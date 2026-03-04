@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Search, Gamepad2, TrendingUp, Calendar, RefreshCw, Image as ImageIcon } from 'lucide-react'
+import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { XMLParser } from 'fast-xml-parser'
 
@@ -50,8 +50,13 @@ const Games = () => {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('name')
-  const [updatingImages, setUpdatingImages] = useState(false)
-  const [updateProgress, setUpdateProgress] = useState(0)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [newGame, setNewGame] = useState({
+    name: '',
+    min_players: '',
+    max_players: '',
+    image_url: ''
+  })
 
   useEffect(() => {
     fetchGames()
@@ -63,7 +68,27 @@ const Games = () => {
 
   const fetchGames = async () => {
     try {
-      // Fetch all games with play counts
+      // Check if user is authenticated
+      if (!user?.id) {
+        setGames([])
+        setFilteredGames([])
+        setLoading(false)
+        return
+      }
+
+      // Fetch all games
+      const { data: gamesData } = await supabase
+        .from('games')
+        .select('*')
+
+      if (!gamesData) {
+        setGames([])
+        setFilteredGames([])
+        setLoading(false)
+        return
+      }
+
+      // Fetch play counts for user's games
       const { data: playsData } = await supabase
         .from('plays')
         .select('game_id, played_at')
@@ -85,30 +110,13 @@ const Games = () => {
         })
       }
 
-      const gameIds = Object.keys(gameStats)
-      let gamesQuery = supabase.from('games').select('*')
+      const gamesWithStats = gamesData.map(game => ({
+        ...game,
+        playCount: gameStats[game.id]?.count || 0,
+        lastPlayed: gameStats[game.id]?.lastPlayed || null
+      }))
 
-      if (gameIds.length > 0) {
-        gamesQuery = gamesQuery.in('id', gameIds)
-      } else {
-        // If no plays, return empty
-        setGames([])
-        setFilteredGames([])
-        setLoading(false)
-        return
-      }
-
-      const { data: gamesData } = await gamesQuery
-
-      if (gamesData) {
-        const gamesWithStats = gamesData.map(game => ({
-          ...game,
-          playCount: gameStats[game.id]?.count || 0,
-          lastPlayed: gameStats[game.id]?.lastPlayed || null
-        }))
-
-        setGames(gamesWithStats)
-      }
+      setGames(gamesWithStats)
     } catch (error) {
       console.error('Error fetching games:', error)
     } finally {
@@ -146,64 +154,122 @@ const Games = () => {
     setFilteredGames(result)
   }
 
-  const updateGameImages = async () => {
-    setUpdatingImages(true)
-    setUpdateProgress(0)
+  const handleCreateGame = async (e) => {
+    e.preventDefault()
+    
+    // Check if user is authenticated
+    if (!user?.id) {
+      toast.error('Devi essere autenticato per aggiungere un gioco')
+      return
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('games')
+        .insert({
+          name: newGame.name,
+          min_players: newGame.min_players ? parseInt(newGame.min_players) : null,
+          max_players: newGame.max_players ? parseInt(newGame.max_players) : null,
+          image_url: newGame.image_url || null
+        })
+
+      if (error) throw error
+
+      toast.success('Gioco aggiunto con successo!')
+      setIsModalOpen(false)
+      setNewGame({
+        name: '',
+        min_players: '',
+        max_players: '',
+        image_url: ''
+      })
+      await fetchGames()
+    } catch (error) {
+      console.error('Error creating game:', error)
+      toast.error('Errore durante la creazione del gioco')
+    }
+  }
+
+  const handleDeleteGame = async (gameId, gameName) => {
+    // Check if user is authenticated
+    if (!user?.id) {
+      toast.error('Devi essere autenticato per eliminare un gioco')
+      return
+    }
+
+    console.log('Tentativo di eliminare gioco:', { gameId, gameName, userId: user.id })
+
+    // Check if there are plays associated with this game
+    const { data: playsData, error: playsError } = await supabase
+      .from('plays')
+      .select('id')
+      .eq('game_id', gameId)
+
+    console.log('Partite associate:', { playsData, playsError })
+
+    if (playsError) {
+      console.error('Error checking plays:', playsError)
+      toast.error('Errore durante il controllo delle partite')
+      return
+    }
+
+    const hasPlays = playsData && playsData.length > 0
+    const playCount = hasPlays ? playsData.length : 0
+
+    // Create confirmation message
+    let confirmMessage = `Sei sicuro di voler eliminare "${gameName}"?`
+    if (hasPlays) {
+      confirmMessage += `\n\nAttenzione: Questo gioco ha ${playCount} partite associate che verranno eliminate.`
+    }
+
+    if (!window.confirm(confirmMessage)) {
+      return
+    }
 
     try {
-      // Get all games without images
-      const { data: gamesWithoutImages } = await supabase
-        .from('games')
-        .select('*')
-        .is('image_url', null)
-        .eq('user_id', user.id)
+      // Delete associated plays first (if any)
+      if (hasPlays) {
+        console.log('Eliminazione partite associate...')
+        const { data: deletedPlays, error: deletePlaysError } = await supabase
+          .from('plays')
+          .delete()
+          .eq('game_id', gameId)
+          .select()
 
-      if (!gamesWithoutImages || gamesWithoutImages.length === 0) {
-        toast.success('Tutti i giochi hanno già un\'immagine!')
-        setUpdatingImages(false)
-        return
-      }
+        console.log('Risultato eliminazione partite:', { deletedPlays, deletePlaysError })
 
-      let updated = 0
-      let failed = 0
-
-      for (let i = 0; i < gamesWithoutImages.length; i++) {
-        const game = gamesWithoutImages[i]
-        setUpdateProgress(Math.round((i / gamesWithoutImages.length) * 100))
-
-        try {
-          const imageUrl = await fetchGameImageFromBGG(game.name)
-
-          if (imageUrl) {
-            await supabase
-              .from('games')
-              .update({ image_url: imageUrl })
-              .eq('id', game.id)
-
-            updated++
-            toast.success(`Immagine trovata per: ${game.name}`)
-          } else {
-            failed++
-            toast.warning(`Nessuna immagine trovata per: ${game.name}`)
-          }
-        } catch (error) {
-          failed++
-          console.error(`Error updating image for ${game.name}:`, error)
-          toast.error(`Errore nell'aggiornamento dell'immagine per: ${game.name}`)
+        if (deletePlaysError) {
+          throw deletePlaysError
         }
       }
 
-      setUpdateProgress(100)
-      toast.success(`Aggiornamento completato! ${updated} immagini aggiornate, ${failed} fallite`)
+      // Delete the game
+      console.log('Eliminazione gioco...')
+      const { data: deletedGame, error: deleteGameError } = await supabase
+        .from('games')
+        .delete()
+        .eq('id', gameId)
+        .select()
 
+      console.log('Risultato eliminazione gioco:', { deletedGame, deleteGameError })
+
+      if (deleteGameError) {
+        throw deleteGameError
+      }
+
+      if (!deletedGame || deletedGame.length === 0) {
+        console.warn('Nessun gioco eliminato. Possibile problema con RLS o ID non valido.')
+        toast.error('Errore: Il gioco non è stato eliminato. Verifica i permessi.')
+        return
+      }
+
+      toast.success(`Gioco "${gameName}" eliminato con successo!${hasPlays ? ` (${playCount} partite eliminate)` : ''}`)
+      
       // Refresh games list
       await fetchGames()
     } catch (error) {
-      console.error('Error updating game images:', error)
-      toast.error('Errore durante l\'aggiornamento delle immagini')
-    } finally {
-      setUpdatingImages(false)
-      setUpdateProgress(0)
+      console.error('Error deleting game:', error)
+      toast.error(`Errore durante l'eliminazione del gioco: ${error.message}`)
     }
   }
 
@@ -228,23 +294,15 @@ const Games = () => {
           <h1 className="text-3xl font-bold text-white">Libreria Giochi</h1>
           <p className="mt-2 text-slate-400">{filteredGames.length} giochi nella tua collezione</p>
         </div>
-        <button
-          onClick={updateGameImages}
-          disabled={updatingImages}
-          className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {updatingImages ? (
-            <>
-              <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-              Aggiornamento in corso... {updateProgress}%
-            </>
-          ) : (
-            <>
-              <ImageIcon className="w-5 h-5 mr-2" />
-              Aggiorna Immagini
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Aggiungi Gioco
+          </button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -289,62 +347,172 @@ const Games = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredGames.map((game) => (
-            <Link
+            <div
               key={game.id}
-              to={`/games/${game.id}`}
-              className="bg-slate-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition cursor-pointer group"
+              className="bg-slate-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition group relative"
             >
-              {/* Game Image */}
-              <div className="relative aspect-[4/3] bg-slate-700">
-                {game.image_url ? (
-                  <img
-                    src={game.image_url}
-                    alt={game.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Gamepad2 className="w-16 h-16 text-slate-500" />
-                  </div>
-                )}
-              </div>
+              {/* Delete Button */}
+              {user && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDeleteGame(game.id, game.name)
+                  }}
+                  className="absolute top-2 right-2 z-10 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition opacity-0 group-hover:opacity-100 shadow-lg"
+                  title="Elimina gioco"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
 
-              {/* Game Info */}
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-white mb-2 line-clamp-2">
-                  {game.name}
-                </h3>
-
-                {/* Player Count */}
-                {game.min_players && game.max_players && (
-                  <p className="text-sm text-slate-400 mb-3">
-                    {game.min_players}-{game.max_players} giocatori
-                  </p>
-                )}
-
-                {/* Stats */}
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center text-emerald-500">
-                    <TrendingUp className="w-4 h-4 mr-1" />
-                    <span className="font-medium">{game.playCount}</span>
-                    <span className="text-slate-400 ml-1">partite</span>
-                  </div>
-
-                  {game.lastPlayed && (
-                    <div className="flex items-center text-slate-400">
-                      <Calendar className="w-4 h-4 mr-1" />
-                      <span>
-                        {new Date(game.lastPlayed).toLocaleDateString('it-IT', {
-                          day: 'numeric',
-                          month: 'short'
-                        })}
-                      </span>
+              <Link
+                to={`/games/${game.id}`}
+                className="block"
+              >
+                {/* Game Image */}
+                <div className="relative aspect-[4/3] bg-slate-700">
+                  {game.image_url ? (
+                    <img
+                      src={game.image_url}
+                      alt={game.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Gamepad2 className="w-16 h-16 text-slate-500" />
                     </div>
                   )}
                 </div>
-              </div>
-            </Link>
+
+                {/* Game Info */}
+                <div className="p-4">
+                  <h3 className="text-lg font-semibold text-white mb-2 line-clamp-2">
+                    {game.name}
+                  </h3>
+
+                  {/* Player Count */}
+                  {game.min_players && game.max_players && (
+                    <p className="text-sm text-slate-400 mb-3">
+                      {game.min_players}-{game.max_players} giocatori
+                    </p>
+                  )}
+
+                  {/* Stats */}
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center text-emerald-500">
+                      <TrendingUp className="w-4 h-4 mr-1" />
+                      <span className="font-medium">{game.playCount}</span>
+                      <span className="text-slate-400 ml-1">partite</span>
+                    </div>
+
+                    {game.lastPlayed && (
+                      <div className="flex items-center text-slate-400">
+                        <Calendar className="w-4 h-4 mr-1" />
+                        <span>
+                          {new Date(game.lastPlayed).toLocaleDateString('it-IT', {
+                            day: 'numeric',
+                            month: 'short'
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal per aggiungere nuovo gioco */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">Aggiungi Nuovo Gioco</h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGame} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Nome del gioco *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newGame.name}
+                  onChange={(e) => setNewGame({ ...newGame, name: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Es. Catan"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Min. Giocatori
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newGame.min_players}
+                    onChange={(e) => setNewGame({ ...newGame, min_players: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Max. Giocatori
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newGame.max_players}
+                    onChange={(e) => setNewGame({ ...newGame, max_players: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="4"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  URL Immagine (opzionale)
+                </label>
+                <input
+                  type="url"
+                  value={newGame.image_url}
+                  onChange={(e) => setNewGame({ ...newGame, image_url: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="https://..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 px-4 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
+                >
+                  Aggiungi Gioco
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -30,6 +30,7 @@ const Navbar = () => {
   ]
 
   const profileNavItems = [
+    { path: '/games', icon: Library, label: 'Giochi' },
     { path: '/images', icon: ImageIcon, label: 'Immagini' },
     { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },
     { path: '/players', icon: Users, label: 'Giocatori' },
