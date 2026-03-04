@@ -38,7 +38,6 @@ const ELO = () => {
       const { data, error } = await supabase
         .from('plays')
         .select('game_id, games(*)')
-        .eq('user_id', user.id)
         .not('game_id', 'is', null)
 
       if (error) throw error
@@ -63,7 +62,7 @@ const ELO = () => {
         .sort((a, b) => b.playCount - a.playCount)
 
       setGames(gamesList)
-      
+
       // Seleziona automaticamente il primo gioco se disponibile
       if (gamesList.length > 0 && !selectedGame) {
         setSelectedGame(gamesList[0])
@@ -77,6 +76,7 @@ const ELO = () => {
 
   const fetchMyPlayer = async () => {
     try {
+      if (!user) return
       const { data, error } = await supabase
         .from('players')
         .select('id')
@@ -114,7 +114,7 @@ const ELO = () => {
 
   const fetchGeneralRatings = async () => {
     try {
-      const data = await getAllGeneralELO(supabase, user.id)
+      const data = await getAllGeneralELO(supabase, user?.id)
       setGeneralRatings(data)
     } catch (error) {
       console.error('Errore nel recupero degli ELO Generali:', error)
@@ -124,29 +124,28 @@ const ELO = () => {
   const handleRecalculateAll = async () => {
     try {
       setRecalculatingAll(true)
-      
+
       // Ricalcola tutti gli ELO per tutti i giochi
       const { data: games } = await supabase
         .from('plays')
         .select('game_id')
-        .eq('user_id', user.id)
         .not('game_id', 'is', null)
 
       const uniqueGameIds = [...new Set(games?.map(g => g.game_id) || [])]
-      
+
       for (const gameId of uniqueGameIds) {
         await recalculateAllELOForGame(supabase, gameId, user.id)
       }
-      
+
       // Ricalcola tutti gli ELO Generali
       await recalculateAllGeneralELO(supabase, user.id)
-      
+
       // Ricarica i dati
       await fetchGeneralRatings()
       if (selectedGame) {
         await fetchRatings(selectedGame.id)
       }
-      
+
       toast.success('Tutti gli ELO ricalcolati con successo!')
     } catch (error) {
       console.error('Errore nel ricalcolo degli ELO:', error)
@@ -200,14 +199,16 @@ const ELO = () => {
           </h1>
           <p className="mt-2 text-slate-400">Classifica dei giocatori per ogni gioco</p>
         </div>
-        <button
-          onClick={handleRecalculateAll}
-          disabled={recalculatingAll}
-          className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-        >
-          <RefreshCw className={`w-5 h-5 ${recalculatingAll ? 'animate-spin' : ''}`} />
-          <span>{recalculatingAll ? 'Ricalcolo in corso...' : 'Ricalcola Tutti gli ELO'}</span>
-        </button>
+        {user && (
+          <button
+            onClick={handleRecalculateAll}
+            disabled={recalculatingAll}
+            className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+          >
+            <RefreshCw className={`w-5 h-5 ${recalculatingAll ? 'animate-spin' : ''}`} />
+            <span>{recalculatingAll ? 'Ricalcolo in corso...' : 'Ricalcola Tutti gli ELO'}</span>
+          </button>
+        )}
       </div>
 
       {/* ELO Generale */}

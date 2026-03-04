@@ -11,7 +11,6 @@ const Navbar = () => {
   const publicNavItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/plays', icon: Calendar, label: 'Partite' },
-    { path: '/games', icon: Library, label: 'Giochi' },
     { path: '/players', icon: Users, label: 'Giocatori' },
     { path: '/stats', icon: BarChart3, label: 'Statistiche' },
     { path: '/elo', icon: Trophy, label: 'Rating ELO' },

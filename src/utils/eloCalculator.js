@@ -457,19 +457,24 @@ export async function getGeneralELO(supabase, playerId) {
 /**
  * Ottieni tutti gli ELO Generali per un utente
  * @param {Object} supabase - Client Supabase
- * @param {string} userId - ID dell'utente
+ * @param {string} userId - ID dell'utente (opzionale, se non fornito mostra tutti)
  * @returns {Promise<Array>} Array di ELO Generali ordinati
  */
 export async function getAllGeneralELO(supabase, userId) {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('player_general_ratings')
       .select(`
         *,
         players(*)
       `)
-      .eq('user_id', userId)
-      .order('rating', { ascending: false });
+
+    // Filtra per user_id solo se fornito (utente registrato)
+    if (userId) {
+      query = query.eq('user_id', userId)
+    }
+
+    const { data, error } = await query.order('rating', { ascending: false });
 
     if (error) throw error;
     return data || [];

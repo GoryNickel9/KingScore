@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Trophy, TrendingUp, Calendar, Gamepad2 } from 'lucide-react'
+import { Trophy, Calendar, Gamepad2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const Dashboard = () => {
@@ -9,7 +9,6 @@ const Dashboard = () => {
   const [stats, setStats] = useState({
     totalPlays: 0,
     mostPlayedGame: null,
-    winRate: 0,
     recentPlays: [],
     playsByMonth: []
   })
@@ -21,17 +20,15 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch total plays
+      // Fetch total plays (public data)
       const { count: totalPlays } = await supabase
         .from('plays')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
 
-      // Fetch most played game
+      // Fetch most played game (public data)
       const { data: playsData } = await supabase
         .from('plays')
         .select('game_id, games(*)')
-        .eq('user_id', user.id)
 
       if (playsData) {
         const gameCounts = playsData.reduce((acc, play) => {
@@ -40,11 +37,11 @@ const Dashboard = () => {
         }, {})
 
         const mostPlayedId = Object.entries(gameCounts).sort((a, b) => b[1] - a[1])[0]
-        const mostPlayedGame = mostPlayedId 
+        const mostPlayedGame = mostPlayedId
           ? playsData.find(p => p.game_id === mostPlayedId[0])?.games
           : null
 
-        // Fetch recent plays with game info
+        // Fetch recent plays with game info (public data)
         const { data: recentPlays } = await supabase
           .from('plays')
           .select(`
@@ -55,48 +52,29 @@ const Dashboard = () => {
               players(*)
             )
           `)
-          .eq('user_id', user.id)
           .order('played_at', { ascending: false })
           .limit(5)
 
-        // Calculate win rate
-        const { data: myPlayer } = await supabase
-          .from('players')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('is_me', true)
-          .maybeSingle()
-
-        let winRate = 0
-        if (myPlayer && recentPlays) {
-          const myScores = recentPlays.flatMap(play => 
-            play.play_scores.filter(score => score.player_id === myPlayer.id)
-          )
-          const wins = myScores.filter(score => score.winner).length
-          winRate = myScores.length > 0 ? Math.round((wins / myScores.length) * 100) : 0
-        }
-
-        // Fetch plays by month (last 12 months)
+        // Fetch plays by month (last 12 months) - public data
         const twelveMonthsAgo = new Date()
         twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
 
         const { data: monthlyPlays } = await supabase
           .from('plays')
           .select('played_at')
-          .eq('user_id', user.id)
           .gte('played_at', twelveMonthsAgo.toISOString())
           .order('played_at', { ascending: true })
 
         const playsByMonth = []
         if (monthlyPlays) {
           const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
-          
+
           for (let i = 11; i >= 0; i--) {
             const date = new Date()
             date.setMonth(date.getMonth() - i)
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
             const count = monthlyPlays.filter(p => p.played_at.startsWith(monthKey)).length
-            
+
             playsByMonth.push({
               month: monthNames[date.getMonth()],
               plays: count
@@ -107,7 +85,6 @@ const Dashboard = () => {
         setStats({
           totalPlays: totalPlays || 0,
           mostPlayedGame,
-          winRate,
           recentPlays: recentPlays || [],
           playsByMonth
         })
@@ -140,15 +117,15 @@ const Dashboard = () => {
       {/* Welcome Section */}
       <div>
         <h1 className="text-3xl font-bold text-white">
-          Benvenuto, {userName}!
+          {user ? `Benvenuto, ${userName}!` : 'Benvenuto!'}
         </h1>
         <p className="mt-2 text-slate-400">
-          Ecco un riepilogo delle tue statistiche
+          {user ? 'Ecco un riepilogo delle statistiche' : 'Ecco le statistiche pubbliche'}
         </p>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <div className="flex items-center justify-between">
             <div>
@@ -171,32 +148,6 @@ const Dashboard = () => {
             </div>
             <div className="bg-purple-500/20 p-3 rounded-lg">
               <Trophy className="w-6 h-6 text-purple-500" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Win Rate</p>
-              <p className="text-3xl font-bold text-white mt-1">{stats.winRate}%</p>
-            </div>
-            <div className="bg-blue-500/20 p-3 rounded-lg">
-              <TrendingUp className="w-6 h-6 text-blue-500" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Attività</p>
-              <p className="text-lg font-bold text-white mt-1">
-                {stats.playsByMonth.reduce((sum, m) => sum + m.plays, 0)} / 12 mesi
-              </p>
-            </div>
-            <div className="bg-orange-500/20 p-3 rounded-lg">
-              <Calendar className="w-6 h-6 text-orange-500" />
             </div>
           </div>
         </div>
