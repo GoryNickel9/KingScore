@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Trophy, Calendar, Gamepad2 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 
 const Dashboard = () => {
   const { user } = useAuth()
   const [stats, setStats] = useState({
     totalPlays: 0,
-    mostPlayedGame: null,
+    topPlayedGames: [],
     recentPlays: [],
     playsByMonth: []
   })
@@ -25,7 +25,7 @@ const Dashboard = () => {
         .from('plays')
         .select('*', { count: 'exact', head: true })
 
-      // Fetch most played game (public data)
+      // Fetch most played games (top 3) (public data)
       const { data: playsData } = await supabase
         .from('plays')
         .select('game_id, games(*)')
@@ -36,10 +36,11 @@ const Dashboard = () => {
           return acc
         }, {})
 
-        const mostPlayedId = Object.entries(gameCounts).sort((a, b) => b[1] - a[1])[0]
-        const mostPlayedGame = mostPlayedId
-          ? playsData.find(p => p.game_id === mostPlayedId[0])?.games
-          : null
+        const topPlayedIds = Object.entries(gameCounts).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        const topPlayedGames = topPlayedIds.map(([gameId, count]) => ({
+          ...playsData.find(p => p.game_id === gameId)?.games,
+          playCount: count
+        }))
 
         // Fetch recent plays with game info (public data)
         const { data: recentPlays } = await supabase
@@ -84,7 +85,7 @@ const Dashboard = () => {
 
         setStats({
           totalPlays: totalPlays || 0,
-          mostPlayedGame,
+          topPlayedGames,
           recentPlays: recentPlays || [],
           playsByMonth
         })
@@ -141,9 +142,9 @@ const Dashboard = () => {
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-400">Gioco più Giocato</p>
+              <p className="text-sm text-slate-400">Giochi Preferiti</p>
               <p className="text-lg font-bold text-white mt-1 truncate">
-                {stats.mostPlayedGame?.name || 'N/A'}
+                {stats.topPlayedGames.length > 0 ? stats.topPlayedGames[0]?.name || 'N/A' : 'N/A'}
               </p>
             </div>
             <div className="bg-purple-500/20 p-3 rounded-lg">
@@ -160,44 +161,55 @@ const Dashboard = () => {
           <h2 className="text-xl font-bold text-white mb-4">Partite per Mese</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.playsByMonth}>
+              <LineChart data={stats.playsByMonth}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis dataKey="month" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
                   itemStyle={{ color: '#e2e8f0' }}
                 />
-                <Bar dataKey="plays" fill="#10b981" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="plays" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Most Played Game */}
-        {stats.mostPlayedGame && (
+        {/* Most Played Games - Top 3 */}
+        {stats.topPlayedGames.length > 0 && (
           <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-            <h2 className="text-xl font-bold text-white mb-4">Gioco Preferito</h2>
-            <div className="flex items-center space-x-4">
-              {stats.mostPlayedGame.image_url ? (
-                <img
-                  src={stats.mostPlayedGame.image_url}
-                  alt={stats.mostPlayedGame.name}
-                  className="w-24 h-24 object-cover rounded-lg"
-                />
-              ) : (
-                <div className="w-24 h-24 bg-slate-700 rounded-lg flex items-center justify-center">
-                  <Gamepad2 className="w-12 h-12 text-slate-500" />
+            <h2 className="text-xl font-bold text-white mb-4">Giochi Preferiti (Top 3)</h2>
+            <div className="space-y-4">
+              {stats.topPlayedGames.map((game, index) => (
+                <div key={game.id} className="flex items-center space-x-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-purple-500 font-bold">{index + 1}</span>
+                  </div>
+                  {game.image_url ? (
+                    <img
+                      src={game.image_url}
+                      alt={game.name}
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-slate-700 rounded-lg flex items-center justify-center">
+                      <Gamepad2 className="w-8 h-8 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">{game.name}</h3>
+                    {game.min_players && game.max_players && (
+                      <p className="text-slate-400 text-sm">
+                        {game.min_players}-{game.max_players} giocatori
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-emerald-500">{game.playCount}</p>
+                    <p className="text-xs text-slate-400">partite</p>
+                  </div>
                 </div>
-              )}
-              <div>
-                <h3 className="text-xl font-bold text-white">{stats.mostPlayedGame.name}</h3>
-                {stats.mostPlayedGame.min_players && stats.mostPlayedGame.max_players && (
-                  <p className="text-slate-400 mt-1">
-                    {stats.mostPlayedGame.min_players}-{stats.mostPlayedGame.max_players} giocatori
-                  </p>
-                )}
-              </div>
+              ))}
             </div>
           </div>
         )}

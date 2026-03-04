@@ -855,6 +855,28 @@ export async function getGeneralELOHistory(supabase, userId = null) {
       // Calcola i nuovi rating ELO
       const eloResults = calculateELOForGame(playersData);
 
+      // Calcola l'ELO Generale per ogni giocatore PRIMA di aggiornare i rating
+      const playersInPlay = play.play_scores.map(score => score.player_id);
+      const previousGeneralRatings = {};
+
+      for (const playerId of playersInPlay) {
+        // Calcola l'ELO Generale come media ponderata degli ELO specifici per gioco
+        let totalWeightedRating = 0;
+        let totalWeight = 0;
+
+        for (const gId in playerGameRatings) {
+          if (playerGameRatings[gId][playerId]) {
+            const gameRating = playerGameRatings[gId][playerId];
+            const weight = gameRating.gamesPlayed;
+            totalWeightedRating += gameRating.currentRating * weight;
+            totalWeight += weight;
+          }
+        }
+
+        const previousGeneralRating = totalWeight > 0 ? Math.round(totalWeightedRating / totalWeight) : 1000;
+        previousGeneralRatings[playerId] = previousGeneralRating;
+      }
+
       // Aggiorna i rating nel mapping
       eloResults.forEach((result) => {
         if (playerGameRatings[gameId][result.playerId]) {
@@ -863,9 +885,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
         }
       });
 
-      // Calcola l'ELO Generale per ogni giocatore dopo questa partita
-      const playersInPlay = play.play_scores.map(score => score.player_id);
-
+      // Calcola l'ELO Generale per ogni giocatore DOPO aver aggiornato i rating
       for (const playerId of playersInPlay) {
         // Calcola l'ELO Generale come media ponderata degli ELO specifici per gioco
         let totalWeightedRating = 0;
@@ -883,6 +903,8 @@ export async function getGeneralELOHistory(supabase, userId = null) {
         }
 
         const generalRating = totalWeight > 0 ? Math.round(totalWeightedRating / totalWeight) : 1000;
+        const previousGeneralRating = previousGeneralRatings[playerId];
+        const ratingChange = generalRating - previousGeneralRating;
 
         // Trova il nome del giocatore
         let playerName = 'Unknown';
@@ -899,6 +921,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
           playerId,
           playerName,
           rating: generalRating,
+          ratingChange,
           gamesPlayed: totalGamesPlayed
         });
       }

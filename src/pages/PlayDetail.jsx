@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getELOHistoryForGame } from '../utils/eloCalculator'
+import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 
 const PlayDetail = () => {
   const { id } = useParams()
@@ -16,6 +16,8 @@ const PlayDetail = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [eloHistory, setEloHistory] = useState([])
   const [loadingElo, setLoadingElo] = useState(false)
+  const [generalELOs, setGeneralELOs] = useState({})
+  const [generalELOHistory, setGeneralELOHistory] = useState([])
 
   useEffect(() => {
     fetchPlay()
@@ -34,22 +36,51 @@ const PlayDetail = () => {
           )
         `)
         .eq('id', id)
-        .eq('user_id', user.id)
         .single()
 
       if (data) {
         setPlay(data)
-        
-        // Recupera lo storico ELO per questo gioco
-        if (data.game_id) {
+
+        // Recupera lo storico ELO per questo gioco usando l'user_id del proprietario della partita
+        if (data.game_id && data.user_id) {
           try {
             setLoadingElo(true)
-            const history = await getELOHistoryForGame(supabase, data.game_id, user.id)
+            const history = await getELOHistoryForGame(supabase, data.game_id, data.user_id)
             setEloHistory(history)
           } catch (error) {
             console.error('Error fetching ELO history:', error)
           } finally {
             setLoadingElo(false)
+          }
+        }
+
+        // Recupera gli ELO Generali per ogni giocatore
+        if (data.play_scores && data.play_scores.length > 0) {
+          const eloPromises = data.play_scores.map(async (score) => {
+            try {
+              const generalELO = await getGeneralELO(supabase, score.player_id)
+              return { playerId: score.player_id, generalELO }
+            } catch (error) {
+              console.error(`Error fetching general ELO for player ${score.player_id}:`, error)
+              return { playerId: score.playerId, generalELO: null }
+            }
+          })
+
+          const eloResults = await Promise.all(eloPromises)
+          const eloMap = {}
+          eloResults.forEach(result => {
+            eloMap[result.playerId] = result.generalELO
+          })
+          setGeneralELOs(eloMap)
+        }
+
+        // Recupera lo storico dell'ELO Generale usando l'user_id del proprietario della partita
+        if (data.user_id) {
+          try {
+            const history = await getGeneralELOHistory(supabase, data.user_id)
+            setGeneralELOHistory(history)
+          } catch (error) {
+            console.error('Error fetching general ELO history:', error)
           }
         }
       } else {
@@ -70,7 +101,6 @@ const PlayDetail = () => {
         .from('plays')
         .delete()
         .eq('id', id)
-        .eq('user_id', user.id)
 
       if (error) throw error
 
@@ -84,7 +114,21 @@ const PlayDetail = () => {
 
   // Ottieni l'ELO attuale e l'ELO guadagnato per un giocatore in questa partita
   const getPlayerELO = (playerId) => {
-    const eloEntry = eloHistory.find(entry => 
+    const eloEntry = eloHistory.find(entry =>
+      entry.playId === play.id && entry.playerId === playerId
+    )
+    
+    if (!eloEntry) return null
+    
+    return {
+      currentRating: eloEntry.rating,
+      ratingChange: eloEntry.ratingChange
+    }
+  }
+
+  // Ottieni l'ELO Generale e la variazione per un giocatore in questa partita
+  const getPlayerGeneralELO = (playerId) => {
+    const eloEntry = generalELOHistory.find(entry =>
       entry.playId === play.id && entry.playerId === playerId
     )
     
@@ -148,22 +192,24 @@ const PlayDetail = () => {
           </div>
         </div>
 
-        <div className="flex space-x-2">
-          <Link
-            to={`/plays/${id}/edit`}
-            className="flex items-center px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            Modifica
-          </Link>
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="flex items-center px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition"
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Elimina
-          </button>
-        </div>
+        {user && play.user_id === user.id && (
+          <div className="flex space-x-2">
+            <Link
+              to={`/plays/${id}/edit`}
+              className="flex items-center px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Modifica
+            </Link>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Elimina
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Game Info Card */}
@@ -241,6 +287,7 @@ const PlayDetail = () => {
                   <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Punteggio</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Vincitore</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">ELO</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">ELO Generale</th>
                 </tr>
               </thead>
               <tbody>
@@ -306,6 +353,33 @@ const PlayDetail = () => {
                           if (!playerELO) return <span className="text-slate-400">-</span>
 
                           const { currentRating, ratingChange } = playerELO
+                          const isPositive = ratingChange > 0
+                          const isNegative = ratingChange < 0
+
+                          return (
+                            <div className="flex items-center">
+                              <span className="text-white font-medium">{currentRating}</span>
+                              {ratingChange !== 0 && (
+                                <span className={`ml-2 text-sm font-medium flex items-center ${
+                                  isPositive ? 'text-emerald-500' :
+                                  isNegative ? 'text-red-500' :
+                                  'text-slate-400'
+                                }`}>
+                                  {isPositive && <TrendingUp className="w-3 h-3 mr-1" />}
+                                  {isNegative && <TrendingDown className="w-3 h-3 mr-1" />}
+                                  {ratingChange > 0 ? '+' : ''}{ratingChange}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
+                      <td className="py-3 px-4">
+                        {(() => {
+                          const playerGeneralELO = getPlayerGeneralELO(score.player_id)
+                          if (!playerGeneralELO) return <span className="text-slate-400">-</span>
+
+                          const { currentRating, ratingChange } = playerGeneralELO
                           const isPositive = ratingChange > 0
                           const isNegative = ratingChange < 0
 

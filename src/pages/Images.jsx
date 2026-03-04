@@ -96,8 +96,6 @@ const Images = () => {
       // Filter games without images on the client side
       const gamesWithoutImages = (data || []).filter(game => !game.image_url || game.image_url === '')
       setGames(gamesWithoutImages)
-
-      setGames(data || [])
     } catch (error) {
       console.error('Error fetching games without images:', error)
       toast.error('Errore durante il caricamento dei giochi')
