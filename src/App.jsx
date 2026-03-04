@@ -6,7 +6,6 @@ import Layout from './components/Layout'
 
 // Pages
 import Login from './pages/Login'
-import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Plays from './pages/Plays'
 import AddPlay from './pages/AddPlay'
@@ -27,85 +26,88 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
 
-          {/* Protected Routes */}
+          {/* Public Routes - Accessible to everyone */}
           <Route
             path="/"
             element={
-              <ProtectedRoute>
-                <Layout>
-                  <Dashboard />
-                </Layout>
-              </ProtectedRoute>
+              <Layout>
+                <Dashboard />
+              </Layout>
             }
           />
           <Route
             path="/plays"
             element={
-              <ProtectedRoute>
-                <Layout>
-                  <Plays />
-                </Layout>
-              </ProtectedRoute>
+              <Layout>
+                <Plays />
+              </Layout>
             }
           />
+          <Route
+            path="/plays/:id"
+            element={
+              <Layout>
+                <PlayDetail />
+              </Layout>
+            }
+          />
+          <Route
+            path="/games"
+            element={
+              <Layout>
+                <Games />
+              </Layout>
+            }
+          />
+          <Route
+            path="/games/:id"
+            element={
+              <Layout>
+                <GameDetail />
+              </Layout>
+            }
+          />
+          <Route
+            path="/players"
+            element={
+              <Layout>
+                <Players />
+              </Layout>
+            }
+          />
+          <Route
+            path="/players/:id"
+            element={
+              <Layout>
+                <PlayerDetail />
+              </Layout>
+            }
+          />
+          <Route
+            path="/stats"
+            element={
+              <Layout>
+                <Stats />
+              </Layout>
+            }
+          />
+          <Route
+            path="/elo"
+            element={
+              <Layout>
+                <ELO />
+              </Layout>
+            }
+          />
+
+          {/* Protected Routes - Only for registered users */}
           <Route
             path="/plays/new"
             element={
               <ProtectedRoute>
                 <Layout>
                   <AddPlay />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/plays/:id"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <PlayDetail />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/games"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Games />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/games/:id"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <GameDetail />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/players"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Players />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/players/:id"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <PlayerDetail />
                 </Layout>
               </ProtectedRoute>
             }
@@ -120,29 +122,9 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/stats"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Stats />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/elo"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <ELO />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
 
           {/* Default redirect */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </AuthProvider>

@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy } from 'lucide-react'
+import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn } from 'lucide-react'
 
 const Navbar = () => {
   const { user, signOut } = useAuth()
@@ -8,16 +8,21 @@ const Navbar = () => {
 
   const isActive = (path) => location.pathname === path
 
-  const navItems = [
+  const publicNavItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/plays', icon: Calendar, label: 'Partite' },
-    { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },
     { path: '/games', icon: Library, label: 'Giochi' },
     { path: '/players', icon: Users, label: 'Giocatori' },
-    { path: '/import', icon: Download, label: 'Import' },
     { path: '/stats', icon: BarChart3, label: 'Statistiche' },
     { path: '/elo', icon: Trophy, label: 'Rating ELO' },
   ]
+
+  const protectedNavItems = [
+    { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },
+    { path: '/import', icon: Download, label: 'Import' },
+  ]
+
+  const allNavItems = user ? [...publicNavItems, ...protectedNavItems] : publicNavItems
 
   return (
     <nav className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
@@ -33,7 +38,7 @@ const Navbar = () => {
 
           {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-1">
-            {navItems.map((item) => (
+            {allNavItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
@@ -51,29 +56,41 @@ const Navbar = () => {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <div className="bg-slate-700 p-2 rounded-full">
-                <User className="w-5 h-5 text-slate-300" />
-              </div>
-              <span className="hidden sm:block text-sm text-slate-300">
-                {user?.user_metadata?.name || user?.email}
-              </span>
-            </div>
-            <button
-              onClick={signOut}
-              className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
-              title="Logout"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+            {user ? (
+              <>
+                <div className="flex items-center space-x-2">
+                  <div className="bg-slate-700 p-2 rounded-full">
+                    <User className="w-5 h-5 text-slate-300" />
+                  </div>
+                  <span className="hidden sm:block text-sm text-slate-300">
+                    {user?.user_metadata?.name || user?.email}
+                  </span>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition"
+              >
+                <LogIn className="w-4 h-4" />
+                <span className="hidden sm:inline">Login</span>
+              </Link>
+            )}
           </div>
         </div>
 
         {/* Mobile Navigation */}
         <div className="md:hidden pb-4">
           <div className="grid grid-cols-3 gap-2">
-            {navItems.map((item) => (
+            {allNavItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
