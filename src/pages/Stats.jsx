@@ -7,6 +7,7 @@ import {
   LineChart, Line, Legend
 } from 'recharts'
 import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculator'
+import { getPlayerImageUrl } from '../utils/imageUpload'
 
 const Stats = () => {
   const { user } = useAuth()
@@ -152,6 +153,7 @@ const Stats = () => {
             playerId,
             playerName: player?.alias || player?.name || 'Unknown',
             playerOriginalName: player?.name || null,
+            playerAvatarUrl: player?.avatar_url || null,
             playCount: count
           }
         })
@@ -244,6 +246,7 @@ const Stats = () => {
             allGamesStats[gameId].players[playerId] = {
               playerId,
               playerName: player?.alias || player?.name || 'Unknown',
+              playerAvatarUrl: player?.avatar_url || null,
               totalScore: 0,
               playCount: 0
             }
@@ -636,11 +639,19 @@ const Stats = () => {
           {stats.mostFrequentPlayers.map((player) => (
             <div key={player.playerId} className="bg-slate-700 rounded-lg p-4">
               <div className="flex items-center space-x-3 mb-3">
-                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                  <span className="text-emerald-500 font-bold text-lg">
-                    {player.playerName?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                {player.playerAvatarUrl ? (
+                  <img
+                    src={getPlayerImageUrl(player.playerAvatarUrl)}
+                    alt={player.playerName}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-emerald-500 font-bold text-lg">
+                      {player.playerName?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <p className="text-white font-medium">{player.playerName}</p>
                   {player.playerOriginalName && player.playerName !== player.playerOriginalName && (
@@ -775,9 +786,24 @@ const Stats = () => {
                         {game.players.map((player) => (
                           <div key={player.playerId} className="bg-slate-700 rounded-lg p-3">
                             <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-white font-medium">{player.playerName}</p>
-                                <p className="text-xs text-slate-400">{player.playCount} partite</p>
+                              <div className="flex items-center space-x-3">
+                                {player.playerAvatarUrl ? (
+                                  <img
+                                    src={getPlayerImageUrl(player.playerAvatarUrl)}
+                                    alt={player.playerName}
+                                    className="w-10 h-10 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                                    <span className="text-emerald-500 font-bold text-sm">
+                                      {player.playerName?.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-white font-medium">{player.playerName}</p>
+                                  <p className="text-xs text-slate-400">{player.playCount} partite</p>
+                                </div>
                               </div>
                               <div className="text-right">
                                 <p className="text-lg font-bold text-emerald-500">{player.avgScore}</p>

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Plus, Edit, Trash2, Users, Trophy, TrendingUp, User, AlertTriangle } from 'lucide-react'
+import { Plus, Edit, Trash2, Users, Trophy, TrendingUp, User, AlertTriangle, Upload, X } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { uploadPlayerImage, deletePlayerImage, getPlayerImageUrl } from '../utils/imageUpload'
 
 const Players = () => {
   const { user } = useAuth()
@@ -14,7 +15,10 @@ const Players = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState(null)
-  const [formData, setFormData] = useState({ name: '', alias: '' })
+  const [formData, setFormData] = useState({ name: '', alias: '', avatar_url: '' })
+  const [avatarFile, setAvatarFile] = useState(null)
+  const [avatarPreview, setAvatarPreview] = useState(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   useEffect(() => {
     fetchPlayers()
@@ -68,12 +72,30 @@ const Players = () => {
     if (!formData.name.trim()) return
 
     try {
+      let avatarUrl = null
+
+      // Carica l'immagine del profilo se presente
+      if (avatarFile) {
+        setUploadingAvatar(true)
+        try {
+          const { publicUrl, path } = await uploadPlayerImage(avatarFile, user.id)
+          avatarUrl = path
+        } catch (error) {
+          toast.error('Errore durante il caricamento dell\'immagine')
+          console.error('Error uploading avatar:', error)
+          setUploadingAvatar(false)
+          return
+        }
+        setUploadingAvatar(false)
+      }
+
       const { error } = await supabase
         .from('players')
         .insert({
           user_id: user.id,
           name: formData.name.trim(),
           alias: formData.alias.trim() || null,
+          avatar_url: avatarUrl,
           is_me: false
         })
 
@@ -81,7 +103,9 @@ const Players = () => {
 
       toast.success('Giocatore aggiunto con successo!')
       setShowAddModal(false)
-      setFormData({ name: '', alias: '' })
+      setFormData({ name: '', alias: '', avatar_url: '' })
+      setAvatarFile(null)
+      setAvatarPreview(null)
       fetchPlayers()
     } catch (error) {
       toast.error('Errore durante l\'aggiunta del giocatore')
@@ -94,11 +118,34 @@ const Players = () => {
     if (!formData.name.trim()) return
 
     try {
+      let avatarUrl = selectedPlayer.avatar_url
+
+      // Carica la nuova immagine del profilo se presente
+      if (avatarFile) {
+        setUploadingAvatar(true)
+        try {
+          // Elimina l'immagine precedente se esiste
+          if (selectedPlayer.avatar_url) {
+            await deletePlayerImage(selectedPlayer.avatar_url)
+          }
+
+          const { publicUrl, path } = await uploadPlayerImage(avatarFile, user.id)
+          avatarUrl = path
+        } catch (error) {
+          toast.error('Errore durante il caricamento dell\'immagine')
+          console.error('Error uploading avatar:', error)
+          setUploadingAvatar(false)
+          return
+        }
+        setUploadingAvatar(false)
+      }
+
       const { error } = await supabase
         .from('players')
         .update({
           name: formData.name.trim(),
-          alias: formData.alias.trim() || null
+          alias: formData.alias.trim() || null,
+          avatar_url: avatarUrl
         })
         .eq('id', selectedPlayer.id)
 
@@ -107,7 +154,9 @@ const Players = () => {
       toast.success('Giocatore aggiornato con successo!')
       setShowEditModal(false)
       setSelectedPlayer(null)
-      setFormData({ name: '', alias: '' })
+      setFormData({ name: '', alias: '', avatar_url: '' })
+      setAvatarFile(null)
+      setAvatarPreview(null)
       fetchPlayers()
     } catch (error) {
       toast.error('Errore durante l\'aggiornamento del giocatore')
@@ -151,6 +200,39 @@ const Players = () => {
       .join('')
       .toUpperCase()
       .slice(0, 2)
+  }
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      // Controlla la dimensione del file (max 2MB)
+      const maxSize = 2 * 1024 * 1024
+      if (file.size > maxSize) {
+        toast.error('Il file è troppo grande. La dimensione massima è 2MB')
+        return
+      }
+
+      // Controlla il tipo MIME
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+      if (!allowedTypes.includes(file.type)) {
+        toast.error('Tipo di file non supportato. Usa: JPG, PNG, WebP o GIF')
+        return
+      }
+
+      setAvatarFile(file)
+
+      // Crea un'anteprima dell'immagine
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setAvatarPreview(reader.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null)
+    setAvatarPreview(null)
   }
 
   if (loading) {
@@ -230,9 +312,17 @@ const Players = () => {
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-4">
                   {/* Avatar */}
-                  <div className={`w-16 h-16 rounded-full ${getAvatarColor(player.name)} flex items-center justify-center flex-shrink-0`}>
-                    <span className="text-white text-xl font-bold">{getInitials(player.name)}</span>
-                  </div>
+                  {player.avatar_url ? (
+                    <img
+                      src={getPlayerImageUrl(player.avatar_url)}
+                      alt={player.name}
+                      className="w-16 h-16 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className={`w-16 h-16 rounded-full ${getAvatarColor(player.name)} flex items-center justify-center flex-shrink-0`}>
+                      <span className="text-white text-xl font-bold">{getInitials(player.name)}</span>
+                    </div>
+                  )}
 
                   <div>
                     <h3 className="text-xl font-semibold text-white">{player.alias || player.name}</h3>
@@ -254,7 +344,8 @@ const Players = () => {
                       <button
                         onClick={() => {
                           setSelectedPlayer(player)
-                          setFormData({ name: player.name, alias: player.alias || '' })
+                          setFormData({ name: player.name, alias: player.alias || '', avatar_url: player.avatar_url || '' })
+                          setAvatarPreview(player.avatar_url ? getPlayerImageUrl(player.avatar_url) : null)
                           setShowEditModal(true)
                         }}
                         className="p-2 hover:bg-slate-700 rounded-lg transition"
@@ -339,12 +430,56 @@ const Players = () => {
                   placeholder="Nickname o alias"
                 />
               </div>
+              <div className="mb-4">
+                <label className="block text-sm text-slate-300 mb-2">Immagine del profilo (opzionale)</label>
+                <div className="flex items-center space-x-4">
+                  {avatarPreview ? (
+                    <div className="relative">
+                      <img
+                        src={avatarPreview}
+                        alt="Anteprima avatar"
+                        className="w-20 h-20 rounded-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveAvatar}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-slate-700 flex items-center justify-center">
+                      <User className="w-10 h-10 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      id="avatar-upload"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="avatar-upload"
+                      className="inline-flex items-center px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {uploadingAvatar ? 'Caricamento...' : 'Carica immagine'}
+                    </label>
+                    <p className="text-xs text-slate-400 mt-2">JPG, PNG, WebP o GIF (max 2MB)</p>
+                  </div>
+                </div>
+              </div>
               <div className="flex space-x-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddModal(false)
-                    setFormData({ name: '', alias: '' })
+                    setFormData({ name: '', alias: '', avatar_url: '' })
+                    setAvatarFile(null)
+                    setAvatarPreview(null)
                   }}
                   className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
                 >
@@ -388,13 +523,57 @@ const Players = () => {
                   placeholder="Nickname o alias"
                 />
               </div>
+              <div className="mb-4">
+                <label className="block text-sm text-slate-300 mb-2">Immagine del profilo (opzionale)</label>
+                <div className="flex items-center space-x-4">
+                  {avatarPreview ? (
+                    <div className="relative">
+                      <img
+                        src={avatarPreview}
+                        alt="Anteprima avatar"
+                        className="w-20 h-20 rounded-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveAvatar}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-slate-700 flex items-center justify-center">
+                      <User className="w-10 h-10 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      id="avatar-edit-upload"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="avatar-edit-upload"
+                      className="inline-flex items-center px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {uploadingAvatar ? 'Caricamento...' : 'Cambia immagine'}
+                    </label>
+                    <p className="text-xs text-slate-400 mt-2">JPG, PNG, WebP o GIF (max 2MB)</p>
+                  </div>
+                </div>
+              </div>
               <div className="flex space-x-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowEditModal(false)
                     setSelectedPlayer(null)
-                    setFormData({ name: '', alias: '' })
+                    setFormData({ name: '', alias: '', avatar_url: '' })
+                    setAvatarFile(null)
+                    setAvatarPreview(null)
                   }}
                   className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
                 >

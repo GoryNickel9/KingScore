@@ -71,18 +71,10 @@ function App() {
             }
           />
           <Route
-            path="/players"
+            path="/stats"
             element={
               <Layout>
-                <Players />
-              </Layout>
-            }
-          />
-          <Route
-            path="/players/:id"
-            element={
-              <Layout>
-                <PlayerDetail />
+                <Stats />
               </Layout>
             }
           />
@@ -128,6 +120,26 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <EditPlay />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/players"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Players />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/players/:id"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <PlayerDetail />
                 </Layout>
               </ProtectedRoute>
             }

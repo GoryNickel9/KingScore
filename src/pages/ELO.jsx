@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { Trophy, TrendingUp, TrendingDown, Award, Users, Gamepad2, Zap, Star, RefreshCw } from 'lucide-react'
 import { getAllGeneralELO, recalculateAllELOForGame, recalculateAllGeneralELO } from '../utils/eloCalculator'
 import toast from 'react-hot-toast'
+import { getPlayerImageUrl } from '../utils/imageUpload'
 
 const ELO = () => {
   const { user } = useAuth()
@@ -254,13 +255,21 @@ const ELO = () => {
                         {index + 1}
                       </span>
                     </div>
-                    
-                    <div className="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center">
-                      <span className="text-white font-bold text-lg">
-                        {rating.players?.alias || rating.players?.name || '?'?.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    
+
+                    {rating.players?.avatar_url ? (
+                      <img
+                        src={getPlayerImageUrl(rating.players.avatar_url)}
+                        alt={rating.players?.alias || rating.players?.name || 'Unknown'}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">
+                          {rating.players?.alias || rating.players?.name || '?'?.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+
                     <div>
                       <div className="flex items-center space-x-2">
                         <p className="text-white font-medium">
@@ -404,13 +413,21 @@ const ELO = () => {
                           {index + 1}
                         </span>
                       </div>
-                      
-                      <div className="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold text-lg">
-                          {rating.players?.alias || rating.players?.name || '?'?.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      
+
+                      {rating.players?.avatar_url ? (
+                        <img
+                          src={getPlayerImageUrl(rating.players.avatar_url)}
+                          alt={rating.players?.alias || rating.players?.name || 'Unknown'}
+                          className="w-12 h-12 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">
+                            {rating.players?.alias || rating.players?.name || '?'?.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+
                       <div>
                         <div className="flex items-center space-x-2">
                           <p className="text-white font-medium">
