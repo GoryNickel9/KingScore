@@ -540,16 +540,30 @@ export async function recalculateAllELOForGame(supabase, gameId, userId) {
 
     if (!plays || plays.length === 0) return;
 
+    // Mappa per tenere traccia dell'ELO corrente di ogni giocatore
+    const playerRatings = {};
+
     // Processa ogni partita in ordine cronologico
     for (const play of plays) {
       if (!play.play_scores || play.play_scores.length < 2) continue;
 
       // Prepara i dati dei giocatori per il calcolo ELO
       const playersData = play.play_scores.map((score) => {
+        const playerId = score.player_id;
+
+        // Inizializza il rating per questo giocatore se non esiste
+        if (!playerRatings[playerId]) {
+          playerRatings[playerId] = {
+            playerId,
+            currentRating: 1000,
+            gamesPlayed: 0
+          };
+        }
+
         return {
           playerId: score.player_id,
-          currentRating: 1000, // Verrà aggiornato man mano che processiamo le partite
-          gamesPlayed: 0, // Verrà aggiornato man mano che processiamo le partite
+          currentRating: playerRatings[playerId].currentRating,
+          gamesPlayed: playerRatings[playerId].gamesPlayed,
           winner: score.winner || false,
           position: score.position || undefined,
           score: score.score
@@ -582,8 +596,19 @@ export async function recalculateAllELOForGame(supabase, gameId, userId) {
         }
       });
 
-      // Aggiorna i rating ELO
-      await updateELOAfterGame(supabase, gameId, playersData);
+      // Calcola i nuovi rating ELO
+      const eloResults = calculateELOForGame(playersData);
+
+      // Aggiorna i rating nel mapping
+      eloResults.forEach((result) => {
+        if (playerRatings[result.playerId]) {
+          playerRatings[result.playerId].currentRating = result.newRating;
+          playerRatings[result.playerId].gamesPlayed++;
+        }
+      });
+
+      // Salva i rating nel database
+      await updateELOAfterGame(supabase, gameId, playersData, userId);
     }
   } catch (error) {
     console.error('Errore nel ricalcolo dei rating ELO:', error);
@@ -708,6 +733,184 @@ export async function getELOHistoryForGame(supabase, gameId, userId = null) {
     return eloHistory;
   } catch (error) {
     console.error('Errore nel calcolo dello storico ELO:', error);
+    throw error;
+  }
+}
+
+/**
+ * Calcola lo storico degli ELO Generali
+ * Questa funzione simula il calcolo degli ELO Generali nel tempo senza salvare nel database
+ * @param {Object} supabase - Client Supabase
+ * @param {string} userId - ID dell'utente (opzionale)
+ * @returns {Promise<Array>} Array di oggetti con data, giocatore e ELO Generale per il grafico
+ */
+export async function getGeneralELOHistory(supabase, userId = null) {
+  try {
+    // Recupera tutte le partite ordinate cronologicamente
+    let query = supabase
+      .from('plays')
+      .select(`
+        *,
+        play_scores(
+          *,
+          players(*)
+        ),
+        games(*)
+      `)
+      .order('played_at', { ascending: true });
+
+    // Filtra per user_id solo se fornito
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data: plays, error } = await query;
+
+    if (error) throw error;
+
+    if (!plays || plays.length === 0) return [];
+
+    console.log(`[getGeneralELOHistory] Recuperate ${plays.length} partite totali`);
+
+    // Mappa per tenere traccia dell'ELO corrente di ogni giocatore per ogni gioco
+    const playerGameRatings = {};
+    const generalELOHistory = [];
+    let playCounter = 0;
+    let skippedPlays = 0;
+    let processedPlays = 0;
+
+    // Processa ogni partita in ordine cronologico
+    for (const play of plays) {
+      playCounter++;
+
+      if (!play.play_scores || play.play_scores.length < 2) {
+        const scoresCount = play.play_scores?.length || 0;
+        const reason = scoresCount === 0 
+          ? 'Nessun punteggio associato (partita incompleta o errata)' 
+          : `Solo ${scoresCount} punteggio/i (servono almeno 2 per il calcolo ELO)`;
+        console.log(`[getGeneralELOHistory] Partita ${playCounter} (${play.id}) saltata: ${reason}`);
+        skippedPlays++;
+        continue;
+      }
+
+      processedPlays++;
+      const gameId = play.game_id;
+
+      // Inizializza lo stato per questo gioco se non esiste
+      if (!playerGameRatings[gameId]) {
+        playerGameRatings[gameId] = {};
+      }
+
+      // Prepara i dati dei giocatori per il calcolo ELO
+      const playersData = play.play_scores.map((score) => {
+        const playerId = score.player_id;
+        const playerName = score.players?.alias || score.players?.name || 'Unknown';
+
+        // Inizializza il rating per questo gioco se non esiste
+        if (!playerGameRatings[gameId][playerId]) {
+          playerGameRatings[gameId][playerId] = {
+            playerId,
+            playerName,
+            currentRating: 1000,
+            gamesPlayed: 0
+          };
+        }
+
+        return {
+          playerId,
+          playerName,
+          currentRating: playerGameRatings[gameId][playerId].currentRating,
+          gamesPlayed: playerGameRatings[gameId][playerId].gamesPlayed,
+          winner: score.winner || false,
+          position: score.position || undefined,
+          score: score.score
+        };
+      });
+
+      // Calcola le posizioni se non sono definite
+      const sortedPlayers = [...playersData].sort((a, b) => {
+        if (a.winner && !b.winner) return -1;
+        if (!a.winner && b.winner) return 1;
+        if (a.score !== null && b.score !== null) {
+          return b.score - a.score;
+        }
+        return 0;
+      });
+
+      // Assegna le posizioni
+      let currentPosition = 1;
+      const winnersCount = sortedPlayers.filter(p => p.winner).length;
+      sortedPlayers.forEach((player, index) => {
+        if (player.winner) {
+          player.position = 1;
+        } else if (index === winnersCount) {
+          currentPosition = winnersCount + 1;
+          player.position = currentPosition;
+        } else if (!player.winner) {
+          currentPosition++;
+          player.position = currentPosition;
+        }
+      });
+
+      // Calcola i nuovi rating ELO
+      const eloResults = calculateELOForGame(playersData);
+
+      // Aggiorna i rating nel mapping
+      eloResults.forEach((result) => {
+        if (playerGameRatings[gameId][result.playerId]) {
+          playerGameRatings[gameId][result.playerId].currentRating = result.newRating;
+          playerGameRatings[gameId][result.playerId].gamesPlayed++;
+        }
+      });
+
+      // Calcola l'ELO Generale per ogni giocatore dopo questa partita
+      const playersInPlay = play.play_scores.map(score => score.player_id);
+
+      for (const playerId of playersInPlay) {
+        // Calcola l'ELO Generale come media ponderata degli ELO specifici per gioco
+        let totalWeightedRating = 0;
+        let totalWeight = 0;
+        let totalGamesPlayed = 0;
+
+        for (const gId in playerGameRatings) {
+          if (playerGameRatings[gId][playerId]) {
+            const gameRating = playerGameRatings[gId][playerId];
+            const weight = gameRating.gamesPlayed;
+            totalWeightedRating += gameRating.currentRating * weight;
+            totalWeight += weight;
+            totalGamesPlayed += gameRating.gamesPlayed;
+          }
+        }
+
+        const generalRating = totalWeight > 0 ? Math.round(totalWeightedRating / totalWeight) : 1000;
+
+        // Trova il nome del giocatore
+        let playerName = 'Unknown';
+        for (const gId in playerGameRatings) {
+          if (playerGameRatings[gId][playerId]) {
+            playerName = playerGameRatings[gId][playerId].playerName;
+            break;
+          }
+        }
+
+        generalELOHistory.push({
+          date: play.played_at,
+          playId: play.id,
+          playerId,
+          playerName,
+          rating: generalRating,
+          gamesPlayed: totalGamesPlayed
+        });
+      }
+
+      playCounter++;
+    }
+
+    console.log(`[getGeneralELOHistory] Riepilogo: ${plays.length} partite totali, ${processedPlays} processate, ${skippedPlays} saltate, ${generalELOHistory.length} punti nel grafico`);
+
+    return generalELOHistory;
+  } catch (error) {
+    console.error('Errore nel calcolo dello storico ELO Generale:', error);
     throw error;
   }
 }

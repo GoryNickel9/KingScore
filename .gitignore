@@ -62,3 +62,6 @@ supabase/.env.local
 
 # Supabase migrations
 supabase/migrations/
+
+# Documentation
+docs/

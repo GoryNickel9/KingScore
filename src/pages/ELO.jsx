@@ -16,7 +16,7 @@ const ELO = () => {
   
   // ELO Generale
   const [generalRatings, setGeneralRatings] = useState([])
-  
+
   // Pulsante temporaneo per calcolare ELO esistenti
   const [recalculatingAll, setRecalculatingAll] = useState(false)
 
@@ -202,16 +202,18 @@ const ELO = () => {
           </h1>
           <p className="mt-2 text-slate-400">Classifica dei giocatori per ogni gioco</p>
         </div>
-        {user && (
-          <button
-            onClick={handleRecalculateAll}
-            disabled={recalculatingAll}
-            className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-          >
-            <RefreshCw className={`w-5 h-5 ${recalculatingAll ? 'animate-spin' : ''}`} />
-            <span>{recalculatingAll ? 'Ricalcolo in corso...' : 'Ricalcola Tutti gli ELO'}</span>
-          </button>
-        )}
+        <div className="flex items-center space-x-2">
+          {user && (
+            <button
+              onClick={handleRecalculateAll}
+              disabled={recalculatingAll}
+              className="flex items-center space-x-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              <RefreshCw className={`w-5 h-5 ${recalculatingAll ? 'animate-spin' : ''}`} />
+              <span>{recalculatingAll ? 'Ricalcolo in corso...' : 'Ricalcola Tutti gli ELO'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ELO Generale */}
