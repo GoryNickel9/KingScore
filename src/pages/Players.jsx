@@ -22,6 +22,11 @@ const Players = () => {
 
   const fetchPlayers = async () => {
     try {
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
       const { data } = await supabase
         .from('players')
         .select('*')
@@ -157,6 +162,29 @@ const Players = () => {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
           <p className="mt-4 text-slate-400">Caricamento...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Nascondi i giocatori agli utenti non registrati
+  if (!user) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Gestione Giocatori</h1>
+          <p className="mt-2 text-slate-400">Accedi per vedere i giocatori</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-12 shadow-md text-center">
+          <Users className="w-16 h-16 mx-auto mb-4 text-slate-600" />
+          <h3 className="text-xl font-semibold text-white mb-2">Accesso Richiesto</h3>
+          <p className="text-slate-400 mb-6">Devi accedere per vedere e gestire i giocatori.</p>
+          <a
+            href="/login"
+            className="inline-flex items-center px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
+          >
+            Accedi
+          </a>
         </div>
       </div>
     )

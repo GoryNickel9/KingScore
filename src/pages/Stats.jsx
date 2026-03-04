@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase'
 import { TrendingUp, Trophy, Calendar, Users, Gamepad2, Flame, Award, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line
+  LineChart, Line, Legend
 } from 'recharts'
+import { getELOHistoryForGame } from '../utils/eloCalculator'
 
 const Stats = () => {
   const { user } = useAuth()
@@ -20,16 +21,33 @@ const Stats = () => {
 
   const [loading, setLoading] = useState(true)
   const [expandedGames, setExpandedGames] = useState({})
+  const [eloHistory, setEloHistory] = useState({})
+  const [loadingEloHistory, setLoadingEloHistory] = useState({})
 
   useEffect(() => {
     fetchStats()
   }, [])
 
-  const toggleGameExpansion = (gameId) => {
+  const toggleGameExpansion = async (gameId) => {
+    const isExpanding = !expandedGames[gameId]
+    
     setExpandedGames(prev => ({
       ...prev,
-      [gameId]: !prev[gameId]
+      [gameId]: isExpanding
     }))
+
+    // Se stiamo espandendo e non abbiamo ancora lo storico ELO, recuperalo
+    if (isExpanding && !eloHistory[gameId]) {
+      try {
+        setLoadingEloHistory(prev => ({ ...prev, [gameId]: true }))
+        const history = await getELOHistoryForGame(supabase, gameId, user?.id)
+        setEloHistory(prev => ({ ...prev, [gameId]: history }))
+      } catch (error) {
+        console.error('Errore nel recupero dello storico ELO:', error)
+      } finally {
+        setLoadingEloHistory(prev => ({ ...prev, [gameId]: false }))
+      }
+    }
   }
 
   const fetchStats = async () => {
@@ -136,8 +154,7 @@ const Stats = () => {
       })
 
       const gameOfTheMonth = Object.entries(gameCountsThisMonth)
-        .sort((a, b) => b[1] - a[1])
-        [0]?.[0]
+        .sort((a, b) => b[1] - a[1])[0]?.[0]
 
       const gameOfTheMonthData = gameOfTheMonth
         ? playsData.find(p => p.game_id === gameOfTheMonth[0])?.games
@@ -159,12 +176,7 @@ const Stats = () => {
       })
 
       const gameOfPreviousMonth = Object.entries(gameCountsPreviousMonth)
-        .sort((a, b) => b[1] - a[1])
-        [0]?.[0]
-
-      const gameOfPreviousMonthData = gameOfPreviousMonth
-        ? playsData.find(p => p.game_id === gameOfPreviousMonth[0])?.games
-        : null
+        .sort((a, b) => b[1] - a[1])[0]?.[0]
 
       let trend = 0
       if (gameOfTheMonth && gameOfPreviousMonth) {
@@ -256,6 +268,8 @@ const Stats = () => {
   }
 
   const getMyPlayer = async () => {
+    if (!user) return null
+    
     const { data, error } = await supabase
       .from('players')
       .select('id')
@@ -269,6 +283,69 @@ const Stats = () => {
     }
 
     return data
+  }
+
+  // Prepara i dati per il grafico ELO
+  const prepareELOChartData = (history) => {
+    if (!history || history.length === 0) return []
+
+    const uniquePlayers = new Set()
+
+    // Ordina per data
+    const sorted = [...history].sort((a, b) => new Date(a.date) - new Date(b.date))
+
+    // Raggruppa per data mantenendo l'ordine cronologico
+    const groupedByDate = {}
+    sorted.forEach(entry => {
+      const dateObj = new Date(entry.date)
+      const dateKey = dateObj.toISOString().split('T')[0]
+      if (!groupedByDate[dateKey]) {
+        groupedByDate[dateKey] = { dateKey }
+      }
+      groupedByDate[dateKey][entry.playerName] = entry.rating
+      uniquePlayers.add(entry.playerName)
+    })
+
+    const players = Array.from(uniquePlayers)
+    const dateEntries = Object.values(groupedByDate).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+
+    // Forward-fill: propaga l'ultimo valore noto per ogni giocatore
+    const lastKnown = {}
+    const chartData = dateEntries.map((entry, index) => {
+      const point = { date: index + 1 }
+      players.forEach(player => {
+        if (entry[player] !== undefined) {
+          lastKnown[player] = entry[player]
+        }
+        point[player] = lastKnown[player] ?? null
+      })
+      return point
+    })
+
+    return { chartData, players }
+  }
+
+  // Genera colori per i giocatori
+  const getPlayerColors = (players) => {
+    const colors = [
+      '#10b981', // emerald-500
+      '#3b82f6', // blue-500
+      '#f59e0b', // amber-500
+      '#ef4444', // red-500
+      '#8b5cf6', // violet-500
+      '#ec4899', // pink-500
+      '#06b6d4', // cyan-500
+      '#84cc16', // lime-500
+      '#f97316', // orange-500
+      '#6366f1', // indigo-500
+    ]
+
+    const playerColors = {}
+    players.forEach((player, index) => {
+      playerColors[player] = colors[index % colors.length]
+    })
+
+    return playerColors
   }
 
   if (loading) {
@@ -329,7 +406,7 @@ const Stats = () => {
           Giocatori più Frequenti
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stats.mostFrequentPlayers.map((player, index) => (
+          {stats.mostFrequentPlayers.map((player) => (
             <div key={player.playerId} className="bg-slate-700 rounded-lg p-4">
               <div className="flex items-center space-x-3 mb-3">
                 <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
@@ -455,23 +532,101 @@ const Stats = () => {
 
                 {/* Players statistics for this game - collapsible */}
                 {expandedGames[game.gameId] && (
-                  <div className="mt-4 pt-4 border-t border-slate-700">
-                    <h4 className="text-sm font-semibold text-slate-300 mb-3">Punteggio medio per giocatore</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {game.players.map((player) => (
-                        <div key={player.playerId} className="bg-slate-700 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-white font-medium">{player.playerName}</p>
-                              <p className="text-xs text-slate-400">{player.playCount} partite</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-emerald-500">{player.avgScore}</p>
-                              <p className="text-xs text-slate-400">media</p>
+                  <div className="mt-4 pt-4 border-t border-slate-700 space-y-6">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-300 mb-3">Punteggio medio per giocatore</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {game.players.map((player) => (
+                          <div key={player.playerId} className="bg-slate-700 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-white font-medium">{player.playerName}</p>
+                                <p className="text-xs text-slate-400">{player.playCount} partite</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-emerald-500">{player.avgScore}</p>
+                                <p className="text-xs text-slate-400">media</p>
+                              </div>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ELO History Chart */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-300 mb-3">Evoluzione ELO nel tempo</h4>
+                      {loadingEloHistory[game.gameId] ? (
+                        <div className="flex items-center justify-center h-64 bg-slate-700 rounded-lg">
+                          <div className="text-center">
+                            <svg className="animate-spin h-8 w-8 text-emerald-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p className="mt-2 text-slate-400">Caricamento storico ELO...</p>
+                          </div>
                         </div>
-                      ))}
+                      ) : eloHistory[game.gameId] && eloHistory[game.gameId].length > 0 ? (
+                        (() => {
+                          const { chartData, players } = prepareELOChartData(eloHistory[game.gameId])
+                          const playerColors = getPlayerColors(players)
+
+                          return (
+                            <div className="h-80 bg-slate-700 rounded-lg p-4">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                                  <XAxis
+                                    dataKey="date"
+                                    stroke="#94a3b8"
+                                    tick={{ fontSize: 11 }}
+                                    label={{ value: 'Partita', position: 'insideBottomRight', offset: -5, fill: '#94a3b8', fontSize: 11 }}
+                                    height={30}
+                                  />
+                                  <YAxis
+                                    stroke="#94a3b8"
+                                    tick={{ fontSize: 12 }}
+                                    domain={['auto', 'auto']}
+                                  />
+                                  <Tooltip
+                                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                                    itemStyle={{ color: '#e2e8f0' }}
+                                    labelStyle={{ color: '#94a3b8' }}
+                                    labelFormatter={(value) => `Partita ${value}`}
+                                  />
+                                  <Legend
+                                    wrapperStyle={{ paddingTop: '20px' }}
+                                    iconType="circle"
+                                  />
+                                  {players.map((player) => (
+                                    <Line
+                                      key={player}
+                                      type="monotone"
+                                      dataKey={player}
+                                      stroke={playerColors[player]}
+                                      strokeWidth={2}
+                                      name={player}
+                                      connectNulls={true}
+                                      dot={{ r: 3 }}
+                                      activeDot={{ r: 5 }}
+                                    />
+                                  ))}
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )
+                        })()
+                      ) : (
+                        <div className="flex items-center justify-center h-64 bg-slate-700 rounded-lg">
+                          <div className="text-center">
+                            <TrendingUp className="w-12 h-12 text-slate-500 mx-auto mb-2" />
+                            <p className="text-slate-400">Nessun dato ELO disponibile</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Gioca qualche partita per vedere l'evoluzione degli ELO
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

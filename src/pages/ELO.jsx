@@ -76,7 +76,10 @@ const ELO = () => {
 
   const fetchMyPlayer = async () => {
     try {
-      if (!user) return
+      if (!user) {
+        setMyPlayer(null)
+        return
+      }
       const { data, error } = await supabase
         .from('players')
         .select('id')
@@ -520,12 +523,6 @@ const ELO = () => {
                 <span className="text-sm">&lt;1050 Principiante</span>
               </div>
             </div>
-          </div>
-          <div>
-            <h3 className="text-white font-medium mb-2">🔄 Ricalcolo</h3>
-            <p className="text-sm">
-              Puoi ricalcolare tutti i rating ELO per un gioco partendo dalle partite storiche. Questo è utile se hai aggiunto nuove partite o se vuoi ricominciare da capo.
-            </p>
           </div>
         </div>
       </div>

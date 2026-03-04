@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { getELOHistoryForGame } from '../utils/eloCalculator'
 
 const PlayDetail = () => {
   const { id } = useParams()
@@ -13,6 +14,8 @@ const PlayDetail = () => {
   const [play, setPlay] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [eloHistory, setEloHistory] = useState([])
+  const [loadingElo, setLoadingElo] = useState(false)
 
   useEffect(() => {
     fetchPlay()
@@ -36,6 +39,19 @@ const PlayDetail = () => {
 
       if (data) {
         setPlay(data)
+        
+        // Recupera lo storico ELO per questo gioco
+        if (data.game_id) {
+          try {
+            setLoadingElo(true)
+            const history = await getELOHistoryForGame(supabase, data.game_id, user.id)
+            setEloHistory(history)
+          } catch (error) {
+            console.error('Error fetching ELO history:', error)
+          } finally {
+            setLoadingElo(false)
+          }
+        }
       } else {
         toast.error('Partita non trovata')
         navigate('/plays')
@@ -63,6 +79,20 @@ const PlayDetail = () => {
     } catch (error) {
       console.error('Error deleting play:', error)
       toast.error('Errore durante l\'eliminazione della partita')
+    }
+  }
+
+  // Ottieni l'ELO attuale e l'ELO guadagnato per un giocatore in questa partita
+  const getPlayerELO = (playerId) => {
+    const eloEntry = eloHistory.find(entry => 
+      entry.playId === play.id && entry.playerId === playerId
+    )
+    
+    if (!eloEntry) return null
+    
+    return {
+      currentRating: eloEntry.rating,
+      ratingChange: eloEntry.ratingChange
     }
   }
 
@@ -210,6 +240,7 @@ const PlayDetail = () => {
                   <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Giocatore</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Punteggio</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Vincitore</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">ELO</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,6 +297,35 @@ const PlayDetail = () => {
                             <span className="text-sm font-medium">Vincitore</span>
                           </div>
                         )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {loadingElo ? (
+                          <span className="text-slate-400">Caricamento...</span>
+                        ) : (() => {
+                          const playerELO = getPlayerELO(score.player_id)
+                          if (!playerELO) return <span className="text-slate-400">-</span>
+
+                          const { currentRating, ratingChange } = playerELO
+                          const isPositive = ratingChange > 0
+                          const isNegative = ratingChange < 0
+
+                          return (
+                            <div className="flex items-center">
+                              <span className="text-white font-medium">{currentRating}</span>
+                              {ratingChange !== 0 && (
+                                <span className={`ml-2 text-sm font-medium flex items-center ${
+                                  isPositive ? 'text-emerald-500' :
+                                  isNegative ? 'text-red-500' :
+                                  'text-slate-400'
+                                }`}>
+                                  {isPositive && <TrendingUp className="w-3 h-3 mr-1" />}
+                                  {isNegative && <TrendingDown className="w-3 h-3 mr-1" />}
+                                  {ratingChange > 0 ? '+' : ''}{ratingChange}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </td>
                     </tr>
                   ))}

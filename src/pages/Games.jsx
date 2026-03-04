@@ -2,7 +2,46 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Search, Gamepad2, TrendingUp, Calendar } from 'lucide-react'
+import { Search, Gamepad2, TrendingUp, Calendar, RefreshCw, Image as ImageIcon } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { XMLParser } from 'fast-xml-parser'
+
+// ─── BoardGameGeek (BGG) Image Fetcher ───────────────────────────────────────
+const parser = new XMLParser()
+
+const fetchGameImageFromBGG = async (gameName) => {
+  try {
+    // Search for the game on BGG
+    const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(gameName)}&type=boardgame`
+    const searchResponse = await fetch(searchUrl)
+    const searchXml = await searchResponse.text()
+    const searchResult = parser.parse(searchXml)
+
+    // Check if we found any games
+    const items = searchResult?.items?.item
+    if (!items) return null
+
+    // Get the first game ID (most relevant result)
+    const gameId = Array.isArray(items) ? items[0].id : items.id
+    if (!gameId) return null
+
+    // Fetch game details including image
+    const detailsUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${gameId}&stats=1`
+    const detailsResponse = await fetch(detailsUrl)
+    const detailsXml = await detailsResponse.text()
+    const detailsResult = parser.parse(detailsXml)
+
+    // Extract image URL
+    const items2 = detailsResult?.items?.item
+    if (!items2) return null
+
+    const game = Array.isArray(items2) ? items2[0] : items2
+    return game?.image || null
+  } catch (error) {
+    console.error('Error fetching game image from BGG:', error)
+    return null
+  }
+}
 
 const Games = () => {
   const { user } = useAuth()
@@ -11,6 +50,8 @@ const Games = () => {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('name')
+  const [updatingImages, setUpdatingImages] = useState(false)
+  const [updateProgress, setUpdateProgress] = useState(0)
 
   useEffect(() => {
     fetchGames()
@@ -105,6 +146,67 @@ const Games = () => {
     setFilteredGames(result)
   }
 
+  const updateGameImages = async () => {
+    setUpdatingImages(true)
+    setUpdateProgress(0)
+
+    try {
+      // Get all games without images
+      const { data: gamesWithoutImages } = await supabase
+        .from('games')
+        .select('*')
+        .is('image_url', null)
+        .eq('user_id', user.id)
+
+      if (!gamesWithoutImages || gamesWithoutImages.length === 0) {
+        toast.success('Tutti i giochi hanno già un\'immagine!')
+        setUpdatingImages(false)
+        return
+      }
+
+      let updated = 0
+      let failed = 0
+
+      for (let i = 0; i < gamesWithoutImages.length; i++) {
+        const game = gamesWithoutImages[i]
+        setUpdateProgress(Math.round((i / gamesWithoutImages.length) * 100))
+
+        try {
+          const imageUrl = await fetchGameImageFromBGG(game.name)
+
+          if (imageUrl) {
+            await supabase
+              .from('games')
+              .update({ image_url: imageUrl })
+              .eq('id', game.id)
+
+            updated++
+            toast.success(`Immagine trovata per: ${game.name}`)
+          } else {
+            failed++
+            toast.warning(`Nessuna immagine trovata per: ${game.name}`)
+          }
+        } catch (error) {
+          failed++
+          console.error(`Error updating image for ${game.name}:`, error)
+          toast.error(`Errore nell'aggiornamento dell'immagine per: ${game.name}`)
+        }
+      }
+
+      setUpdateProgress(100)
+      toast.success(`Aggiornamento completato! ${updated} immagini aggiornate, ${failed} fallite`)
+
+      // Refresh games list
+      await fetchGames()
+    } catch (error) {
+      console.error('Error updating game images:', error)
+      toast.error('Errore durante l\'aggiornamento delle immagini')
+    } finally {
+      setUpdatingImages(false)
+      setUpdateProgress(0)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -126,6 +228,23 @@ const Games = () => {
           <h1 className="text-3xl font-bold text-white">Libreria Giochi</h1>
           <p className="mt-2 text-slate-400">{filteredGames.length} giochi nella tua collezione</p>
         </div>
+        <button
+          onClick={updateGameImages}
+          disabled={updatingImages}
+          className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {updatingImages ? (
+            <>
+              <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+              Aggiornamento in corso... {updateProgress}%
+            </>
+          ) : (
+            <>
+              <ImageIcon className="w-5 h-5 mr-2" />
+              Aggiorna Immagini
+            </>
+          )}
+        </button>
       </div>
 
       {/* Search and Filters */}

@@ -9,6 +9,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Plays from './pages/Plays'
 import AddPlay from './pages/AddPlay'
+import EditPlay from './pages/EditPlay'
 import PlayDetail from './pages/PlayDetail'
 import Games from './pages/Games'
 import GameDetail from './pages/GameDetail'
@@ -17,6 +18,7 @@ import PlayerDetail from './pages/PlayerDetail'
 import Import from './pages/Import'
 import Stats from './pages/Stats'
 import ELO from './pages/ELO'
+import Images from './pages/Images'
 
 function App() {
   return (
@@ -100,6 +102,14 @@ function App() {
               </Layout>
             }
           />
+          <Route
+            path="/images"
+            element={
+              <Layout>
+                <Images />
+              </Layout>
+            }
+          />
 
           {/* Protected Routes - Only for registered users */}
           <Route
@@ -108,6 +118,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <AddPlay />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/plays/:id/edit"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <EditPlay />
                 </Layout>
               </ProtectedRoute>
             }

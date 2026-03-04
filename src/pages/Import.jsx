@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { Download, AlertCircle, CheckCircle, Loader2, Info, Users, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { updateELOAfterGame } from '../utils/eloCalculator'
+import { XMLParser } from 'fast-xml-parser'
 
 const LOG_CONFIG = {
   success: { icon: CheckCircle, iconClass: 'text-emerald-500', textClass: 'text-emerald-400' },
@@ -29,6 +30,43 @@ const similarity = (a, b) => {
   if (!a || !b) return 0
   const dist = levenshtein(a.toLowerCase(), b.toLowerCase())
   return 1 - dist / Math.max(a.length, b.length)
+}
+
+// ─── BoardGameGeek (BGG) Image Fetcher ───────────────────────────────────────
+const parser = new XMLParser()
+
+const fetchGameImageFromBGG = async (gameName) => {
+  try {
+    // Search for the game on BGG
+    const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(gameName)}&type=boardgame`
+    const searchResponse = await fetch(searchUrl)
+    const searchXml = await searchResponse.text()
+    const searchResult = parser.parse(searchXml)
+
+    // Check if we found any games
+    const items = searchResult?.items?.item
+    if (!items) return null
+
+    // Get the first game ID (most relevant result)
+    const gameId = Array.isArray(items) ? items[0].id : items.id
+    if (!gameId) return null
+
+    // Fetch game details including image
+    const detailsUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${gameId}&stats=1`
+    const detailsResponse = await fetch(detailsUrl)
+    const detailsXml = await detailsResponse.text()
+    const detailsResult = parser.parse(detailsXml)
+
+    // Extract image URL
+    const items2 = detailsResult?.items?.item
+    if (!items2) return null
+
+    const game = Array.isArray(items2) ? items2[0] : items2
+    return game?.image || null
+  } catch (error) {
+    console.error('Error fetching game image from BGG:', error)
+    return null
+  }
 }
 
 // Resolve "GoryNickel9112" → { name: "GoryNickel9", score: 112, autoResolved: bool }
@@ -406,8 +444,16 @@ const Import = () => {
 
           let gameId = existingGame?.id
           if (!gameId) {
+            // Try to fetch game image from BGG
+            const imageUrl = await fetchGameImageFromBGG(play.game_name)
+            if (imageUrl) {
+              addLog(`Immagine trovata per: ${play.game_name}`, 'info')
+            } else {
+              addLog(`Nessuna immagine trovata per: ${play.game_name}`, 'warning')
+            }
+
             const { data: newGame } = await supabase.from('games')
-              .insert({ name: play.game_name, bga_id: null }).select().single()
+              .insert({ name: play.game_name, bga_id: null, image_url: imageUrl }).select().single()
             if (newGame) { gameId = newGame.id; addLog(`Nuovo gioco: ${play.game_name}`, 'info') }
           }
 

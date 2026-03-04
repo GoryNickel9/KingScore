@@ -20,7 +20,7 @@ const Plays = () => {
 
   useEffect(() => {
     fetchPlays()
-  }, [])
+  }, [user])
 
   useEffect(() => {
     applyFilters()
@@ -38,7 +38,6 @@ const Plays = () => {
             players(*)
           )
         `)
-        .eq('user_id', user.id)
         .order('played_at', { ascending: false })
 
       setPlays(data || [])

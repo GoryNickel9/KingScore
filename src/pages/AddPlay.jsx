@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Save, Plus, Search, X, Gamepad2 } from 'lucide-react'
+import { Save, Plus, Search, X, Gamepad2, Upload, Image as ImageIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { updateELOAfterGame } from '../utils/eloCalculator'
+import { uploadGameImage, compressImage } from '../utils/imageUpload'
 
 const AddPlay = () => {
   const { user } = useAuth()
@@ -33,6 +34,9 @@ const AddPlay = () => {
     maxPlayers: '',
     imageUrl: ''
   })
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -74,18 +78,70 @@ const AddPlay = () => {
     setSearchTerm('')
   }
 
+  const handleImageSelect = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Valida il file
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Tipo di file non supportato. Usa: JPG, PNG, WebP o GIF')
+      return
+    }
+
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      toast.error('Il file è troppo grande. La dimensione massima è 5MB')
+      return
+    }
+
+    // Crea anteprima
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result)
+    }
+    reader.readAsDataURL(file)
+    setImageFile(file)
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    setNewGame(prev => ({ ...prev, imageUrl: '' }))
+  }
+
   const handleAddGame = async (e) => {
     e.preventDefault()
     if (!newGame.name) return
 
+    setUploadingImage(true)
+
     try {
+      let imageUrl = newGame.imageUrl || null
+
+      // Se è stato selezionato un file, caricalo su Supabase Storage
+      if (imageFile) {
+        try {
+          // Comprimi l'immagine prima dell'upload
+          const compressedImage = await compressImage(imageFile, 800, 0.8)
+          
+          // Carica l'immagine
+          const { publicUrl } = await uploadGameImage(compressedImage, user.id)
+          imageUrl = publicUrl
+          toast.success('Immagine caricata con successo!')
+        } catch (uploadError) {
+          console.error('Errore durante l\'upload dell\'immagine:', uploadError)
+          toast.error('Errore durante il caricamento dell\'immagine. Il gioco verrà salvato senza immagine.')
+        }
+      }
+
       const { data, error } = await supabase
         .from('games')
         .insert({
           name: newGame.name,
           min_players: newGame.minPlayers ? parseInt(newGame.minPlayers) : null,
           max_players: newGame.maxPlayers ? parseInt(newGame.maxPlayers) : null,
-          image_url: newGame.imageUrl || null
+          image_url: imageUrl
         })
         .select()
         .single()
@@ -100,11 +156,15 @@ const AddPlay = () => {
 
       setGames([...games, data])
       setNewGame({ name: '', minPlayers: '', maxPlayers: '', imageUrl: '' })
+      setImageFile(null)
+      setImagePreview(null)
       setShowAddGame(false)
       toast.success('Gioco aggiunto con successo!')
     } catch (error) {
       toast.error('Errore durante l\'aggiunta del gioco')
       console.error('Error adding game:', error)
+    } finally {
+      setUploadingImage(false)
     }
   }
 
@@ -411,26 +471,78 @@ const AddPlay = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-300 mb-1">URL Immagine</label>
-                  <input
-                    type="url"
-                    value={newGame.imageUrl}
-                    onChange={(e) => setNewGame(prev => ({ ...prev, imageUrl: e.target.value }))}
-                    className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                  <label className="block text-sm text-slate-300 mb-1">Immagine</label>
+                  
+                  {/* Anteprima immagine */}
+                  {(imagePreview || newGame.imageUrl) && (
+                    <div className="mb-3 relative">
+                      <img
+                        src={imagePreview || newGame.imageUrl}
+                        alt="Anteprima"
+                        className="w-full h-48 object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Upload file */}
+                  <div className="mb-3">
+                    <label className="flex items-center justify-center w-full px-4 py-3 bg-slate-600 border-2 border-dashed border-slate-500 rounded-lg cursor-pointer hover:border-emerald-500 transition">
+                      <div className="flex items-center space-x-2">
+                        <Upload className="w-5 h-5 text-slate-400" />
+                        <span className="text-slate-400">
+                          {imageFile ? imageFile.name : 'Carica un\'immagine'}
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-xs text-slate-500 mt-1">Formati supportati: JPG, PNG, WebP, GIF (max 5MB)</p>
+                  </div>
+
+                  {/* Oppure inserisci URL */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 text-sm">oppure</span>
+                    <input
+                      type="url"
+                      value={newGame.imageUrl}
+                      onChange={(e) => setNewGame(prev => ({ ...prev, imageUrl: e.target.value }))}
+                      placeholder="https://esempio.com/immagine.jpg"
+                      className="flex-1 px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
                 </div>
                 <div className="flex space-x-2">
                   <button
                     type="button"
                     onClick={handleAddGame}
-                    className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
+                    disabled={uploadingImage}
+                    className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
-                    Salva Gioco
+                    {uploadingImage ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Caricamento...
+                      </>
+                    ) : (
+                      'Salva Gioco'
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowAddGame(false)}
-                    className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition"
+                    disabled={uploadingImage}
+                    className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Annulla
                   </button>
