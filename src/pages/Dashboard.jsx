@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Trophy, Calendar, Gamepad2 } from 'lucide-react'
@@ -6,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const Dashboard = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [stats, setStats] = useState({
     totalPlays: 0,
     topPlayedGames: [],
@@ -230,6 +232,7 @@ const Dashboard = () => {
               <div
                 key={play.id}
                 className="flex items-center justify-between p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition cursor-pointer"
+                onClick={() => navigate(`/plays/${play.id}`)}
               >
                 <div className="flex items-center space-x-4">
                   {play.games?.image_url ? (
