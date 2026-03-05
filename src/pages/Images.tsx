@@ -4,13 +4,19 @@ import { supabase } from '../lib/supabase'
 import { Image as ImageIcon, Save, CheckCircle, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+}
+
 const Images = () => {
   const { user, loading: authLoading } = useAuth()
-  const [games, setGames] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [urlInputs, setUrlInputs] = useState({})
-  const [saving, setSaving] = useState({})
-  const [saved, setSaved] = useState({})
+  const [games, setGames] = useState<DbGame[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [urlInputs, setUrlInputs] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState<Record<string, boolean>>({})
+  const [saved, setSaved] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -20,7 +26,7 @@ const Images = () => {
     }
   }, [user, authLoading])
 
-  const fetchGamesWithoutImages = async () => {
+  const fetchGamesWithoutImages = async (): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('games')
@@ -32,10 +38,10 @@ const Images = () => {
         return
       }
 
-      const gamesWithoutImages = (data || []).filter(g => !g.image_url || g.image_url === '')
+      const gamesWithoutImages = ((data ?? []) as DbGame[]).filter(g => !g.image_url || g.image_url === '')
       setGames(gamesWithoutImages)
 
-      const inputs = {}
+      const inputs: Record<string, string> = {}
       gamesWithoutImages.forEach(g => { inputs[g.id] = '' })
       setUrlInputs(inputs)
     } catch (err) {
@@ -46,7 +52,7 @@ const Images = () => {
     }
   }
 
-  const handleSave = async (game) => {
+  const handleSave = async (game: DbGame): Promise<void> => {
     const url = urlInputs[game.id]?.trim()
     if (!url) {
       toast.error('Inserisci un URL valido')
@@ -135,7 +141,7 @@ const Images = () => {
                         src={url}
                         alt={game.name}
                         className="w-full h-full object-cover"
-                        onError={(e) => { e.target.style.display = 'none' }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
                     ) : (
                       <ImageIcon className="w-6 h-6 text-slate-500" />
@@ -161,8 +167,8 @@ const Images = () => {
                         type="url"
                         placeholder="https://cf.geekdo-images.com/..."
                         value={url}
-                        onChange={(e) => setUrlInputs(prev => ({ ...prev, [game.id]: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleSave(game) }}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUrlInputs(prev => ({ ...prev, [game.id]: e.target.value }))}
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSave(game) }}
                         disabled={isSaving || isSaved}
                         className="flex-1 px-3 py-2 bg-slate-700 text-white text-sm rounded-lg border border-slate-600 focus:border-emerald-500 focus:outline-none placeholder-slate-500 disabled:opacity-50"
                       />

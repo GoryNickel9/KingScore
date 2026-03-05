@@ -2,29 +2,49 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Plus, Edit, Trash2, Users, Trophy, TrendingUp, User, AlertTriangle, Upload, X } from 'lucide-react'
+import { Plus, Edit, Trash2, Users, Trophy, User, AlertTriangle, Upload, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { uploadPlayerImage, deletePlayerImage, getPlayerImageUrl } from '../utils/imageUpload'
 
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+  avatar_url?: string | null
+  is_me?: boolean
+  user_id?: string
+}
+
+interface PlayerStats {
+  totalPlays: number
+  winRate: number
+}
+
+interface PlayerFormData {
+  name: string
+  alias: string
+  avatar_url: string
+}
+
 const Players = () => {
   const { user } = useAuth()
-  const [players, setPlayers] = useState([])
-  const [playerStats, setPlayerStats] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedPlayer, setSelectedPlayer] = useState(null)
-  const [formData, setFormData] = useState({ name: '', alias: '', avatar_url: '' })
-  const [avatarFile, setAvatarFile] = useState(null)
-  const [avatarPreview, setAvatarPreview] = useState(null)
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [players, setPlayers] = useState<DbPlayer[]>([])
+  const [playerStats, setPlayerStats] = useState<Record<string, PlayerStats>>({})
+  const [loading, setLoading] = useState<boolean>(true)
+  const [showAddModal, setShowAddModal] = useState<boolean>(false)
+  const [showEditModal, setShowEditModal] = useState<boolean>(false)
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
+  const [selectedPlayer, setSelectedPlayer] = useState<DbPlayer | null>(null)
+  const [formData, setFormData] = useState<PlayerFormData>({ name: '', alias: '', avatar_url: '' })
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false)
 
   useEffect(() => {
     fetchPlayers()
   }, [])
 
-  const fetchPlayers = async () => {
+  const fetchPlayers = async (): Promise<void> => {
     try {
       if (!user) {
         setLoading(false)
@@ -38,19 +58,22 @@ const Players = () => {
         .order('name')
 
       if (data) {
-        setPlayers(data)
+        setPlayers(data as DbPlayer[])
 
-        // Fetch stats for each player
-        const stats = {}
-        for (const player of data) {
-          const { data: playsData } = await supabase
+        // Fetch stats for all players in a single batch query
+        const playerIds = (data as DbPlayer[]).map(p => p.id)
+        const stats: Record<string, PlayerStats> = {}
+
+        if (playerIds.length > 0) {
+          const { data: allPlaysData } = await supabase
             .from('play_scores')
-            .select('winner, plays(*)')
-            .eq('player_id', player.id)
+            .select('player_id, winner')
+            .in('player_id', playerIds)
 
-          if (playsData) {
-            const totalPlays = playsData.length
-            const wins = playsData.filter(s => s.winner).length
+          for (const player of data as DbPlayer[]) {
+            const playerPlays = (allPlaysData || []).filter((s: { player_id: string; winner: boolean }) => s.player_id === player.id)
+            const totalPlays = playerPlays.length
+            const wins = playerPlays.filter((s: { player_id: string; winner: boolean }) => s.winner).length
             stats[player.id] = {
               totalPlays,
               winRate: totalPlays > 0 ? Math.round((wins / totalPlays) * 100) : 0
@@ -67,21 +90,21 @@ const Players = () => {
     }
   }
 
-  const handleAdd = async (e) => {
+  const handleAdd = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     if (!formData.name.trim()) return
 
     try {
-      let avatarUrl = null
+      let avatarUrl: string | null = null
 
       // Carica l'immagine del profilo se presente
       if (avatarFile) {
         setUploadingAvatar(true)
         try {
-          const { publicUrl, path } = await uploadPlayerImage(avatarFile, user.id)
+          const { path } = await uploadPlayerImage(avatarFile, user!.id)
           avatarUrl = path
         } catch (error) {
-          toast.error('Errore durante il caricamento dell\'immagine')
+          toast.error("Errore durante il caricamento dell'immagine")
           console.error('Error uploading avatar:', error)
           setUploadingAvatar(false)
           return
@@ -92,7 +115,7 @@ const Players = () => {
       const { error } = await supabase
         .from('players')
         .insert({
-          user_id: user.id,
+          user_id: user!.id,
           name: formData.name.trim(),
           alias: formData.alias.trim() || null,
           avatar_url: avatarUrl,
@@ -108,31 +131,31 @@ const Players = () => {
       setAvatarPreview(null)
       fetchPlayers()
     } catch (error) {
-      toast.error('Errore durante l\'aggiunta del giocatore')
+      toast.error("Errore durante l'aggiunta del giocatore")
       console.error('Error adding player:', error)
     }
   }
 
-  const handleEdit = async (e) => {
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     if (!formData.name.trim()) return
 
     try {
-      let avatarUrl = selectedPlayer.avatar_url
+      let avatarUrl = selectedPlayer!.avatar_url
 
       // Carica la nuova immagine del profilo se presente
       if (avatarFile) {
         setUploadingAvatar(true)
         try {
           // Elimina l'immagine precedente se esiste
-          if (selectedPlayer.avatar_url) {
-            await deletePlayerImage(selectedPlayer.avatar_url)
+          if (selectedPlayer!.avatar_url) {
+            await deletePlayerImage(selectedPlayer!.avatar_url)
           }
 
-          const { publicUrl, path } = await uploadPlayerImage(avatarFile, user.id)
+          const { path } = await uploadPlayerImage(avatarFile, user!.id)
           avatarUrl = path
         } catch (error) {
-          toast.error('Errore durante il caricamento dell\'immagine')
+          toast.error("Errore durante il caricamento dell'immagine")
           console.error('Error uploading avatar:', error)
           setUploadingAvatar(false)
           return
@@ -147,7 +170,7 @@ const Players = () => {
           alias: formData.alias.trim() || null,
           avatar_url: avatarUrl
         })
-        .eq('id', selectedPlayer.id)
+        .eq('id', selectedPlayer!.id)
 
       if (error) throw error
 
@@ -159,17 +182,17 @@ const Players = () => {
       setAvatarPreview(null)
       fetchPlayers()
     } catch (error) {
-      toast.error('Errore durante l\'aggiornamento del giocatore')
+      toast.error("Errore durante l'aggiornamento del giocatore")
       console.error('Error updating player:', error)
     }
   }
 
-  const handleDelete = async () => {
+  const handleDelete = async (): Promise<void> => {
     try {
       const { error } = await supabase
         .from('players')
         .delete()
-        .eq('id', selectedPlayer.id)
+        .eq('id', selectedPlayer!.id)
 
       if (error) throw error
 
@@ -178,12 +201,12 @@ const Players = () => {
       setSelectedPlayer(null)
       fetchPlayers()
     } catch (error) {
-      toast.error('Errore durante l\'eliminazione del giocatore')
+      toast.error("Errore durante l'eliminazione del giocatore")
       console.error('Error deleting player:', error)
     }
   }
 
-  const getAvatarColor = (name) => {
+  const getAvatarColor = (name: string): string => {
     const colors = [
       'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500',
       'bg-teal-500', 'bg-blue-500', 'bg-indigo-500', 'bg-purple-500',
@@ -193,7 +216,7 @@ const Players = () => {
     return colors[index]
   }
 
-  const getInitials = (name) => {
+  const getInitials = (name: string): string => {
     return name
       .split(' ')
       .map(word => word[0])
@@ -202,8 +225,8 @@ const Players = () => {
       .slice(0, 2)
   }
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0]
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0]
     if (file) {
       // Controlla la dimensione del file (max 2MB)
       const maxSize = 2 * 1024 * 1024
@@ -224,13 +247,13 @@ const Players = () => {
       // Crea un'anteprima dell'immagine
       const reader = new FileReader()
       reader.onloadend = () => {
-        setAvatarPreview(reader.result)
+        setAvatarPreview(reader.result as string)
       }
       reader.readAsDataURL(file)
     }
   }
 
-  const handleRemoveAvatar = () => {
+  const handleRemoveAvatar = (): void => {
     setAvatarFile(null)
     setAvatarPreview(null)
   }
@@ -314,7 +337,7 @@ const Players = () => {
                   {/* Avatar */}
                   {player.avatar_url ? (
                     <img
-                      src={getPlayerImageUrl(player.avatar_url)}
+                      src={getPlayerImageUrl(player.avatar_url!) ?? undefined}
                       alt={player.name}
                       className="w-16 h-16 rounded-full object-cover flex-shrink-0"
                     />
@@ -414,7 +437,7 @@ const Players = () => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="Nome del giocatore"
                   autoFocus
@@ -425,7 +448,7 @@ const Players = () => {
                 <input
                   type="text"
                   value={formData.alias}
-                  onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, alias: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="Nickname o alias"
                 />
@@ -508,7 +531,7 @@ const Players = () => {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   autoFocus
                 />
@@ -518,7 +541,7 @@ const Players = () => {
                 <input
                   type="text"
                   value={formData.alias}
-                  onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, alias: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="Nickname o alias"
                 />

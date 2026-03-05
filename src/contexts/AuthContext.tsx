@@ -1,16 +1,23 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
+import type { AuthContextType, AuthResult } from '../types'
+import type { User } from '@supabase/supabase-js'
 
-const AuthContext = createContext(null)
+const AuthContext = createContext<AuthContextType | null>(null)
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+interface AuthProviderProps {
+  children: ReactNode
+}
+
+export const AuthProvider = ({ children }: AuthProviderProps) => {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
     // Controlla la sessione corrente
-    const checkSession = async () => {
+    const checkSession = async (): Promise<void> => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         setUser(session?.user ?? null)
@@ -32,7 +39,7 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email, password, name) => {
+  const signUp = async (email: string, password: string, name: string): Promise<AuthResult> => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -49,12 +56,12 @@ export const AuthProvider = ({ children }) => {
       toast.success('Registrazione completata! Controlla la tua email.')
       return { data, error: null }
     } catch (error) {
-      toast.error(error.message)
-      return { data: null, error }
+      toast.error((error as Error).message)
+      return { data: null, error: error as Error }
     }
   }
 
-  const signIn = async (email, password) => {
+  const signIn = async (email: string, password: string): Promise<AuthResult> => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -66,12 +73,12 @@ export const AuthProvider = ({ children }) => {
       toast.success('Login effettuato con successo!')
       return { data, error: null }
     } catch (error) {
-      toast.error(error.message)
-      return { data: null, error }
+      toast.error((error as Error).message)
+      return { data: null, error: error as Error }
     }
   }
 
-  const signOut = async () => {
+  const signOut = async (): Promise<void> => {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
@@ -79,7 +86,7 @@ export const AuthProvider = ({ children }) => {
       toast.success('Logout effettuato con successo!')
       setUser(null)
     } catch (error) {
-      toast.error(error.message)
+      toast.error((error as Error).message)
     }
   }
 
@@ -90,7 +97,7 @@ export const AuthProvider = ({ children }) => {
   )
 }
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext)
   if (!context) {
     throw new Error('useAuth deve essere usato all\'interno di AuthProvider')

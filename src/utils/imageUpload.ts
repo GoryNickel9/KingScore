@@ -1,13 +1,10 @@
 import { supabase } from '../lib/supabase'
+import type { UploadResult } from '../types'
 
 /**
  * Upload un'immagine del gioco su Supabase Storage
- * @param {File} file - Il file dell'immagine da caricare
- * @param {string} userId - L'ID dell'utente autenticato
- * @param {string} gameId - L'ID del gioco (opzionale, per aggiornare un gioco esistente)
- * @returns {Promise<{publicUrl: string, path: string}>} L'URL pubblico e il path dell'immagine caricata
  */
-export const uploadGameImage = async (file, userId, gameId = null) => {
+export const uploadGameImage = async (file: File, userId: string, _gameId: string | null = null): Promise<UploadResult> => {
   try {
     // Valida il file
     if (!file) {
@@ -32,7 +29,7 @@ export const uploadGameImage = async (file, userId, gameId = null) => {
     const filePath = `${userId}/${fileName}`
 
     // Carica il file su Supabase Storage
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('game-images')
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -61,10 +58,8 @@ export const uploadGameImage = async (file, userId, gameId = null) => {
 
 /**
  * Elimina un'immagine del gioco da Supabase Storage
- * @param {string} filePath - Il percorso del file da eliminare
- * @returns {Promise<void>}
  */
-export const deleteGameImage = async (filePath) => {
+export const deleteGameImage = async (filePath: string): Promise<void> => {
   try {
     const { error } = await supabase.storage
       .from('game-images')
@@ -82,10 +77,8 @@ export const deleteGameImage = async (filePath) => {
 
 /**
  * Ottiene l'URL pubblico di un'immagine dal path
- * @param {string} filePath - Il percorso del file
- * @returns {string} L'URL pubblico dell'immagine
  */
-export const getGameImageUrl = (filePath) => {
+export const getGameImageUrl = (filePath: string): string | null => {
   if (!filePath) return null
   
   const { data: { publicUrl } } = supabase.storage
@@ -97,12 +90,8 @@ export const getGameImageUrl = (filePath) => {
 
 /**
  * Upload un'immagine del profilo del giocatore su Supabase Storage
- * @param {File} file - Il file dell'immagine da caricare
- * @param {string} userId - L'ID dell'utente autenticato
- * @param {string} playerId - L'ID del giocatore (opzionale, per aggiornare un giocatore esistente)
- * @returns {Promise<{publicUrl: string, path: string}>} L'URL pubblico e il path dell'immagine caricata
  */
-export const uploadPlayerImage = async (file, userId, playerId = null) => {
+export const uploadPlayerImage = async (file: File, userId: string, _playerId: string | null = null): Promise<UploadResult> => {
   try {
     // Valida il file
     if (!file) {
@@ -127,7 +116,7 @@ export const uploadPlayerImage = async (file, userId, playerId = null) => {
     const filePath = `${userId}/avatars/${fileName}`
 
     // Carica il file su Supabase Storage
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('player-images')
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -156,10 +145,8 @@ export const uploadPlayerImage = async (file, userId, playerId = null) => {
 
 /**
  * Elimina un'immagine del profilo del giocatore da Supabase Storage
- * @param {string} filePath - Il percorso del file da eliminare
- * @returns {Promise<void>}
  */
-export const deletePlayerImage = async (filePath) => {
+export const deletePlayerImage = async (filePath: string): Promise<void> => {
   try {
     const { error } = await supabase.storage
       .from('player-images')
@@ -177,10 +164,8 @@ export const deletePlayerImage = async (filePath) => {
 
 /**
  * Ottiene l'URL pubblico di un'immagine del profilo dal path
- * @param {string} filePath - Il percorso del file
- * @returns {string} L'URL pubblico dell'immagine
  */
-export const getPlayerImageUrl = (filePath) => {
+export const getPlayerImageUrl = (filePath: string): string | null => {
   if (!filePath) return null
   
   const { data: { publicUrl } } = supabase.storage
@@ -192,18 +177,14 @@ export const getPlayerImageUrl = (filePath) => {
 
 /**
  * Comprime un'immagine prima dell'upload
- * @param {File} file - Il file dell'immagine
- * @param {number} maxWidth - Larghezza massima in pixel
- * @param {number} quality - Qualità dell'immagine (0-1)
- * @returns {Promise<Blob>} L'immagine compressa
  */
-export const compressImage = async (file, maxWidth = 800, quality = 0.8) => {
+export const compressImage = async (file: File, maxWidth: number = 800, quality: number = 0.8): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.readAsDataURL(file)
     reader.onload = (event) => {
       const img = new Image()
-      img.src = event.target.result
+      img.src = event.target!.result as string
       img.onload = () => {
         const canvas = document.createElement('canvas')
         let width = img.width
@@ -218,7 +199,7 @@ export const compressImage = async (file, maxWidth = 800, quality = 0.8) => {
         canvas.width = width
         canvas.height = height
 
-        const ctx = canvas.getContext('2d')
+        const ctx = canvas.getContext('2d')!
         ctx.drawImage(img, 0, 0, width, height)
 
         canvas.toBlob(

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { TrendingUp, Trophy, Calendar, Users, Gamepad2, Flame, Award, ChevronDown, ChevronUp, Star } from 'lucide-react'
+import { TrendingUp, Trophy, Users, Gamepad2, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
@@ -9,10 +9,111 @@ import {
 import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculator'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+  avatar_url?: string | null
+}
+
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+  min_players?: number | null
+  max_players?: number | null
+}
+
+interface DbPlayScore {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+  position?: number | null
+  players?: DbPlayer
+}
+
+interface DbPlay {
+  id: string
+  game_id: string
+  played_at: string
+  duration_minutes?: number | null
+  games?: DbGame
+  play_scores?: DbPlayScore[]
+  user_id?: string
+}
+
+interface WinRateEntry {
+  gameId: string
+  gameName: string
+  winRate: number
+  totalPlays: number
+}
+
+interface FrequentPlayer {
+  playerId: string
+  playerName: string
+  playerOriginalName: string | null
+  playerAvatarUrl: string | null
+  playCount: number
+}
+
+interface PlayerStats {
+  playerId: string
+  playerName: string
+  playerAvatarUrl: string | null
+  totalScore: number
+  playCount: number
+  avgScore?: number | string
+}
+
+interface GameStats {
+  gameId: string
+  gameName: string
+  gameImage: string | null
+  totalPlays: number
+  totalDuration: number
+  allScores: number[]
+  players: Record<string, PlayerStats>
+  avgScore?: number | string
+  avgDuration?: number
+}
+
+interface ComputedGameStats extends Omit<GameStats, 'players'> {
+  avgScore: number | string
+  avgDuration: number
+  players: PlayerStats[]
+}
+
+interface StatsState {
+  winRateByGame: WinRateEntry[]
+  mostFrequentPlayers: FrequentPlayer[]
+  gameOfTheMonth: DbGame | null
+  gameOfTheMonthTrend: number
+  allGamesStats: ComputedGameStats[]
+}
+
+interface EloHistoryEntry {
+  playId?: string
+  playerName: string
+  rating: number
+  date: string
+}
+
+interface ChartPoint {
+  date: number
+  [player: string]: number | null
+}
+
+interface PreparedChartData {
+  chartData: ChartPoint[]
+  players: string[]
+}
+
 const Stats = () => {
   const { user } = useAuth()
 
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<StatsState>({
     winRateByGame: [],
     mostFrequentPlayers: [],
     gameOfTheMonth: null,
@@ -20,23 +121,20 @@ const Stats = () => {
     allGamesStats: []
   })
 
-  const [loading, setLoading] = useState(true)
-  const [expandedGames, setExpandedGames] = useState({})
-  const [eloHistory, setEloHistory] = useState({})
-  const [loadingEloHistory, setLoadingEloHistory] = useState({})
-  const [generalEloHistory, setGeneralEloHistory] = useState([])
-  const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState(false)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [expandedGames, setExpandedGames] = useState<Record<string, boolean>>({})
+  const [eloHistory, setEloHistory] = useState<Record<string, EloHistoryEntry[]>>({})
+  const [loadingEloHistory, setLoadingEloHistory] = useState<Record<string, boolean>>({})
+  const [generalEloHistory, setGeneralEloHistory] = useState<EloHistoryEntry[]>([])
+  const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState<boolean>(false)
 
   useEffect(() => {
-    console.log('[Stats] Component mounted, fetching stats...')
     fetchStats()
     fetchGeneralEloHistory()
   }, [])
 
-  const toggleGameExpansion = async (gameId) => {
+  const toggleGameExpansion = async (gameId: string): Promise<void> => {
     const isExpanding = !expandedGames[gameId]
-
-    console.log('[Stats] Toggling game expansion:', gameId, 'expanding:', isExpanding)
 
     setExpandedGames(prev => ({
       ...prev,
@@ -47,10 +145,8 @@ const Stats = () => {
     if (isExpanding && !eloHistory[gameId]) {
       try {
         setLoadingEloHistory(prev => ({ ...prev, [gameId]: true }))
-        console.log('[Stats] Fetching ELO history for game:', gameId)
         const history = await getELOHistoryForGame(supabase, gameId, user?.id)
-        console.log('[Stats] ELO history fetched for game:', gameId, 'points:', history?.length || 0)
-        setEloHistory(prev => ({ ...prev, [gameId]: history }))
+        setEloHistory(prev => ({ ...prev, [gameId]: history as EloHistoryEntry[] }))
       } catch (error) {
         console.error('[Stats] Errore nel recupero dello storico ELO:', error)
       } finally {
@@ -59,12 +155,9 @@ const Stats = () => {
     }
   }
 
-  const fetchStats = async () => {
+  const fetchStats = async (): Promise<void> => {
     try {
       setLoading(true)
-
-      console.log('[Stats] Fetching stats data...')
-      console.log('[Stats] User:', user?.id, user?.email)
 
       // Fetch all plays with games and scores (public data)
       const { data: playsData, error: playsError } = await supabase
@@ -84,8 +177,6 @@ const Stats = () => {
         return
       }
 
-      console.log('[Stats] Plays data fetched:', playsData?.length || 0, 'plays')
-
       if (!playsData || playsData.length === 0) {
         console.warn('[Stats] No plays found in database')
         setStats({
@@ -98,14 +189,14 @@ const Stats = () => {
         return
       }
 
+      const plays = playsData as DbPlay[]
+
       // Calculate Win Rate by Game (Top 10) - only for logged in users
-      const gameWinRates = {}
+      const gameWinRates: Record<string, { total: number; wins: number }> = {}
       const myPlayer = user ? await getMyPlayer() : null
 
-      console.log('[Stats] My player:', myPlayer)
-
       if (myPlayer) {
-        playsData.forEach(play => {
+        plays.forEach(play => {
           const gameId = play.game_id
           const myScore = play.play_scores?.find(s => s.player_id === myPlayer?.id)
 
@@ -120,9 +211,9 @@ const Stats = () => {
         })
       }
 
-      const winRateByGame = Object.entries(gameWinRates)
+      const winRateByGame: WinRateEntry[] = Object.entries(gameWinRates)
         .map(([gameId, data]) => {
-          const game = playsData.find(p => p.game_id === gameId)?.games
+          const game = plays.find(p => p.game_id === gameId)?.games
           return {
             gameId,
             gameName: game?.name || 'Unknown',
@@ -133,20 +224,18 @@ const Stats = () => {
         .sort((a, b) => b.totalPlays - a.totalPlays)
         .slice(0, 10)
 
-      console.log('[Stats] Win rate by game calculated:', winRateByGame.length, 'games')
-
       // Calculate Most Frequent Players
-      const playerCounts = {}
-      playsData.forEach(play => {
+      const playerCounts: Record<string, number> = {}
+      plays.forEach(play => {
         play.play_scores?.forEach(score => {
           const playerId = score.player_id
           playerCounts[playerId] = (playerCounts[playerId] || 0) + 1
         })
       })
 
-      const mostFrequentPlayers = Object.entries(playerCounts)
+      const mostFrequentPlayers: FrequentPlayer[] = Object.entries(playerCounts)
         .map(([playerId, count]) => {
-          const player = playsData
+          const player = plays
             .flatMap(p => p.play_scores || [])
             .find(s => s.player_id === playerId)?.players
           return {
@@ -160,8 +249,6 @@ const Stats = () => {
         .sort((a, b) => b.playCount - a.playCount)
         .slice(0, 5)
 
-      console.log('[Stats] Most frequent players calculated:', mostFrequentPlayers.length, 'players')
-
       // Calculate Game of the Month
       const now = new Date()
       const currentMonth = now.getMonth()
@@ -169,48 +256,46 @@ const Stats = () => {
       const firstDayOfMonth = new Date(currentYear, currentMonth, 1)
       const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0)
 
-      const monthPlays = playsData.filter(play => {
+      const monthPlays = plays.filter(play => {
         const playDate = new Date(play.played_at)
         return playDate >= firstDayOfMonth && playDate <= lastDayOfMonth
       })
 
-      const gameCountsThisMonth = {}
+      const gameCountsThisMonth: Record<string, number> = {}
       monthPlays.forEach(play => {
         const gameId = play.game_id
         gameCountsThisMonth[gameId] = (gameCountsThisMonth[gameId] || 0) + 1
       })
 
-      const gameOfTheMonth = Object.entries(gameCountsThisMonth)
+      const gameOfTheMonthId = Object.entries(gameCountsThisMonth)
         .sort((a, b) => b[1] - a[1])[0]?.[0]
 
-      const gameOfTheMonthData = gameOfTheMonth
-        ? playsData.find(p => p.game_id === gameOfTheMonth[0])?.games
+      const gameOfTheMonthData = gameOfTheMonthId
+        ? plays.find(p => p.game_id === gameOfTheMonthId)?.games || null
         : null
-
-      console.log('[Stats] Game of the month:', gameOfTheMonthData?.name || 'None')
 
       // Calculate Game of the Month Trend
       const previousMonth = new Date(currentYear, currentMonth - 1, 1)
       const lastDayOfPreviousMonth = new Date(currentYear, currentMonth, 0)
 
-      const previousMonthPlays = playsData.filter(play => {
+      const previousMonthPlays = plays.filter(play => {
         const playDate = new Date(play.played_at)
         return playDate >= previousMonth && playDate <= lastDayOfPreviousMonth
       })
 
-      const gameCountsPreviousMonth = {}
+      const gameCountsPreviousMonth: Record<string, number> = {}
       previousMonthPlays.forEach(play => {
         const gameId = play.game_id
         gameCountsPreviousMonth[gameId] = (gameCountsPreviousMonth[gameId] || 0) + 1
       })
 
-      const gameOfPreviousMonth = Object.entries(gameCountsPreviousMonth)
+      const gameOfPreviousMonthId = Object.entries(gameCountsPreviousMonth)
         .sort((a, b) => b[1] - a[1])[0]?.[0]
 
       let trend = 0
-      if (gameOfTheMonth && gameOfPreviousMonth) {
-        const currentCount = gameCountsThisMonth[gameOfTheMonth[0]] || 0
-        const previousCount = gameCountsPreviousMonth[gameOfPreviousMonth[0]] || 0
+      if (gameOfTheMonthId && gameOfPreviousMonthId) {
+        const currentCount = gameCountsThisMonth[gameOfTheMonthId] || 0
+        const previousCount = gameCountsPreviousMonth[gameOfPreviousMonthId] || 0
 
         if (previousCount > 0) {
           trend = Math.round(((currentCount - previousCount) / previousCount) * 100)
@@ -218,8 +303,8 @@ const Stats = () => {
       }
 
       // Calculate stats for all games (NEW: per game statistics)
-      const allGamesStats = {}
-      playsData.forEach(play => {
+      const allGamesStats: Record<string, GameStats> = {}
+      plays.forEach(play => {
         const gameId = play.game_id
         const game = play.games
 
@@ -264,16 +349,16 @@ const Stats = () => {
       })
 
       // Convert to array and calculate averages
-      const gamesWithStats = Object.values(allGamesStats).map(game => {
+      const gamesWithStats: ComputedGameStats[] = Object.values(allGamesStats).map(game => {
         // Calculate average score correctly: average of all individual scores
         const avgScore = game.allScores.length > 0
           ? parseFloat((game.allScores.reduce((sum, score) => sum + score, 0) / game.allScores.length).toFixed(2))
           : '0.00'
 
-        const playersWithAvgScore = Object.values(game.players).map(player => ({
+        const playersWithAvgScore: PlayerStats[] = Object.values(game.players).map(player => ({
           ...player,
           avgScore: player.playCount > 0 ? parseFloat((player.totalScore / player.playCount).toFixed(2)) : '0.00'
-        })).sort((a, b) => b.avgScore - a.avgScore)
+        })).sort((a, b) => (b.avgScore as number) - (a.avgScore as number))
 
         return {
           ...game,
@@ -290,14 +375,6 @@ const Stats = () => {
         gameOfTheMonthTrend: trend,
         allGamesStats: gamesWithStats
       })
-
-      console.log('[Stats] Stats updated successfully')
-      console.log('[Stats] Final stats:', {
-        winRateByGame: winRateByGame.length,
-        mostFrequentPlayers: mostFrequentPlayers.length,
-        gameOfTheMonth: gameOfTheMonthData?.name || 'None',
-        allGamesStats: gamesWithStats.length
-      })
     } catch (error) {
       console.error('[Stats] Error fetching stats:', error)
     } finally {
@@ -305,13 +382,10 @@ const Stats = () => {
     }
   }
 
-  const getMyPlayer = async () => {
+  const getMyPlayer = async (): Promise<{ id: string } | null> => {
     if (!user) {
-      console.log('[Stats] No user logged in, skipping getMyPlayer')
       return null
     }
-
-    console.log('[Stats] Fetching my player for user:', user.id)
 
     const { data, error } = await supabase
       .from('players')
@@ -325,23 +399,17 @@ const Stats = () => {
       return null
     }
 
-    console.log('[Stats] My player found:', data?.id || 'None')
-
     return data
   }
 
-  const fetchGeneralEloHistory = async () => {
+  const fetchGeneralEloHistory = async (): Promise<void> => {
     try {
       setLoadingGeneralEloHistory(true)
-
-      console.log('[Stats] Fetching general ELO history...')
 
       // Usa la funzione getGeneralELOHistory per calcolare lo storico completo
       const history = await getGeneralELOHistory(supabase, user?.id)
 
-      console.log('[Stats] General ELO history fetched:', history.length, 'points')
-
-      setGeneralEloHistory(history)
+      setGeneralEloHistory(history as EloHistoryEntry[])
     } catch (error) {
       console.error('[Stats] Errore nel recupero dello storico ELO Generale:', error)
     } finally {
@@ -350,16 +418,16 @@ const Stats = () => {
   }
 
   // Prepara i dati per il grafico ELO
-  const prepareELOChartData = (history) => {
-    if (!history || history.length === 0) return []
+  const prepareELOChartData = (history: EloHistoryEntry[]): PreparedChartData => {
+    if (!history || history.length === 0) return { chartData: [], players: [] }
 
-    const uniquePlayers = new Set()
+    const uniquePlayers = new Set<string>()
 
     // Ordina per data
-    const sorted = [...history].sort((a, b) => new Date(a.date) - new Date(b.date))
+    const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Raggruppa per data mantenendo l'ordine cronologico
-    const groupedByDate = {}
+    const groupedByDate: Record<string, Record<string, number | string>> = {}
     sorted.forEach(entry => {
       const dateObj = new Date(entry.date)
       const dateKey = dateObj.toISOString().split('T')[0]
@@ -371,15 +439,15 @@ const Stats = () => {
     })
 
     const players = Array.from(uniquePlayers)
-    const dateEntries = Object.values(groupedByDate).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+    const dateEntries = Object.values(groupedByDate).sort((a, b) => (a.dateKey as string).localeCompare(b.dateKey as string))
 
     // Forward-fill: propaga l'ultimo valore noto per ogni giocatore
-    const lastKnown = {}
-    const chartData = dateEntries.map((entry, index) => {
-      const point = { date: index + 1 }
+    const lastKnown: Record<string, number> = {}
+    const chartData: ChartPoint[] = dateEntries.map((entry, index) => {
+      const point: ChartPoint = { date: index + 1 }
       players.forEach(player => {
         if (entry[player] !== undefined) {
-          lastKnown[player] = entry[player]
+          lastKnown[player] = entry[player] as number
         }
         point[player] = lastKnown[player] ?? null
       })
@@ -390,16 +458,16 @@ const Stats = () => {
   }
 
   // Prepara i dati per il grafico ELO Generale (senza raggruppamento per data)
-  const prepareGeneralELOChartData = (history) => {
-    if (!history || history.length === 0) return []
+  const prepareGeneralELOChartData = (history: EloHistoryEntry[]): PreparedChartData => {
+    if (!history || history.length === 0) return { chartData: [], players: [] }
 
-    const uniquePlayers = new Set()
+    const uniquePlayers = new Set<string>()
 
     // Ordina per data
-    const sorted = [...history].sort((a, b) => new Date(a.date) - new Date(b.date))
+    const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Raggruppa per play_id per mantenere ogni partita separata
-    const groupedByPlay = {}
+    const groupedByPlay: Record<string, Record<string, number | string>> = {}
     sorted.forEach(entry => {
       const playId = entry.playId || entry.date
       if (!groupedByPlay[playId]) {
@@ -413,12 +481,12 @@ const Stats = () => {
     const playEntries = Object.values(groupedByPlay)
 
     // Forward-fill: propaga l'ultimo valore noto per ogni giocatore
-    const lastKnown = {}
-    const chartData = playEntries.map((entry, index) => {
-      const point = { date: index + 1 }
+    const lastKnown: Record<string, number> = {}
+    const chartData: ChartPoint[] = playEntries.map((entry, index) => {
+      const point: ChartPoint = { date: index + 1 }
       players.forEach(player => {
         if (entry[player] !== undefined) {
-          lastKnown[player] = entry[player]
+          lastKnown[player] = entry[player] as number
         }
         point[player] = lastKnown[player] ?? null
       })
@@ -429,7 +497,7 @@ const Stats = () => {
   }
 
   // Genera colori per i giocatori
-  const getPlayerColors = (players) => {
+  const getPlayerColors = (players: string[]): Record<string, string> => {
     const colors = [
       '#10b981', // emerald-500
       '#3b82f6', // blue-500
@@ -443,7 +511,7 @@ const Stats = () => {
       '#6366f1', // indigo-500
     ]
 
-    const playerColors = {}
+    const playerColors: Record<string, string> = {}
     players.forEach((player, index) => {
       playerColors[player] = colors[index % colors.length]
     })
@@ -452,7 +520,6 @@ const Stats = () => {
   }
 
   if (loading) {
-    console.log('[Stats] Still loading, showing loading indicator')
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -465,14 +532,6 @@ const Stats = () => {
       </div>
     )
   }
-
-  console.log('[Stats] Rendering stats with data:', {
-    winRateByGame: stats.winRateByGame?.length || 0,
-    mostFrequentPlayers: stats.mostFrequentPlayers?.length || 0,
-    gameOfTheMonth: stats.gameOfTheMonth?.name || 'None',
-    allGamesStats: stats.allGamesStats?.length || 0,
-    generalEloHistory: generalEloHistory?.length || 0
-  })
 
   // Mostra un messaggio se non ci sono dati
   if (stats.allGamesStats.length === 0 && stats.mostFrequentPlayers.length === 0) {
@@ -509,11 +568,7 @@ const Stats = () => {
       </div>
 
       {/* Win Rate by Game */}
-      {(() => {
-        const shouldShow = stats.winRateByGame && stats.winRateByGame.length > 0
-        console.log('[Stats] Win Rate section:', shouldShow ? 'SHOWING' : 'HIDDEN', 'games:', stats.winRateByGame?.length || 0)
-        return shouldShow
-      })() && (
+      {stats.winRateByGame && stats.winRateByGame.length > 0 && (
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-bold text-white mb-4 flex items-center">
             <Trophy className="w-6 h-6 mr-2 text-purple-500" />
@@ -533,7 +588,7 @@ const Stats = () => {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
                   itemStyle={{ color: '#e2e8f0' }}
-                  formatter={(value, name) => [name, `${value}%`]}
+                  formatter={(value: number | undefined, name: string | undefined) => [name ?? '', `${value ?? 0}%`]}
                 />
                 <Bar dataKey="winRate" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -548,10 +603,6 @@ const Stats = () => {
           <Star className="w-6 h-6 mr-2 text-yellow-500" />
           ELO Generale - Evoluzione nel Tempo
         </h2>
-        {(() => {
-          console.log('[Stats] ELO Generale section:', loadingGeneralEloHistory ? 'LOADING' : (generalEloHistory?.length > 0 ? 'SHOWING' : 'NO DATA'), 'points:', generalEloHistory?.length || 0)
-          return null
-        })()}
         {loadingGeneralEloHistory ? (
           <div className="flex items-center justify-center h-64 bg-slate-700 rounded-lg">
             <div className="text-center">
@@ -631,17 +682,13 @@ const Stats = () => {
           <Users className="w-6 h-6 mr-2 text-emerald-500" />
           Giocatori più Frequenti
         </h2>
-        {(() => {
-          console.log('[Stats] Most Frequent Players section:', 'SHOWING', 'players:', stats.mostFrequentPlayers?.length || 0)
-          return null
-        })()}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {stats.mostFrequentPlayers.map((player) => (
             <div key={player.playerId} className="bg-slate-700 rounded-lg p-4">
               <div className="flex items-center space-x-3 mb-3">
                 {player.playerAvatarUrl ? (
                   <img
-                    src={getPlayerImageUrl(player.playerAvatarUrl)}
+                    src={getPlayerImageUrl(player.playerAvatarUrl!) ?? undefined}
                     alt={player.playerName}
                     className="w-12 h-12 rounded-full object-cover"
                   />
@@ -672,11 +719,7 @@ const Stats = () => {
       </div>
 
       {/* Game of the Month */}
-      {(() => {
-        const shouldShow = stats.gameOfTheMonth
-        console.log('[Stats] Game of the Month section:', shouldShow ? 'SHOWING' : 'HIDDEN', 'game:', stats.gameOfTheMonth?.name || 'None')
-        return shouldShow
-      })() && (
+      {stats.gameOfTheMonth && (
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-bold text-white mb-4 flex items-center">
             <Trophy className="w-6 h-6 mr-2 text-emerald-500" />
@@ -727,11 +770,6 @@ const Stats = () => {
           <Gamepad2 className="w-6 h-6 mr-2 text-emerald-500" />
           Statistiche per Gioco
         </h2>
-        {(() => {
-          const hasGames = stats.allGamesStats && stats.allGamesStats.length > 0
-          console.log('[Stats] All Games Statistics section:', hasGames ? 'SHOWING' : 'HIDDEN', 'games:', stats.allGamesStats?.length || 0)
-          return null
-        })()}
         {stats.allGamesStats && stats.allGamesStats.length > 0 ? (
           <div className="space-y-4">
             {stats.allGamesStats.map((game) => (
@@ -789,7 +827,7 @@ const Stats = () => {
                               <div className="flex items-center space-x-3">
                                 {player.playerAvatarUrl ? (
                                   <img
-                                    src={getPlayerImageUrl(player.playerAvatarUrl)}
+                                    src={getPlayerImageUrl(player.playerAvatarUrl!) ?? undefined}
                                     alt={player.playerName}
                                     className="w-10 h-10 rounded-full object-cover"
                                   />

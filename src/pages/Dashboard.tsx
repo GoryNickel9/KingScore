@@ -2,25 +2,72 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Trophy, Calendar, Gamepad2 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { Trophy, Gamepad2 } from 'lucide-react'
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+  min_players?: number | null
+  max_players?: number | null
+}
+
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+}
+
+interface DbPlayScore {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+  players?: DbPlayer
+}
+
+interface DbPlay {
+  id: string
+  game_id: string
+  played_at: string
+  location?: string | null
+  games?: DbGame
+  play_scores?: DbPlayScore[]
+}
+
+interface TopGame extends DbGame {
+  playCount: number
+}
+
+interface MonthData {
+  month: string
+  plays: number
+}
+
+interface DashboardStats {
+  totalPlays: number
+  topPlayedGames: TopGame[]
+  recentPlays: DbPlay[]
+  playsByMonth: MonthData[]
+}
 
 const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     totalPlays: 0,
     topPlayedGames: [],
     recentPlays: [],
     playsByMonth: []
   })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
     fetchDashboardData()
   }, [])
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (): Promise<void> => {
     try {
       // Fetch total plays (public data)
       const { count: totalPlays } = await supabase
@@ -33,14 +80,14 @@ const Dashboard = () => {
         .select('game_id, games(*)')
 
       if (playsData) {
-        const gameCounts = playsData.reduce((acc, play) => {
+        const gameCounts = (playsData as unknown as DbPlay[]).reduce((acc: Record<string, number>, play) => {
           acc[play.game_id] = (acc[play.game_id] || 0) + 1
           return acc
         }, {})
 
         const topPlayedIds = Object.entries(gameCounts).sort((a, b) => b[1] - a[1]).slice(0, 3)
-        const topPlayedGames = topPlayedIds.map(([gameId, count]) => ({
-          ...playsData.find(p => p.game_id === gameId)?.games,
+        const topPlayedGames: TopGame[] = topPlayedIds.map(([gameId, count]) => ({
+          ...((playsData as unknown as DbPlay[]).find(p => p.game_id === gameId)?.games as DbGame),
           playCount: count
         }))
 
@@ -68,15 +115,15 @@ const Dashboard = () => {
           .gte('played_at', twelveMonthsAgo.toISOString())
           .order('played_at', { ascending: true })
 
-        const playsByMonth = []
+        const playsByMonth: MonthData[] = []
         if (monthlyPlays) {
-          const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
+          const monthNames = ['Gen', 'Feb', 'Mar', 'apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
 
           for (let i = 11; i >= 0; i--) {
             const date = new Date()
             date.setMonth(date.getMonth() - i)
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-            const count = monthlyPlays.filter(p => p.played_at.startsWith(monthKey)).length
+            const count = (monthlyPlays as { played_at: string }[]).filter(p => p.played_at.startsWith(monthKey)).length
 
             playsByMonth.push({
               month: monthNames[date.getMonth()],
@@ -88,7 +135,7 @@ const Dashboard = () => {
         setStats({
           totalPlays: totalPlays || 0,
           topPlayedGames,
-          recentPlays: recentPlays || [],
+          recentPlays: (recentPlays ?? []) as DbPlay[],
           playsByMonth
         })
       }
@@ -255,7 +302,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  {play.play_scores?.length > 0 && (
+                  {play.play_scores && play.play_scores.length > 0 && (
                     <p className="text-sm text-slate-400">
                       {play.play_scores.filter(s => s.winner).length > 0 && (
                         <span className="text-emerald-500">

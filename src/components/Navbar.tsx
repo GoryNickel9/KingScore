@@ -2,19 +2,20 @@ import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown } from 'lucide-react'
+import type { NavItem } from '../types'
 
 const Navbar = () => {
   const { user, signOut } = useAuth()
   const location = useLocation()
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const dropdownRef = useRef(null)
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const isActive = (path) => location.pathname === path
+  const isActive = (path: string): boolean => location.pathname === path
 
   // Chiudi il dropdown quando si clicca fuori
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false)
       }
     }
@@ -22,14 +23,14 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const publicNavItems = [
+  const publicNavItems: NavItem[] = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/plays', icon: Calendar, label: 'Partite' },
     { path: '/stats', icon: BarChart3, label: 'Statistiche' },
     { path: '/elo', icon: Trophy, label: 'Rating ELO' },
   ]
 
-  const profileNavItems = [
+  const profileNavItems: NavItem[] = [
     { path: '/games', icon: Library, label: 'Giochi' },
     { path: '/images', icon: ImageIcon, label: 'Immagini' },
     { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },

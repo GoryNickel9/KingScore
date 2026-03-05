@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { Toaster } from 'react-hot-toast'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Pages
 import Login from './pages/Login'
@@ -19,15 +20,18 @@ import Import from './pages/Import'
 import Stats from './pages/Stats'
 import ELO from './pages/ELO'
 import Images from './pages/Images'
+import Register from './pages/Register'
 
 function App() {
   return (
-    <AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
       <Router>
         <Toaster position="top-right" />
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
           {/* Public Routes - Accessible to everyone */}
           <Route
@@ -67,14 +71,6 @@ function App() {
             element={
               <Layout>
                 <GameDetail />
-              </Layout>
-            }
-          />
-          <Route
-            path="/stats"
-            element={
-              <Layout>
-                <Stats />
               </Layout>
             }
           />
@@ -159,7 +155,8 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

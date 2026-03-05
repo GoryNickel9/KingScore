@@ -2,16 +2,58 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Save, Plus, Search, X, Gamepad2, Upload, Image as ImageIcon } from 'lucide-react'
+import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { updateELOAfterGame } from '../utils/eloCalculator'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
+
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+}
+
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+  is_me?: boolean
+}
+
+interface TempPlayer {
+  id: string
+  name: string
+  isNew: boolean
+}
+
+interface PlayerScore {
+  score?: string
+  winner?: boolean
+}
+
+interface AddPlayFormData {
+  gameId: string
+  gameName: string
+  playedAt: string
+  location: string
+  durationMinutes: string
+  source: string
+  notes: string
+  players: string[]
+}
+
+interface NewGameForm {
+  name: string
+  minPlayers: string
+  maxPlayers: string
+  imageUrl: string
+}
 
 const AddPlay = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<AddPlayFormData>({
     gameId: '',
     gameName: '',
     playedAt: new Date().toISOString().split('T')[0],
@@ -22,54 +64,55 @@ const AddPlay = () => {
     players: []
   })
 
-  const [playerScores, setPlayerScores] = useState({})
+  const [playerScores, setPlayerScores] = useState<Record<string, PlayerScore>>({})
 
-  const [games, setGames] = useState([])
-  const [players, setPlayers] = useState([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [showAddGame, setShowAddGame] = useState(false)
-  const [newGame, setNewGame] = useState({
+  const [games, setGames] = useState<DbGame[]>([])
+  const [players, setPlayers] = useState<(DbPlayer | TempPlayer)[]>([])
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [showAddGame, setShowAddGame] = useState<boolean>(false)
+  const [newGame, setNewGame] = useState<NewGameForm>({
     name: '',
     minPlayers: '',
     maxPlayers: '',
     imageUrl: ''
   })
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(false)
 
   useEffect(() => {
     fetchGames()
     fetchPlayers()
   }, [])
 
-  const fetchGames = async () => {
+  const fetchGames = async (): Promise<void> => {
     try {
       const { data } = await supabase
         .from('games')
         .select('*')
         .order('name')
-      setGames(data || [])
+      setGames((data || []) as DbGame[])
     } catch (error) {
       console.error('Error fetching games:', error)
     }
   }
 
-  const fetchPlayers = async () => {
+  const fetchPlayers = async (): Promise<void> => {
+    if (!user) return
     try {
       const { data } = await supabase
         .from('players')
         .select('*')
         .eq('user_id', user.id)
         .order('name')
-      setPlayers(data || [])
+      setPlayers((data || []) as DbPlayer[])
     } catch (error) {
       console.error('Error fetching players:', error)
     }
   }
 
-  const handleGameSelect = (game) => {
+  const handleGameSelect = (game: DbGame): void => {
     setFormData(prev => ({
       ...prev,
       gameId: game.id,
@@ -78,8 +121,8 @@ const AddPlay = () => {
     setSearchTerm('')
   }
 
-  const handleImageSelect = async (e) => {
-    const file = e.target.files[0]
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0]
     if (!file) return
 
     // Valida il file
@@ -98,35 +141,35 @@ const AddPlay = () => {
     // Crea anteprima
     const reader = new FileReader()
     reader.onloadend = () => {
-      setImagePreview(reader.result)
+      setImagePreview(reader.result as string)
     }
     reader.readAsDataURL(file)
     setImageFile(file)
   }
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = (): void => {
     setImageFile(null)
     setImagePreview(null)
     setNewGame(prev => ({ ...prev, imageUrl: '' }))
   }
 
-  const handleAddGame = async (e) => {
+  const handleAddGame = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault()
     if (!newGame.name) return
 
     setUploadingImage(true)
 
     try {
-      let imageUrl = newGame.imageUrl || null
+      let imageUrl: string | null = newGame.imageUrl || null
 
       // Se è stato selezionato un file, caricalo su Supabase Storage
       if (imageFile) {
         try {
           // Comprimi l'immagine prima dell'upload
           const compressedImage = await compressImage(imageFile, 800, 0.8)
-          
+
           // Carica l'immagine
-          const { publicUrl } = await uploadGameImage(compressedImage, user.id)
+          const { publicUrl } = await uploadGameImage(compressedImage as unknown as File, user!.id)
           imageUrl = publicUrl
           toast.success('Immagine caricata con successo!')
         } catch (uploadError) {
@@ -154,7 +197,7 @@ const AddPlay = () => {
         gameName: data.name
       }))
 
-      setGames([...games, data])
+      setGames([...games, data as DbGame])
       setNewGame({ name: '', minPlayers: '', maxPlayers: '', imageUrl: '' })
       setImageFile(null)
       setImagePreview(null)
@@ -168,7 +211,7 @@ const AddPlay = () => {
     }
   }
 
-  const handlePlayerToggle = (playerId) => {
+  const handlePlayerToggle = (playerId: string): void => {
     setFormData(prev => ({
       ...prev,
       players: prev.players.includes(playerId)
@@ -177,12 +220,14 @@ const AddPlay = () => {
     }))
   }
 
-  const handleAddQuickPlayer = (e) => {
+  const handleAddQuickPlayer = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault()
-    const name = e.target.playerName.value.trim()
+    const form = e.currentTarget
+    const input = form.elements.namedItem('playerName') as HTMLInputElement
+    const name = input.value.trim()
     if (!name) return
 
-    const newPlayer = {
+    const newPlayer: TempPlayer = {
       id: `temp-${Date.now()}`,
       name,
       isNew: true
@@ -194,10 +239,10 @@ const AddPlay = () => {
     }))
 
     setPlayers([...players, newPlayer])
-    e.target.reset()
+    form.reset()
   }
 
-  const handlePlayerScoreChange = (playerId, field, value) => {
+  const handlePlayerScoreChange = (playerId: string, field: keyof PlayerScore, value: string | boolean): void => {
     setPlayerScores(prev => ({
       ...prev,
       [playerId]: {
@@ -207,7 +252,7 @@ const AddPlay = () => {
     }))
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     if (!formData.gameId || formData.players.length === 0) {
       toast.error('Seleziona un gioco e almeno un giocatore')
@@ -219,15 +264,15 @@ const AddPlay = () => {
     try {
       // Create new players if needed
       const newPlayers = formData.players.filter(id => id.startsWith('temp-'))
-      const createdPlayers = []
+      const createdPlayers: { tempId: string; newId: string }[] = []
 
       for (const tempId of newPlayers) {
-        const player = players.find(p => p.id === tempId)
+        const player = players.find(p => p.id === tempId) as TempPlayer | undefined
         if (player) {
           const { data, error } = await supabase
             .from('players')
             .insert({
-              user_id: user.id,
+              user_id: user!.id,
               name: player.name,
               is_me: false
             })
@@ -249,7 +294,7 @@ const AddPlay = () => {
       const { data: play, error: playError } = await supabase
         .from('plays')
         .insert({
-          user_id: user.id,
+          user_id: user!.id,
           game_id: formData.gameId,
           played_at: formData.playedAt,
           location: formData.location || null,
@@ -265,7 +310,7 @@ const AddPlay = () => {
       // Create play scores
       // Calcola le posizioni prima di salvare
       const playersWithScores = mappedPlayers.map(playerId => {
-        const playerData = playerScores[playerId] || { score: null, winner: false }
+        const playerData = playerScores[playerId] || { score: undefined, winner: false }
         return {
           playerId,
           score: playerData.score ? parseFloat(playerData.score) : null,
@@ -278,7 +323,7 @@ const AddPlay = () => {
       // Gli altri sono ordinati per punteggio decrescente (se disponibile) o per ordine di inserimento
       const winners = playersWithScores.filter(p => p.winner)
       const nonWinners = playersWithScores.filter(p => !p.winner)
-      
+
       // Ordina i non vincitori per punteggio decrescente (se disponibile)
       nonWinners.sort((a, b) => {
         if (a.score !== null && b.score !== null) {
@@ -333,7 +378,7 @@ const AddPlay = () => {
           })
 
           // Aggiorna gli ELO (incluso l'ELO Generale)
-          await updateELOAfterGame(supabase, play.game_id, playersData, user.id)
+          await updateELOAfterGame(supabase, play.game_id, playersData, user!.id)
         }
       } catch (eloError) {
         // Non bloccare il salvataggio se l'aggiornamento ELO fallisce
@@ -367,78 +412,78 @@ const AddPlay = () => {
           <label className="block text-sm font-medium text-slate-300 mb-2">
             Gioco *
           </label>
-          
+
           {/* Local Search */}
-              {!formData.gameId && (
-                <div className="relative">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="Cerca un gioco..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
+          {!formData.gameId && (
+            <div className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Cerca un gioco..."
+                  value={searchTerm}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
 
-                  {searchTerm && filteredGames.length > 0 && (
-                    <div className="absolute z-10 w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {filteredGames.map((game) => (
-                        <div
-                          key={game.id}
-                          onClick={() => handleGameSelect(game)}
-                          className="flex items-center p-3 hover:bg-slate-600 cursor-pointer transition"
-                        >
-                          {game.image_url ? (
-                            <img src={game.image_url} alt={game.name} className="w-10 h-10 object-cover rounded" />
-                          ) : (
-                            <div className="w-10 h-10 bg-slate-600 rounded flex items-center justify-center">
-                              <Gamepad2 className="w-5 h-5 text-slate-400" />
-                            </div>
-                          )}
-                          <span className="ml-3 text-white">{game.name}</span>
+              {searchTerm && filteredGames.length > 0 && (
+                <div className="absolute z-10 w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredGames.map((game) => (
+                    <div
+                      key={game.id}
+                      onClick={() => handleGameSelect(game)}
+                      className="flex items-center p-3 hover:bg-slate-600 cursor-pointer transition"
+                    >
+                      {game.image_url ? (
+                        <img src={game.image_url} alt={game.name} className="w-10 h-10 object-cover rounded" />
+                      ) : (
+                        <div className="w-10 h-10 bg-slate-600 rounded flex items-center justify-center">
+                          <Gamepad2 className="w-5 h-5 text-slate-400" />
                         </div>
-                      ))}
+                      )}
+                      <span className="ml-3 text-white">{game.name}</span>
                     </div>
-                  )}
-
-                  {searchTerm && filteredGames.length === 0 && (
-                    <div className="absolute z-10 w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg shadow-lg p-4">
-                      <p className="text-slate-400 mb-3">Nessun gioco trovato</p>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddGame(true)}
-                        className="w-full flex items-center justify-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Aggiungi gioco manualmente
-                      </button>
-                    </div>
-                  )}
+                  ))}
                 </div>
               )}
 
-              {formData.gameId && (
-                <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
-                  <div className="flex items-center">
-                    <Gamepad2 className="w-6 h-6 text-emerald-500 mr-3" />
-                    <span className="text-white font-medium">{formData.gameName}</span>
-                  </div>
+              {searchTerm && filteredGames.length === 0 && (
+                <div className="absolute z-10 w-full mt-2 bg-slate-700 border border-slate-600 rounded-lg shadow-lg p-4">
+                  <p className="text-slate-400 mb-3">Nessun gioco trovato</p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, gameId: '', gameName: '' }))
-                    }}
-                    className="text-slate-400 hover:text-white transition"
+                    onClick={() => setShowAddGame(true)}
+                    className="w-full flex items-center justify-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
                   >
-                    <X className="w-5 h-5" />
+                    <Plus className="w-4 h-4 mr-2" />
+                    Aggiungi gioco manualmente
                   </button>
                 </div>
               )}
+            </div>
+          )}
 
-              {showAddGame && (
-                <div className="mt-4 p-4 bg-slate-700 rounded-lg">
+          {formData.gameId && (
+            <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+              <div className="flex items-center">
+                <Gamepad2 className="w-6 h-6 text-emerald-500 mr-3" />
+                <span className="text-white font-medium">{formData.gameName}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, gameId: '', gameName: '' }))
+                }}
+                className="text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          {showAddGame && (
+            <div className="mt-4 p-4 bg-slate-700 rounded-lg">
               <h3 className="text-lg font-semibold text-white mb-4">Aggiungi Nuovo Gioco</h3>
               <div className="space-y-4">
                 <div>
@@ -446,7 +491,7 @@ const AddPlay = () => {
                   <input
                     type="text"
                     value={newGame.name}
-                    onChange={(e) => setNewGame(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame(prev => ({ ...prev, name: e.target.value }))}
                     className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
@@ -456,7 +501,7 @@ const AddPlay = () => {
                     <input
                       type="number"
                       value={newGame.minPlayers}
-                      onChange={(e) => setNewGame(prev => ({ ...prev, minPlayers: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame(prev => ({ ...prev, minPlayers: e.target.value }))}
                       className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
@@ -465,14 +510,14 @@ const AddPlay = () => {
                     <input
                       type="number"
                       value={newGame.maxPlayers}
-                      onChange={(e) => setNewGame(prev => ({ ...prev, maxPlayers: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame(prev => ({ ...prev, maxPlayers: e.target.value }))}
                       className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm text-slate-300 mb-1">Immagine</label>
-                  
+
                   {/* Anteprima immagine */}
                   {(imagePreview || newGame.imageUrl) && (
                     <div className="mb-3 relative">
@@ -516,7 +561,7 @@ const AddPlay = () => {
                     <input
                       type="url"
                       value={newGame.imageUrl}
-                      onChange={(e) => setNewGame(prev => ({ ...prev, imageUrl: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame(prev => ({ ...prev, imageUrl: e.target.value }))}
                       placeholder="https://esempio.com/immagine.jpg"
                       className="flex-1 px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
@@ -561,7 +606,7 @@ const AddPlay = () => {
             <input
               type="date"
               value={formData.playedAt}
-              onChange={(e) => setFormData(prev => ({ ...prev, playedAt: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, playedAt: e.target.value }))}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               required
             />
@@ -574,7 +619,7 @@ const AddPlay = () => {
             <input
               type="text"
               value={formData.location}
-              onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, location: e.target.value }))}
               placeholder="es. Casa mia, Online"
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
@@ -587,7 +632,7 @@ const AddPlay = () => {
             <input
               type="number"
               value={formData.durationMinutes}
-              onChange={(e) => setFormData(prev => ({ ...prev, durationMinutes: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, durationMinutes: e.target.value }))}
               placeholder="es. 60"
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
@@ -610,7 +655,7 @@ const AddPlay = () => {
                   name="source"
                   value={source.value}
                   checked={formData.source === source.value}
-                  onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, source: e.target.value }))}
                   className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
                 />
                 <span className="text-white">{source.label}</span>
@@ -626,56 +671,59 @@ const AddPlay = () => {
           </label>
 
           <div className="space-y-3">
-            {players.map((player) => (
-              <div key={player.id} className="p-4 bg-slate-700 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.players.includes(player.id)}
-                      onChange={() => handlePlayerToggle(player.id)}
-                      className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
-                    />
-                    <span className="text-white font-medium">{player.alias || player.name}</span>
-                    {player.alias && (
-                      <span className="text-xs text-slate-400 ml-2">({player.name})</span>
-                    )}
-                    {player.is_me && (
-                      <span className="px-2 py-1 bg-emerald-500/20 text-emerald-500 text-xs rounded-full">
-                        Sei tu
-                      </span>
-                    )}
-                  </label>
-                </div>
-
-                {formData.players.includes(player.id) && (
-                  <div className="grid grid-cols-2 gap-4 ml-7">
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">Punteggio</label>
+            {players.map((player) => {
+              const dbPlayer = player as DbPlayer
+              return (
+                <div key={player.id} className="p-4 bg-slate-700 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="flex items-center space-x-3 cursor-pointer">
                       <input
-                        type="number"
-                        step="0.1"
-                        placeholder="Punteggio"
-                        value={playerScores[player.id]?.score || ''}
-                        onChange={(e) => handlePlayerScoreChange(player.id, 'score', e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        type="checkbox"
+                        checked={formData.players.includes(player.id)}
+                        onChange={() => handlePlayerToggle(player.id)}
+                        className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
                       />
-                    </div>
-                    <div>
-                      <label className="flex items-center space-x-2 cursor-pointer mt-5">
-                        <input
-                          type="checkbox"
-                          checked={playerScores[player.id]?.winner || false}
-                          onChange={(e) => handlePlayerScoreChange(player.id, 'winner', e.target.checked)}
-                          className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
-                        />
-                        <span className="text-white text-sm">Vincitore</span>
-                      </label>
-                    </div>
+                      <span className="text-white font-medium">{dbPlayer.alias || player.name}</span>
+                      {dbPlayer.alias && (
+                        <span className="text-xs text-slate-400 ml-2">({player.name})</span>
+                      )}
+                      {dbPlayer.is_me && (
+                        <span className="px-2 py-1 bg-emerald-500/20 text-emerald-500 text-xs rounded-full">
+                          Sei tu
+                        </span>
+                      )}
+                    </label>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {formData.players.includes(player.id) && (
+                    <div className="grid grid-cols-2 gap-4 ml-7">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Punteggio</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          placeholder="Punteggio"
+                          value={playerScores[player.id]?.score || ''}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerScoreChange(player.id, 'score', e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center space-x-2 cursor-pointer mt-5">
+                          <input
+                            type="checkbox"
+                            checked={playerScores[player.id]?.winner || false}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerScoreChange(player.id, 'winner', e.target.checked)}
+                            className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
+                          />
+                          <span className="text-white text-sm">Vincitore</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           <form onSubmit={handleAddQuickPlayer} className="mt-4 flex space-x-2">
@@ -701,7 +749,7 @@ const AddPlay = () => {
           </label>
           <textarea
             value={formData.notes}
-            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
             rows={4}
             placeholder="Aggiungi note sulla partita..."
             className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"

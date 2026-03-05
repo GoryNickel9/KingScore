@@ -5,12 +5,43 @@ import { supabase } from '../lib/supabase'
 import { Save, ArrowLeft, Gamepad2, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+interface DbGame {
+  id: string
+  name: string
+}
+
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+}
+
+interface EditPlayerRow {
+  id: string | null
+  playerId: string
+  playerName: string
+  score: string | number
+  winner: boolean
+  position: number | null
+}
+
+interface EditFormData {
+  gameId: string
+  gameName: string
+  playedAt: string
+  location: string
+  durationMinutes: string
+  source: string
+  notes: string
+  players: EditPlayerRow[]
+}
+
 const EditPlay = () => {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EditFormData>({
     gameId: '',
     gameName: '',
     playedAt: '',
@@ -21,10 +52,10 @@ const EditPlay = () => {
     players: []
   })
 
-  const [games, setGames] = useState([])
-  const [players, setPlayers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [games, setGames] = useState<DbGame[]>([])
+  const [players, setPlayers] = useState<DbPlayer[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [saving, setSaving] = useState<boolean>(false)
 
   useEffect(() => {
     fetchPlay()
@@ -32,7 +63,7 @@ const EditPlay = () => {
     fetchPlayers()
   }, [id])
 
-  const fetchPlay = async () => {
+  const fetchPlay = async (): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('plays')
@@ -45,7 +76,7 @@ const EditPlay = () => {
           )
         `)
         .eq('id', id)
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .single()
 
       if (error) throw error
@@ -59,7 +90,7 @@ const EditPlay = () => {
           durationMinutes: data.duration_minutes || '',
           source: data.source || 'offline',
           notes: data.notes || '',
-          players: data.play_scores?.map(score => ({
+          players: data.play_scores?.map((score: { id: string; player_id: string; players?: DbPlayer; score: number | null; winner: boolean; position: number | null }) => ({
             id: score.id,
             playerId: score.player_id,
             playerName: score.players?.alias || score.players?.name || '',
@@ -78,32 +109,32 @@ const EditPlay = () => {
     }
   }
 
-  const fetchGames = async () => {
+  const fetchGames = async (): Promise<void> => {
     try {
       const { data } = await supabase
         .from('games')
         .select('*')
         .order('name')
-      setGames(data || [])
+      setGames((data ?? []) as DbGame[])
     } catch (error) {
       console.error('Error fetching games:', error)
     }
   }
 
-  const fetchPlayers = async () => {
+  const fetchPlayers = async (): Promise<void> => {
     try {
       const { data } = await supabase
         .from('players')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .order('name')
-      setPlayers(data || [])
+      setPlayers((data ?? []) as DbPlayer[])
     } catch (error) {
       console.error('Error fetching players:', error)
     }
   }
 
-  const handleGameSelect = (game) => {
+  const handleGameSelect = (game: DbGame): void => {
     setFormData(prev => ({
       ...prev,
       gameId: game.id,
@@ -111,7 +142,7 @@ const EditPlay = () => {
     }))
   }
 
-  const handlePlayerAdd = () => {
+  const handlePlayerAdd = (): void => {
     setFormData(prev => ({
       ...prev,
       players: [
@@ -128,23 +159,23 @@ const EditPlay = () => {
     }))
   }
 
-  const handlePlayerRemove = (index) => {
+  const handlePlayerRemove = (index: number): void => {
     setFormData(prev => ({
       ...prev,
       players: prev.players.filter((_, i) => i !== index)
     }))
   }
 
-  const handlePlayerChange = (index, field, value) => {
+  const handlePlayerChange = (index: number, field: keyof EditPlayerRow, value: string | number | boolean | null): void => {
     setFormData(prev => ({
       ...prev,
-      players: prev.players.map((player, i) => 
+      players: prev.players.map((player, i) =>
         i === index ? { ...player, [field]: value } : player
       )
     }))
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
 
     if (!formData.gameId) {
@@ -167,12 +198,12 @@ const EditPlay = () => {
           game_id: formData.gameId,
           played_at: formData.playedAt,
           location: formData.location || null,
-          duration_minutes: formData.durationMinutes ? parseInt(formData.durationMinutes) : null,
+          duration_minutes: formData.durationMinutes ? parseInt(formData.durationMinutes as string) : null,
           source: formData.source,
           notes: formData.notes || null
         })
         .eq('id', id)
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
 
       if (playError) throw playError
 
@@ -189,7 +220,7 @@ const EditPlay = () => {
       const scoresToInsert = formData.players.map((player, index) => ({
         play_id: id,
         player_id: player.playerId,
-        score: player.score !== '' ? parseInt(player.score) : null,
+        score: player.score !== '' ? parseInt(player.score as string) : null,
         winner: player.winner,
         position: player.position || index + 1
       }))
@@ -204,7 +235,7 @@ const EditPlay = () => {
       navigate(`/plays/${id}`)
     } catch (error) {
       console.error('Error updating play:', error)
-      toast.error('Errore durante l\'aggiornamento della partita')
+      toast.error("Errore durante l'aggiornamento della partita")
     } finally {
       setSaving(false)
     }
@@ -252,7 +283,10 @@ const EditPlay = () => {
               <label className="block text-sm font-medium text-slate-300 mb-2">Gioco</label>
               <select
                 value={formData.gameId}
-                onChange={(e) => handleGameSelect(games.find(g => g.id === e.target.value))}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  const game = games.find(g => g.id === e.target.value)
+                  if (game) handleGameSelect(game)
+                }}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 required
               >
@@ -267,7 +301,7 @@ const EditPlay = () => {
               <input
                 type="date"
                 value={formData.playedAt}
-                onChange={(e) => setFormData(prev => ({ ...prev, playedAt: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, playedAt: e.target.value }))}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 required
               />
@@ -284,7 +318,7 @@ const EditPlay = () => {
               <input
                 type="text"
                 value={formData.location}
-                onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, location: e.target.value }))}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="Es. Casa, Parco..."
               />
@@ -294,7 +328,7 @@ const EditPlay = () => {
               <input
                 type="number"
                 value={formData.durationMinutes}
-                onChange={(e) => setFormData(prev => ({ ...prev, durationMinutes: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, durationMinutes: e.target.value }))}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="Es. 60"
                 min="0"
@@ -304,7 +338,7 @@ const EditPlay = () => {
               <label className="block text-sm font-medium text-slate-300 mb-2">Fonte</label>
               <select
                 value={formData.source}
-                onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData(prev => ({ ...prev, source: e.target.value }))}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="offline">IRL</option>
@@ -316,9 +350,9 @@ const EditPlay = () => {
             <label className="block text-sm font-medium text-slate-300 mb-2">Note</label>
             <textarea
               value={formData.notes}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
               className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              rows="3"
+              rows={3}
               placeholder="Aggiungi note sulla partita..."
             />
           </div>
@@ -357,7 +391,7 @@ const EditPlay = () => {
                     <label className="block text-sm font-medium text-slate-300 mb-2">Giocatore</label>
                     <select
                       value={player.playerId}
-                      onChange={(e) => {
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                         const selectedPlayer = players.find(p => p.id === e.target.value)
                         handlePlayerChange(index, 'playerId', e.target.value)
                         handlePlayerChange(index, 'playerName', selectedPlayer?.alias || selectedPlayer?.name || '')
@@ -377,8 +411,8 @@ const EditPlay = () => {
                     <label className="block text-sm font-medium text-slate-300 mb-2">Punteggio</label>
                     <input
                       type="number"
-                      value={player.score}
-                      onChange={(e) => handlePlayerChange(index, 'score', e.target.value)}
+                      value={player.score as string}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerChange(index, 'score', e.target.value)}
                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       placeholder="Punteggio"
                     />

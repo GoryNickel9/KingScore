@@ -6,24 +6,71 @@ import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, Ale
 import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+  is_me?: boolean
+}
+
+interface DbPlayScore {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+  position?: number | null
+  players?: DbPlayer
+}
+
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+}
+
+interface DbPlay {
+  id: string
+  game_id: string
+  played_at: string
+  location?: string | null
+  duration_minutes?: number | null
+  source?: string
+  notes?: string | null
+  user_id?: string
+  games?: DbGame
+  play_scores?: DbPlayScore[]
+}
+
+interface EloHistoryEntry {
+  playId: string
+  playerId: string
+  rating: number
+  ratingChange: number
+}
+
+interface PlayerEloResult {
+  currentRating: number
+  ratingChange: number
+}
+
 const PlayDetail = () => {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [play, setPlay] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [eloHistory, setEloHistory] = useState([])
-  const [loadingElo, setLoadingElo] = useState(false)
-  const [generalELOs, setGeneralELOs] = useState({})
-  const [generalELOHistory, setGeneralELOHistory] = useState([])
+  const [play, setPlay] = useState<DbPlay | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
+  const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
+  const [loadingElo, setLoadingElo] = useState<boolean>(false)
+  const [_generalELOs, setGeneralELOs] = useState<Record<string, unknown>>({})
+  const [generalELOHistory, setGeneralELOHistory] = useState<EloHistoryEntry[]>([])
 
   useEffect(() => {
     fetchPlay()
   }, [id])
 
-  const fetchPlay = async () => {
+  const fetchPlay = async (): Promise<void> => {
     try {
       const { data } = await supabase
         .from('plays')
@@ -39,14 +86,14 @@ const PlayDetail = () => {
         .single()
 
       if (data) {
-        setPlay(data)
+        setPlay(data as DbPlay)
 
         // Recupera lo storico ELO per questo gioco usando l'user_id del proprietario della partita
         if (data.game_id && data.user_id) {
           try {
             setLoadingElo(true)
             const history = await getELOHistoryForGame(supabase, data.game_id, data.user_id)
-            setEloHistory(history)
+            setEloHistory(history as EloHistoryEntry[])
           } catch (error) {
             console.error('Error fetching ELO history:', error)
           } finally {
@@ -56,18 +103,18 @@ const PlayDetail = () => {
 
         // Recupera gli ELO Generali per ogni giocatore
         if (data.play_scores && data.play_scores.length > 0) {
-          const eloPromises = data.play_scores.map(async (score) => {
+          const eloPromises = (data.play_scores as DbPlayScore[]).map(async (score) => {
             try {
               const generalELO = await getGeneralELO(supabase, score.player_id)
               return { playerId: score.player_id, generalELO }
             } catch (error) {
               console.error(`Error fetching general ELO for player ${score.player_id}:`, error)
-              return { playerId: score.playerId, generalELO: null }
+              return { playerId: score.player_id, generalELO: null }
             }
           })
 
           const eloResults = await Promise.all(eloPromises)
-          const eloMap = {}
+          const eloMap: Record<string, unknown> = {}
           eloResults.forEach(result => {
             eloMap[result.playerId] = result.generalELO
           })
@@ -78,7 +125,7 @@ const PlayDetail = () => {
         if (data.user_id) {
           try {
             const history = await getGeneralELOHistory(supabase, data.user_id)
-            setGeneralELOHistory(history)
+            setGeneralELOHistory(history as EloHistoryEntry[])
           } catch (error) {
             console.error('Error fetching general ELO history:', error)
           }
@@ -95,7 +142,7 @@ const PlayDetail = () => {
     }
   }
 
-  const handleDelete = async () => {
+  const handleDelete = async (): Promise<void> => {
     try {
       const { error } = await supabase
         .from('plays')
@@ -108,18 +155,18 @@ const PlayDetail = () => {
       navigate('/plays')
     } catch (error) {
       console.error('Error deleting play:', error)
-      toast.error('Errore durante l\'eliminazione della partita')
+      toast.error("Errore durante l'eliminazione della partita")
     }
   }
 
   // Ottieni l'ELO attuale e l'ELO guadagnato per un giocatore in questa partita
-  const getPlayerELO = (playerId) => {
+  const getPlayerELO = (playerId: string): PlayerEloResult | null => {
     const eloEntry = eloHistory.find(entry =>
-      entry.playId === play.id && entry.playerId === playerId
+      entry.playId === play?.id && entry.playerId === playerId
     )
-    
+
     if (!eloEntry) return null
-    
+
     return {
       currentRating: eloEntry.rating,
       ratingChange: eloEntry.ratingChange
@@ -127,13 +174,13 @@ const PlayDetail = () => {
   }
 
   // Ottieni l'ELO Generale e la variazione per un giocatore in questa partita
-  const getPlayerGeneralELO = (playerId) => {
+  const getPlayerGeneralELO = (playerId: string): PlayerEloResult | null => {
     const eloEntry = generalELOHistory.find(entry =>
-      entry.playId === play.id && entry.playerId === playerId
+      entry.playId === play?.id && entry.playerId === playerId
     )
-    
+
     if (!eloEntry) return null
-    
+
     return {
       currentRating: eloEntry.rating,
       ratingChange: eloEntry.ratingChange
@@ -259,7 +306,7 @@ const PlayDetail = () => {
                 play.source === 'offline' ? 'bg-orange-500/20 text-orange-500' :
                 'bg-slate-700 text-slate-300'
               }`}>
-                {play.source === 'online' ? 'Online' : play.source === 'offline' ? 'IRL' : play.source.toUpperCase()}
+                {play.source === 'online' ? 'Online' : play.source === 'offline' ? 'IRL' : play.source?.toUpperCase()}
               </span>
             </div>
           </div>
@@ -292,10 +339,11 @@ const PlayDetail = () => {
               </thead>
               <tbody>
                 {play.play_scores
+                  .slice()
                   .sort((a, b) => {
                     if (a.winner) return -1
                     if (b.winner) return 1
-                    if (a.score !== null && b.score !== null) {
+                    if (a.score !== null && a.score !== undefined && b.score !== null && b.score !== undefined) {
                       return b.score - a.score
                     }
                     return 0
@@ -335,7 +383,7 @@ const PlayDetail = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-white">
-                        {score.score !== null ? score.score : '-'}
+                        {score.score !== null && score.score !== undefined ? score.score : '-'}
                       </td>
                       <td className="py-3 px-4">
                         {score.winner && (

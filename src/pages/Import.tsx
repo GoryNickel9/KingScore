@@ -6,7 +6,21 @@ import toast from 'react-hot-toast'
 import { updateELOAfterGame } from '../utils/eloCalculator'
 import { XMLParser } from 'fast-xml-parser'
 
-const LOG_CONFIG = {
+interface LogEntry {
+  timestamp: string
+  message: string
+  type: LogType
+}
+
+type LogType = 'success' | 'error' | 'warning' | 'info'
+
+interface LogConfig {
+  icon: React.ComponentType<{ className?: string }>
+  iconClass: string
+  textClass: string
+}
+
+const LOG_CONFIG: Record<LogType, LogConfig> = {
   success: { icon: CheckCircle, iconClass: 'text-emerald-500', textClass: 'text-emerald-400' },
   error:   { icon: AlertCircle, iconClass: 'text-red-500',     textClass: 'text-red-400' },
   warning: { icon: AlertCircle, iconClass: 'text-yellow-500',  textClass: 'text-yellow-400' },
@@ -14,9 +28,9 @@ const LOG_CONFIG = {
 }
 
 // ─── Levenshtein similarity ───────────────────────────────────────────────────
-const levenshtein = (a, b) => {
+const levenshtein = (a: string, b: string): number => {
   const m = a.length, n = b.length
-  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
   for (let j = 0; j <= n; j++) dp[0][j] = j
   for (let i = 1; i <= m; i++)
     for (let j = 1; j <= n; j++)
@@ -26,7 +40,7 @@ const levenshtein = (a, b) => {
   return dp[m][n]
 }
 
-const similarity = (a, b) => {
+const similarity = (a: string, b: string): number => {
   if (!a || !b) return 0
   const dist = levenshtein(a.toLowerCase(), b.toLowerCase())
   return 1 - dist / Math.max(a.length, b.length)
@@ -35,7 +49,7 @@ const similarity = (a, b) => {
 // ─── BoardGameGeek (BGG) Image Fetcher ───────────────────────────────────────
 const parser = new XMLParser()
 
-const fetchGameImageFromBGG = async (gameName) => {
+const fetchGameImageFromBGG = async (gameName: string): Promise<string | null> => {
   try {
     // Search for the game on BGG
     const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(gameName)}&type=boardgame`
@@ -62,15 +76,22 @@ const fetchGameImageFromBGG = async (gameName) => {
     if (!items2) return null
 
     const game = Array.isArray(items2) ? items2[0] : items2
-    return game?.image || null
+    return (game?.image as string) || null
   } catch (error) {
     console.error('Error fetching game image from BGG:', error)
     return null
   }
 }
 
+interface ResolveResult {
+  name: string
+  score: number | null
+  autoResolved: boolean
+  similarityScore: number
+}
+
 // Resolve "GoryNickel9112" → { name: "GoryNickel9", score: 112, autoResolved: bool }
-const resolvePlayerString = (raw, knownNames) => {
+const resolvePlayerString = (raw: string, knownNames: string[]): ResolveResult => {
   const scoreMatch = raw.match(/(-?\d+)\s*$/)
   if (!scoreMatch) return { name: raw, score: null, autoResolved: false, similarityScore: 0 }
 
@@ -90,7 +111,7 @@ const resolvePlayerString = (raw, knownNames) => {
   }
 
   // Fuzzy match on name portion
-  let best = { name: nameRaw || raw, score: parseInt(scoreStr, 10), autoResolved: false, similarityScore: 0 }
+  let best: ResolveResult = { name: nameRaw || raw, score: parseInt(scoreStr, 10), autoResolved: false, similarityScore: 0 }
   for (const known of knownNames) {
     const sim = similarity(nameRaw, known)
     if (sim > best.similarityScore)
@@ -99,10 +120,31 @@ const resolvePlayerString = (raw, knownNames) => {
   return best
 }
 
+interface RawPlayer {
+  position: string
+  raw: string
+  winner: boolean
+}
+
+interface ParsedPlay {
+  bga_table_id: string
+  game_name: string
+  played_at: string | null
+  duration_minutes: number | null
+  location: string | null
+  rawPlayers: RawPlayer[]
+}
+
+interface ResolvedPlayer extends RawPlayer, ResolveResult {}
+
+interface ResolvedPlay extends Omit<ParsedPlay, 'rawPlayers'> {
+  players: ResolvedPlayer[]
+}
+
 // ─── Parse raw text into plays with rawPlayers ────────────────────────────────
-const parseLines = (txtContent) => {
-  const lines = txtContent.split('\n').map(l => l.trim()).filter(Boolean)
-  const parsedPlays = []
+const parseLines = (txtContent: string): ParsedPlay[] => {
+  const lines = txtContent.split('\n').map((l: string) => l.trim()).filter(Boolean)
+  const parsedPlays: ParsedPlay[] = []
   let i = 0
 
   while (i < lines.length) {
@@ -120,10 +162,10 @@ const parseLines = (txtContent) => {
     if (isGameName) {
       const gameName = line; i++
 
-      let tableId = null
+      let tableId: string | null = null
       if (i < lines.length && lines[i].startsWith('#')) { tableId = lines[i].trim(); i++ }
 
-      let playedAt = null
+      let playedAt: string | null = null
       if (i < lines.length && lines[i].includes('alle ore')) {
         const dateLine = lines[i]
         const mFull = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}).*?(\d{1,2}):(\d{2})/)
@@ -141,14 +183,14 @@ const parseLines = (txtContent) => {
         i++
       }
 
-      let durationMinutes = null
+      let durationMinutes: number | null = null
       if (i < lines.length && lines[i].includes('mn')) {
         const m = lines[i].match(/(\d+)\s*mn/)
         if (m) durationMinutes = parseInt(m[1], 10)
         i++
       }
 
-      const rawPlayers = []
+      const rawPlayers: RawPlayer[] = []
       while (i < lines.length) {
         const m = lines[i].match(/^(\d+)°\s*(.+)$/)
         if (m) { rawPlayers.push({ position: m[1], raw: m[2].trim(), winner: m[1] === '1' }); i++ }
@@ -165,23 +207,33 @@ const parseLines = (txtContent) => {
   return parsedPlays
 }
 
+interface ConfirmedEntry {
+  name: string
+  score: number
+}
+
+interface DisambiguationStepProps {
+  plays: ResolvedPlay[]
+  onConfirm: (confirmedMap: Record<string, ConfirmedEntry>) => void
+}
+
 // ─── Disambiguation: one play at a time ──────────────────────────────────────
-const DisambiguationStep = ({ plays, onConfirm }) => {
+const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
   // Only plays that have at least one unresolved player
   const playsToResolve = plays.filter(p => p.players.some(pl => !pl.autoResolved))
-  const [currentIdx, setCurrentIdx] = useState(0)
+  const [currentIdx, setCurrentIdx] = useState<number>(0)
   // confirmedMap: raw string → { name, score }
-  const [confirmedMap, setConfirmedMap] = useState({})
+  const [confirmedMap, setConfirmedMap] = useState<Record<string, ConfirmedEntry>>({})
 
   const currentPlay = playsToResolve[currentIdx]
   const isLast = currentIdx === playsToResolve.length - 1
 
-  const getEntry = (player) => {
+  const getEntry = (player: ResolvedPlayer): ConfirmedEntry => {
     if (confirmedMap[player.raw]) return confirmedMap[player.raw]
-    return { name: player.name, score: player.score }
+    return { name: player.name, score: player.score ?? 0 }
   }
 
-  const updateEntry = (raw, field, value) => {
+  const updateEntry = (raw: string, field: keyof ConfirmedEntry, value: string): void => {
     setConfirmedMap(prev => {
       const current = prev[raw] ?? { name: '', score: 0 }
       return { ...prev, [raw]: { ...current, [field]: field === 'score' ? (parseInt(value) || 0) : value } }
@@ -190,10 +242,10 @@ const DisambiguationStep = ({ plays, onConfirm }) => {
 
   // Ensure all unresolved players have an entry initialized
   const ensureInit = () => {
-    const toInit = {}
+    const toInit: Record<string, ConfirmedEntry> = {}
     currentPlay?.players.forEach(p => {
       if (!p.autoResolved && !confirmedMap[p.raw])
-        toInit[p.raw] = { name: p.name, score: p.score }
+        toInit[p.raw] = { name: p.name, score: p.score ?? 0 }
     })
     if (Object.keys(toInit).length > 0)
       setConfirmedMap(prev => ({ ...toInit, ...prev }))
@@ -202,12 +254,12 @@ const DisambiguationStep = ({ plays, onConfirm }) => {
   // Init on first render of each play
   useState(() => { ensureInit() })
 
-  const handleNext = () => {
+  const handleNext = (): void => {
     // Init any missing entries for current play before moving on
     const snapshot = { ...confirmedMap }
     currentPlay?.players.forEach(p => {
       if (!p.autoResolved && !snapshot[p.raw])
-        snapshot[p.raw] = { name: p.name, score: p.score }
+        snapshot[p.raw] = { name: p.name, score: p.score ?? 0 }
     })
     setConfirmedMap(snapshot)
 
@@ -261,8 +313,6 @@ const DisambiguationStep = ({ plays, onConfirm }) => {
       {/* Players list */}
       <div className="space-y-3">
         {currentPlay?.players.map((player, idx) => {
-          const isAutoOrConfirmed = player.autoResolved || (confirmedMap[player.raw] !== undefined && player.autoResolved)
-          const isResolved = player.autoResolved || (confirmedMap[player.raw] !== undefined)
           const entry = getEntry(player)
           const needsInput = !player.autoResolved
 
@@ -288,7 +338,7 @@ const DisambiguationStep = ({ plays, onConfirm }) => {
                   <input
                     type="text"
                     value={entry.name}
-                    onChange={e => updateEntry(player.raw, 'name', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateEntry(player.raw, 'name', e.target.value)}
                     className="w-full px-3 py-1.5 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 ) : (
@@ -303,7 +353,7 @@ const DisambiguationStep = ({ plays, onConfirm }) => {
                   <input
                     type="number"
                     value={entry.score ?? ''}
-                    onChange={e => updateEntry(player.raw, 'score', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateEntry(player.raw, 'score', e.target.value)}
                     className="w-full px-2 py-1.5 bg-slate-600 border border-slate-500 rounded text-white text-sm font-mono text-right focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 ) : (
@@ -329,21 +379,30 @@ const DisambiguationStep = ({ plays, onConfirm }) => {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+type ImportStep = 'input' | 'disambiguate' | 'importing'
+
+interface ImportResult {
+  imported: number
+  skipped: number
+  errors: number
+  total: number
+}
+
 const Import = () => {
   const { user } = useAuth()
-  const [txtContent, setTxtContent] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [logs, setLogs] = useState([])
-  const [result, setResult] = useState(null)
-  const [step, setStep] = useState('input') // 'input' | 'disambiguate' | 'importing'
-  const [pendingPlays, setPendingPlays] = useState([])
+  const [txtContent, setTxtContent] = useState<string>('')
+  const [loading, setLoading] = useState<boolean>(false)
+  const [progress, setProgress] = useState<number>(0)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [result, setResult] = useState<ImportResult | null>(null)
+  const [step, setStep] = useState<ImportStep>('input')
+  const [pendingPlays, setPendingPlays] = useState<ResolvedPlay[]>([])
 
-  const addLog = (message, type = 'info') =>
+  const addLog = (message: string, type: LogType = 'info'): void =>
     setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString('it-IT'), message, type }])
 
   // ── Step 1: parse and resolve what we can ────────────────────────────────
-  const handleParse = async (e) => {
+  const handleParse = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     setLoading(true)
     setLogs([])
@@ -356,15 +415,15 @@ const Import = () => {
 
       addLog('Analisi del testo in corso...', 'info')
 
-      const { data: knownPlayers } = await supabase.from('players').select('name, alias').eq('user_id', user.id)
-      const knownNames = (knownPlayers || []).map(p => p.alias || p.name)
+      const { data: knownPlayers } = await supabase.from('players').select('name, alias').eq('user_id', user!.id)
+      const knownNames = (knownPlayers || []).map((p: { name: string; alias?: string | null }) => p.alias || p.name)
       addLog(`${knownNames.length} giocatori già conosciuti`, 'info')
 
       const parsedPlays = parseLines(txtContent)
       addLog(`Trovate ${parsedPlays.length} partite`, 'info')
 
       // Resolve players using known names
-      const resolvedPlays = parsedPlays.map(play => ({
+      const resolvedPlays: ResolvedPlay[] = parsedPlays.map(play => ({
         ...play,
         players: play.rawPlayers.map(rp => {
           const resolved = resolvePlayerString(rp.raw, knownNames)
@@ -385,15 +444,15 @@ const Import = () => {
         await runImport(resolvedPlays, [])
       }
     } catch (error) {
-      addLog(`Errore: ${error.message}`, 'error')
-      toast.error(error.message)
+      addLog(`Errore: ${(error as Error).message}`, 'error')
+      toast.error((error as Error).message)
     } finally {
       setLoading(false)
     }
   }
 
   // ── Step 2: apply confirmed map and import ───────────────────────────────
-  const handleDisambiguationConfirm = async (confirmedMap) => {
+  const handleDisambiguationConfirm = async (confirmedMap: Record<string, ConfirmedEntry>): Promise<void> => {
     // confirmedMap: { raw → { name, score } }
     setStep('importing')
     setLoading(true)
@@ -414,7 +473,7 @@ const Import = () => {
   }
 
   // ── Core import ───────────────────────────────────────────────────────────
-  const runImport = async (plays, confirmedItems) => {
+  const runImport = async (plays: ResolvedPlay[], confirmedItems: (ConfirmedEntry & { raw: string })[]): Promise<void> => {
     setProgress(0)
     let imported = 0, skipped = 0, errors = 0
 
@@ -423,9 +482,9 @@ const Import = () => {
       for (const item of confirmedItems) {
         if (!item.name) continue
         const { data: existing } = await supabase.from('players').select('id')
-          .eq('user_id', user.id).eq('name', item.name).maybeSingle()
+          .eq('user_id', user!.id).eq('name', item.name).maybeSingle()
         if (!existing) {
-          await supabase.from('players').insert({ user_id: user.id, name: item.name, is_me: false })
+          await supabase.from('players').insert({ user_id: user!.id, name: item.name, is_me: false })
           addLog(`Giocatore memorizzato: ${item.name}`, 'info')
         }
       }
@@ -436,13 +495,13 @@ const Import = () => {
 
         try {
           const { data: existing } = await supabase.from('plays').select('id')
-            .eq('user_id', user.id).eq('bga_table_id', play.bga_table_id).maybeSingle()
+            .eq('user_id', user!.id).eq('bga_table_id', play.bga_table_id).maybeSingle()
           if (existing) { skipped++; continue }
 
           const { data: existingGame } = await supabase.from('games').select('id')
             .eq('name', play.game_name).maybeSingle()
 
-          let gameId = existingGame?.id
+          let gameId: string | undefined = existingGame?.id
           if (!gameId) {
             // Try to fetch game image from BGG
             const imageUrl = await fetchGameImageFromBGG(play.game_name)
@@ -460,7 +519,7 @@ const Import = () => {
           if (!gameId) { errors++; addLog(`Impossibile creare gioco per ${play.bga_table_id}`, 'error'); continue }
 
           const { data: newPlay, error: playError } = await supabase.from('plays')
-            .insert({ user_id: user.id, game_id: gameId, played_at: play.played_at, location: play.location, duration_minutes: play.duration_minutes, source: 'offline', bga_table_id: play.bga_table_id })
+            .insert({ user_id: user!.id, game_id: gameId, played_at: play.played_at, location: play.location, duration_minutes: play.duration_minutes, source: 'offline', bga_table_id: play.bga_table_id })
             .select().single()
 
           if (playError) throw playError
@@ -468,11 +527,11 @@ const Import = () => {
           for (const p of play.players) {
             if (!p.name) continue
             const { data: existingPlayer } = await supabase.from('players').select('id')
-              .eq('user_id', user.id).eq('name', p.name).maybeSingle()
-            let pid = existingPlayer?.id
+              .eq('user_id', user!.id).eq('name', p.name).maybeSingle()
+            let pid: string | undefined = existingPlayer?.id
             if (!pid) {
               const { data: newPlayer } = await supabase.from('players')
-                .insert({ user_id: user.id, name: p.name, is_me: false }).select().single()
+                .insert({ user_id: user!.id, name: p.name, is_me: false }).select().single()
               pid = newPlayer?.id
             }
             if (pid) {
@@ -495,7 +554,7 @@ const Import = () => {
 
             if (playScores && playScores.length >= 2) {
               // Prepara i dati dei giocatori per il calcolo ELO
-              const playersData = playScores.map((score) => {
+              const playersData = playScores.map((score: { player_id: string; winner: boolean; position?: number | null }) => {
                 return {
                   playerId: score.player_id,
                   currentRating: 1000, // Verrà aggiornato da updateELOAfterGame
@@ -506,7 +565,7 @@ const Import = () => {
               })
 
               // Aggiorna gli ELO (incluso l'ELO Generale)
-              await updateELOAfterGame(supabase, gameId, playersData, user.id)
+              await updateELOAfterGame(supabase, gameId, playersData, user!.id)
             }
           } catch (eloError) {
             // Non bloccare l'importazione se l'aggiornamento ELO fallisce
@@ -516,7 +575,7 @@ const Import = () => {
           imported++
         } catch (err) {
           errors++
-          addLog(`Errore partita ${play.bga_table_id}: ${err.message}`, 'error')
+          addLog(`Errore partita ${play.bga_table_id}: ${(err as Error).message}`, 'error')
         }
       }
 
@@ -526,8 +585,8 @@ const Import = () => {
       toast.success(`Importazione completata! ${imported} partite importate`)
       setStep('input')
     } catch (error) {
-      addLog(`Errore: ${error.message}`, 'error')
-      toast.error(error.message)
+      addLog(`Errore: ${(error as Error).message}`, 'error')
+      toast.error((error as Error).message)
     } finally {
       setLoading(false)
     }
@@ -552,7 +611,7 @@ const Import = () => {
               <textarea
                 rows={10}
                 value={txtContent}
-                onChange={e => setTxtContent(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTxtContent(e.target.value)}
                 placeholder="Incolla qui il contenuto"
                 className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-xs resize-none"
                 disabled={loading}

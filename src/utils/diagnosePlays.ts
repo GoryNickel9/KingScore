@@ -3,21 +3,34 @@
  * 
  * Utilizzo nel browser:
  * 1. Apri la console del browser (F12)
- * 2. Importa questo script: import { diagnoseProblematicPlays } from './src/utils/diagnosePlays.js'
+ * 2. Importa questo script: import { diagnoseProblematicPlays } from './src/utils/diagnosePlays.ts'
  * 3. Esegui: await diagnoseProblematicPlays(supabase, userId)
  * 
  * Oppure esegui direttamente dalla console copiando la funzione
  */
 
-import { supabase } from '../lib/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DiagnosisResult } from '../types'
+
+interface PlayInfo {
+  index: number
+  id: string
+  gameId: string
+  gameName: string
+  playedAt: string
+  location: string | null
+  durationMinutes: number | null
+  source: string
+  notes: string | null
+  scoresCount: number
+  scores: any[]
+  issue?: string
+}
 
 /**
  * Diagnostica le partite problematiche
- * @param {Object} supabaseClient - Client Supabase
- * @param {string} userId - ID dell'utente (opzionale)
- * @returns {Promise<Object>} Oggetto con i risultati della diagnosi
  */
-export async function diagnoseProblematicPlays(supabaseClient, userId = null) {
+export async function diagnoseProblematicPlays(supabaseClient: SupabaseClient, userId: string | null = null): Promise<DiagnosisResult> {
   try {
     console.log('🔍 Inizio diagnosi delle partite problematiche...\n')
 
@@ -44,20 +57,20 @@ export async function diagnoseProblematicPlays(supabaseClient, userId = null) {
 
     if (!plays || plays.length === 0) {
       console.log('ℹ️  Nessuna partita trovata nel database')
-      return { totalPlays: 0, problematicPlays: [] }
+      return { totalPlays: 0, problematicPlays: [], playsWithoutScores: [], playsWithOneScore: [], playsWithMultipleScores: [] }
     }
 
     console.log(`📊 Totale partite recuperate: ${plays.length}\n`)
 
     // Analizza ogni partita
-    const problematicPlays = []
-    const playsWithoutScores = []
-    const playsWithOneScore = []
-    const playsWithMultipleScores = []
+    const problematicPlays: PlayInfo[] = []
+    const playsWithoutScores: PlayInfo[] = []
+    const playsWithOneScore: PlayInfo[] = []
+    const playsWithMultipleScores: PlayInfo[] = []
 
-    plays.forEach((play, index) => {
-      const scoresCount = play.play_scores?.length || 0
-      const playInfo = {
+    plays.forEach((play: any, index: number) => {
+      const scoresCount: number = play.play_scores?.length || 0
+      const playInfo: PlayInfo = {
         index: index + 1,
         id: play.id,
         gameId: play.game_id,
@@ -98,7 +111,7 @@ export async function diagnoseProblematicPlays(supabaseClient, userId = null) {
       console.log('🔍 DETTAGLIO DELLE PARTITE PROBLEMATICHE:')
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
 
-      problematicPlays.forEach((play, index) => {
+      problematicPlays.forEach((play) => {
         console.log(`📌 Partita #${play.index} - ID: ${play.id}`)
         console.log(`   🎮 Gioco: ${play.gameName} (ID: ${play.gameId})`)
         console.log(`   📅 Data: ${play.playedAt}`)
@@ -111,7 +124,7 @@ export async function diagnoseProblematicPlays(supabaseClient, userId = null) {
 
         if (play.scores.length > 0) {
           console.log(`   👥 Giocatori:`)
-          play.scores.forEach((score, scoreIndex) => {
+          play.scores.forEach((score: any, scoreIndex: number) => {
             const playerName = score.players?.alias || score.players?.name || 'Unknown'
             console.log(`      ${scoreIndex + 1}. ${playerName} - Punteggio: ${score.score}, Vincitore: ${score.winner}, Posizione: ${score.position}`)
           })
@@ -169,7 +182,7 @@ export async function diagnoseProblematicPlays(supabaseClient, userId = null) {
  * Funzione helper per eseguire la diagnosi dalla console del browser
  * Copia e incolla questa funzione nella console del browser
  */
-export function browserDiagnoseFunction() {
+export function browserDiagnoseFunction(): string {
   return `
 // Copia e incolla questo codice nella console del browser per eseguire la diagnosi
 

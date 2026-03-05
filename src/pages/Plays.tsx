@@ -4,12 +4,53 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy } from 'lucide-react'
 
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+}
+
+interface DbPlayScore {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+  players?: DbPlayer
+}
+
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+}
+
+interface DbPlay {
+  id: string
+  game_id: string
+  played_at: string
+  location?: string | null
+  duration_minutes?: number | null
+  source?: string
+  notes?: string | null
+  games?: DbGame
+  play_scores?: DbPlayScore[]
+}
+
+interface Filters {
+  search: string
+  game: string
+  player: string
+  source: string
+  month: string
+  year: string
+}
+
 const Plays = () => {
   const { user } = useAuth()
-  const [plays, setPlays] = useState([])
-  const [filteredPlays, setFilteredPlays] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
+  const [plays, setPlays] = useState<DbPlay[]>([])
+  const [filteredPlays, setFilteredPlays] = useState<DbPlay[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [filters, setFilters] = useState<Filters>({
     search: '',
     game: '',
     player: '',
@@ -26,7 +67,7 @@ const Plays = () => {
     applyFilters()
   }, [plays, filters])
 
-  const fetchPlays = async () => {
+  const fetchPlays = async (): Promise<void> => {
     try {
       const { data } = await supabase
         .from('plays')
@@ -40,7 +81,7 @@ const Plays = () => {
         `)
         .order('played_at', { ascending: false })
 
-      setPlays(data || [])
+      setPlays((data ?? []) as DbPlay[])
     } catch (error) {
       console.error('Error fetching plays:', error)
     } finally {
@@ -48,7 +89,7 @@ const Plays = () => {
     }
   }
 
-  const applyFilters = () => {
+  const applyFilters = (): void => {
     let result = [...plays]
 
     if (filters.search) {
@@ -84,17 +125,17 @@ const Plays = () => {
     setFilteredPlays(result)
   }
 
-  const getUniqueGames = () => {
+  const getUniqueGames = (): DbGame[] => {
     const games = [...new Set(plays.map(p => p.game_id))]
-    return games.map(id => plays.find(p => p.game_id === id)?.games).filter(Boolean)
+    return games.map(id => plays.find(p => p.game_id === id)?.games).filter(Boolean) as DbGame[]
   }
 
-  const getUniqueYears = () => {
+  const getUniqueYears = (): number[] => {
     const years = [...new Set(plays.map(p => new Date(p.played_at).getFullYear()))]
     return years.sort((a, b) => b - a)
   }
 
-  const getWinner = (play) => {
+  const getWinner = (play: DbPlay): string | undefined => {
     const winner = play.play_scores?.find(s => s.winner)
     return winner?.players?.alias || winner?.players?.name
   }
@@ -144,7 +185,7 @@ const Plays = () => {
               type="text"
               placeholder="Cerca gioco o note..."
               value={filters.search}
-              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -152,7 +193,7 @@ const Plays = () => {
           {/* Game Filter */}
           <select
             value={filters.game}
-            onChange={(e) => setFilters(prev => ({ ...prev, game: e.target.value }))}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({ ...prev, game: e.target.value }))}
             className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option value="">Tutti i giochi</option>
@@ -164,7 +205,7 @@ const Plays = () => {
           {/* Source Filter */}
           <select
             value={filters.source}
-            onChange={(e) => setFilters(prev => ({ ...prev, source: e.target.value }))}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({ ...prev, source: e.target.value }))}
             className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option value="">Tutte le fonti</option>
@@ -176,7 +217,7 @@ const Plays = () => {
           <div className="flex space-x-2">
             <select
               value={filters.year}
-              onChange={(e) => setFilters(prev => ({ ...prev, year: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({ ...prev, year: e.target.value }))}
               className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">Anno</option>
@@ -186,7 +227,7 @@ const Plays = () => {
             </select>
             <select
               value={filters.month}
-              onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters(prev => ({ ...prev, month: e.target.value }))}
               className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">Mese</option>
@@ -319,7 +360,7 @@ const Plays = () => {
                   play.source === 'offline' ? 'bg-orange-500/20 text-orange-500' :
                   'bg-slate-700 text-slate-300'
                 }`}>
-                  {play.source === 'online' ? 'Online' : play.source === 'offline' ? 'IRL' : play.source.toUpperCase()}
+                  {play.source === 'online' ? 'Online' : play.source === 'offline' ? 'IRL' : play.source?.toUpperCase()}
                 </span>
               </div>
             </Link>

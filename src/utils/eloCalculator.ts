@@ -1,3 +1,5 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+
 /**
  * Sistema di Rating ELO per giochi da tavolo
  *
@@ -20,13 +22,74 @@
  * - Il risultato reale è basato sulla posizione finale nella partita
  */
 
+// ─── Interfaces ───────────────────────────────────────────────────────────────
+
+interface PlayerInput {
+  playerId: string
+  currentRating: number
+  gamesPlayed: number
+  winner: boolean
+  position?: number
+  score?: number | null
+  draw?: boolean
+}
+
+interface PlayerWithPosition extends PlayerInput {
+  finalPosition: number
+  playerName?: string
+}
+
+interface EloResult {
+  playerId: string
+  oldRating: number
+  newRating: number
+  ratingChange: number
+  expectedScore: string
+  actualScore: string
+  kFactor: number
+}
+
+interface GeneralELOResult {
+  playerId: string
+  rating: number
+  gamesPlayed: number
+  wins: number
+  losses: number
+  draws: number
+}
+
+interface ELOHistoryEntry {
+  date: string
+  playId: string
+  playerId: string
+  playerName: string
+  rating: number
+  ratingChange: number
+}
+
+interface GeneralELOHistoryEntry {
+  date: string
+  playId: string
+  playerId: string
+  playerName: string
+  rating: number
+  ratingChange: number
+  gamesPlayed: number
+}
+
+interface PlayerGameRating {
+  playerId: string
+  playerName: string
+  currentRating: number
+  gamesPlayed: number
+}
+
+// ─── Functions ────────────────────────────────────────────────────────────────
+
 /**
  * Calcola il risultato atteso per un giocatore contro altri giocatori (metodo classico)
- * @param {number} playerRating - Rating del giocatore
- * @param {number[]} opponentRatings - Array dei rating degli avversari
- * @returns {number} Risultato atteso (0-1)
  */
-export function calculateExpectedScore(playerRating, opponentRatings) {
+export function calculateExpectedScore(playerRating: number, opponentRatings: number[]): number {
   if (opponentRatings.length === 0) return 0.5;
 
   // Calcola la media dei rating degli avversari
@@ -41,11 +104,8 @@ export function calculateExpectedScore(playerRating, opponentRatings) {
 /**
  * Calcola il risultato atteso per un giocatore usando il metodo pairwise
  * Questo metodo calcola il risultato atteso contro ogni altro giocatore e fa la media
- * @param {number} playerRating - Rating del giocatore
- * @param {number[]} opponentRatings - Array dei rating degli avversari
- * @returns {number} Risultato atteso (0-1)
  */
-export function calculateExpectedScorePairwise(playerRating, opponentRatings) {
+export function calculateExpectedScorePairwise(playerRating: number, opponentRatings: number[]): number {
   if (opponentRatings.length === 0) return 0.5;
 
   // Calcola il risultato atteso contro ogni avversario
@@ -61,12 +121,8 @@ export function calculateExpectedScorePairwise(playerRating, opponentRatings) {
 
 /**
  * Calcola il risultato reale basato sulla posizione finale nella partita
- * @param {number} playerPosition - Posizione del giocatore (1 = primo)
- * @param {number} totalPlayers - Numero totale di giocatori
- * @param {boolean} isWinner - Se il giocatore ha vinto
- * @returns {number} Risultato reale (0-1)
  */
-export function calculateActualScore(playerPosition, totalPlayers, isWinner) {
+export function calculateActualScore(playerPosition: number, totalPlayers: number, isWinner: boolean): number {
   if (isWinner) return 1;
   
   // Per non vincitori, assegna un punteggio basato sulla posizione
@@ -79,13 +135,8 @@ export function calculateActualScore(playerPosition, totalPlayers, isWinner) {
 
 /**
  * Calcola il nuovo rating ELO per un giocatore
- * @param {number} currentRating - Rating attuale del giocatore
- * @param {number} expectedScore - Risultato atteso (0-1)
- * @param {number} actualScore - Risultato reale (0-1)
- * @param {number} kFactor - Fattore K (default: 32)
- * @returns {number} Nuovo rating
  */
-export function calculateNewRating(currentRating, expectedScore, actualScore, kFactor = 32) {
+export function calculateNewRating(currentRating: number, expectedScore: number, actualScore: number, kFactor: number = 32): number {
   const ratingChange = kFactor * (actualScore - expectedScore);
   const newRating = Math.round(currentRating + ratingChange);
   
@@ -94,10 +145,8 @@ export function calculateNewRating(currentRating, expectedScore, actualScore, kF
 
 /**
  * Calcola il fattore K basato sul numero di partite giocate
- * @param {number} gamesPlayed - Numero di partite giocate
- * @returns {number} Fattore K
  */
-export function calculateKFactor(gamesPlayed) {
+export function calculateKFactor(gamesPlayed: number): number {
   // Nuovi giocatori (< 10 partite): K = 48 per adattamento più rapido
   // Giocatori esperti (10-30 partite): K = 32
   // Giocatori molto esperti (>= 30 partite): K = 24 per maggiore stabilità
@@ -109,31 +158,24 @@ export function calculateKFactor(gamesPlayed) {
 
 /**
  * Calcola i nuovi rating ELO per tutti i giocatori in una partita
- * @param {Array} players - Array di giocatori con i loro dati
- * @param {Array} players[].playerId - ID del giocatore
- * @param {number} players[].currentRating - Rating attuale del giocatore
- * @param {number} players[].gamesPlayed - Numero di partite giocate
- * @param {boolean} players[].winner - Se il giocatore ha vinto
- * @param {number} players[].position - Posizione nella partita (opzionale)
- * @returns {Array} Array con i nuovi rating calcolati
  *
  * Note:
  * - Per 2 giocatori: usa il metodo ELO classico
  * - Per 3+ giocatori: usa il metodo pairwise (all-pairs)
  */
-export function calculateELOForGame(players) {
+export function calculateELOForGame(players: PlayerInput[]): EloResult[] {
   if (players.length < 2) {
     throw new Error('Servono almeno 2 giocatori per calcolare il rating ELO');
   }
 
   // Calcola le posizioni se non fornite
-  const playersWithPositions = players.map((player, index) => ({
+  const playersWithPositions: PlayerWithPosition[] = players.map((player, index) => ({
     ...player,
-    position: player.position !== undefined ? player.position : index + 1
+    finalPosition: player.position !== undefined ? player.position : index + 1
   }));
 
   // Ordina i giocatori per posizione (vincitori primi)
-  const sortedPlayers = [...playersWithPositions].sort((a, b) => a.position - b.position);
+  const sortedPlayers = [...playersWithPositions].sort((a, b) => a.position! - b.position!);
 
   // Assegna le posizioni corrette gestendo i pareggi
   let currentPosition = 1;
@@ -148,7 +190,7 @@ export function calculateELOForGame(players) {
   // Usa il metodo pairwise per 3+ player, metodo classico per 2 player
   const usePairwise = players.length >= 3;
 
-  const results = sortedPlayers.map(player => {
+  const results: EloResult[] = sortedPlayers.map(player => {
     const opponentRatings = playersWithPositions
       .filter(p => p.playerId !== player.playerId)
       .map(p => p.currentRating);
@@ -178,13 +220,8 @@ export function calculateELOForGame(players) {
 
 /**
  * Aggiorna i rating ELO nel database dopo una partita
- * @param {Object} supabase - Client Supabase
- * @param {string} gameId - ID del gioco
- * @param {Array} players - Array di giocatori con i loro dati
- * @param {string} userId - ID dell'utente (opzionale, per aggiornare l'ELO Generale)
- * @returns {Promise<Array>} Array con i rating aggiornati
  */
-export async function updateELOAfterGame(supabase, gameId, players, userId = null) {
+export async function updateELOAfterGame(supabase: SupabaseClient, gameId: string, players: PlayerInput[], userId: string | null = null): Promise<Record<string, unknown>[]> {
   try {
     // Calcola i nuovi rating
     const eloResults = calculateELOForGame(players);
@@ -266,11 +303,8 @@ export async function updateELOAfterGame(supabase, gameId, players, userId = nul
 
 /**
  * Ottieni i rating ELO per un gioco specifico
- * @param {Object} supabase - Client Supabase
- * @param {string} gameId - ID del gioco
- * @returns {Promise<Array>} Array di rating ELO ordinati
  */
-export async function getELOForGame(supabase, gameId) {
+export async function getELOForGame(supabase: SupabaseClient, gameId: string): Promise<Record<string, unknown>[]> {
   try {
     const { data, error } = await supabase
       .from('player_ratings')
@@ -291,11 +325,8 @@ export async function getELOForGame(supabase, gameId) {
 
 /**
  * Ottieni i rating ELO per un giocatore specifico
- * @param {Object} supabase - Client Supabase
- * @param {string} playerId - ID del giocatore
- * @returns {Promise<Array>} Array di rating ELO per tutti i giochi
  */
-export async function getELOForPlayer(supabase, playerId) {
+export async function getELOForPlayer(supabase: SupabaseClient, playerId: string): Promise<Record<string, unknown>[]> {
   try {
     const { data, error } = await supabase
       .from('player_ratings')
@@ -317,11 +348,8 @@ export async function getELOForPlayer(supabase, playerId) {
 /**
  * Calcola l'ELO Generale (aggregato) per un giocatore
  * L'ELO Generale è una media ponderata degli ELO specifici per gioco
- * @param {Object} supabase - Client Supabase
- * @param {string} playerId - ID del giocatore
- * @returns {Promise<Object|null>} Oggetto con l'ELO generale o null
  */
-export async function calculateGeneralELO(supabase, playerId) {
+export async function calculateGeneralELO(supabase: SupabaseClient, playerId: string): Promise<GeneralELOResult | null> {
   try {
     // Recupera tutti gli ELO specifici per gioco del giocatore
     const { data: gameRatings, error } = await supabase
@@ -344,8 +372,8 @@ export async function calculateGeneralELO(supabase, playerId) {
     let totalLosses = 0;
     let totalDraws = 0;
 
-    gameRatings.forEach(rating => {
-      const weight = rating.games_played;
+    gameRatings.forEach((rating: any) => {
+      const weight: number = rating.games_played;
       totalWeightedRating += rating.rating * weight;
       totalWeight += weight;
       totalGamesPlayed += rating.games_played;
@@ -372,12 +400,8 @@ export async function calculateGeneralELO(supabase, playerId) {
 
 /**
  * Aggiorna l'ELO Generale per un giocatore
- * @param {Object} supabase - Client Supabase
- * @param {string} playerId - ID del giocatore
- * @param {string} userId - ID dell'utente
- * @returns {Promise<Object>} L'ELO Generale aggiornato
  */
-export async function updateGeneralELO(supabase, playerId, userId) {
+export async function updateGeneralELO(supabase: SupabaseClient, playerId: string, userId: string): Promise<GeneralELOResult> {
   try {
     // Calcola il nuovo ELO Generale
     const generalELO = await calculateGeneralELO(supabase, playerId);
@@ -433,11 +457,8 @@ export async function updateGeneralELO(supabase, playerId, userId) {
 
 /**
  * Ottieni l'ELO Generale per un giocatore
- * @param {Object} supabase - Client Supabase
- * @param {string} playerId - ID del giocatore
- * @returns {Promise<Object|null>} L'ELO Generale o null
  */
-export async function getGeneralELO(supabase, playerId) {
+export async function getGeneralELO(supabase: SupabaseClient, playerId: string): Promise<GeneralELOResult | null> {
   try {
     const { data, error } = await supabase
       .from('player_general_ratings')
@@ -455,11 +476,8 @@ export async function getGeneralELO(supabase, playerId) {
 
 /**
  * Ottieni tutti gli ELO Generali per un utente
- * @param {Object} supabase - Client Supabase
- * @param {string} userId - ID dell'utente (opzionale, se non fornito mostra tutti)
- * @returns {Promise<Array>} Array di ELO Generali ordinati
  */
-export async function getAllGeneralELO(supabase, userId) {
+export async function getAllGeneralELO(supabase: SupabaseClient, userId: string | null): Promise<GeneralELOResult[]> {
   try {
     let query = supabase
       .from('player_general_ratings')
@@ -485,11 +503,8 @@ export async function getAllGeneralELO(supabase, userId) {
 
 /**
  * Ricalcola tutti gli ELO Generali per un utente
- * @param {Object} supabase - Client Supabase
- * @param {string} userId - ID dell'utente
- * @returns {Promise<void>}
  */
-export async function recalculateAllGeneralELO(supabase, userId) {
+export async function recalculateAllGeneralELO(supabase: SupabaseClient, userId: string): Promise<void> {
   try {
     // Recupera tutti i giocatori dell'utente
     const { data: players, error: playersError } = await supabase
@@ -511,12 +526,8 @@ export async function recalculateAllGeneralELO(supabase, userId) {
 
 /**
  * Ricalcola tutti i rating ELO per un gioco partendo dalle partite storiche
- * @param {Object} supabase - Client Supabase
- * @param {string} gameId - ID del gioco
- * @param {string} userId - ID dell'utente
- * @returns {Promise<void>}
  */
-export async function recalculateAllELOForGame(supabase, gameId, userId) {
+export async function recalculateAllELOForGame(supabase: SupabaseClient, gameId: string, userId: string): Promise<void> {
   try {
     // Elimina tutti i rating esistenti per questo gioco
     await supabase
@@ -541,15 +552,15 @@ export async function recalculateAllELOForGame(supabase, gameId, userId) {
     if (!plays || plays.length === 0) return;
 
     // Mappa per tenere traccia dell'ELO corrente di ogni giocatore
-    const playerRatings = {};
+    const playerRatings: Record<string, { playerId: string; currentRating: number; gamesPlayed: number }> = {};
 
     // Processa ogni partita in ordine cronologico
     for (const play of plays) {
       if (!play.play_scores || play.play_scores.length < 2) continue;
 
       // Prepara i dati dei giocatori per il calcolo ELO
-      const playersData = play.play_scores.map((score) => {
-        const playerId = score.player_id;
+      const playersData: PlayerInput[] = play.play_scores.map((score: any) => {
+        const playerId: string = score.player_id;
 
         // Inizializza il rating per questo giocatore se non esiste
         if (!playerRatings[playerId]) {
@@ -576,7 +587,7 @@ export async function recalculateAllELOForGame(supabase, gameId, userId) {
         if (a.winner && !b.winner) return -1;
         if (!a.winner && b.winner) return 1;
         if (a.score !== null && b.score !== null) {
-          return b.score - a.score;
+          return (b.score ?? 0) - (a.score ?? 0);
         }
         return 0;
       });
@@ -619,12 +630,8 @@ export async function recalculateAllELOForGame(supabase, gameId, userId) {
 /**
  * Calcola lo storico degli ELO per un gioco specifico
  * Questa funzione simula il calcolo degli ELO nel tempo senza salvare nel database
- * @param {Object} supabase - Client Supabase
- * @param {string} gameId - ID del gioco
- * @param {string} userId - ID dell'utente (opzionale)
- * @returns {Promise<Array>} Array di oggetti con data, giocatore e ELO per il grafico
  */
-export async function getELOHistoryForGame(supabase, gameId, userId = null) {
+export async function getELOHistoryForGame(supabase: SupabaseClient, gameId: string, userId: string | null = null): Promise<ELOHistoryEntry[]> {
   try {
     // Recupera tutte le partite per questo gioco ordinate cronologicamente
     let query = supabase
@@ -651,15 +658,15 @@ export async function getELOHistoryForGame(supabase, gameId, userId = null) {
     if (!plays || plays.length === 0) return [];
 
     // Mappa per tenere traccia dell'ELO corrente di ogni giocatore
-    const playerRatings = {};
-    const eloHistory = [];
+    const playerRatings: Record<string, PlayerGameRating> = {};
+    const eloHistory: ELOHistoryEntry[] = [];
 
     // Processa ogni partita in ordine cronologico
     for (const play of plays) {
       if (!play.play_scores || play.play_scores.length < 2) continue;
 
       // Prepara i dati dei giocatori per il calcolo ELO
-      const playersData = play.play_scores.map((score) => {
+      const playersData: (PlayerInput & { playerName: string })[] = play.play_scores.map((score: any) => {
         // Recupera o inizializza il rating corrente del giocatore
         if (!playerRatings[score.player_id]) {
           playerRatings[score.player_id] = {
@@ -686,7 +693,7 @@ export async function getELOHistoryForGame(supabase, gameId, userId = null) {
         if (a.winner && !b.winner) return -1;
         if (!a.winner && b.winner) return 1;
         if (a.score !== null && b.score !== null) {
-          return b.score - a.score;
+          return (b.score ?? 0) - (a.score ?? 0);
         }
         return 0;
       });
@@ -740,11 +747,8 @@ export async function getELOHistoryForGame(supabase, gameId, userId = null) {
 /**
  * Calcola lo storico degli ELO Generali
  * Questa funzione simula il calcolo degli ELO Generali nel tempo senza salvare nel database
- * @param {Object} supabase - Client Supabase
- * @param {string} userId - ID dell'utente (opzionale)
- * @returns {Promise<Array>} Array di oggetti con data, giocatore e ELO Generale per il grafico
  */
-export async function getGeneralELOHistory(supabase, userId = null) {
+export async function getGeneralELOHistory(supabase: SupabaseClient, userId: string | null = null): Promise<GeneralELOHistoryEntry[]> {
   try {
     // Recupera tutte le partite ordinate cronologicamente
     let query = supabase
@@ -773,8 +777,8 @@ export async function getGeneralELOHistory(supabase, userId = null) {
     console.log(`[getGeneralELOHistory] Recuperate ${plays.length} partite totali`);
 
     // Mappa per tenere traccia dell'ELO corrente di ogni giocatore per ogni gioco
-    const playerGameRatings = {};
-    const generalELOHistory = [];
+    const playerGameRatings: Record<string, Record<string, PlayerGameRating>> = {};
+    const generalELOHistory: GeneralELOHistoryEntry[] = [];
     let playCounter = 0;
     let skippedPlays = 0;
     let processedPlays = 0;
@@ -784,7 +788,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
       playCounter++;
 
       if (!play.play_scores || play.play_scores.length < 2) {
-        const scoresCount = play.play_scores?.length || 0;
+        const scoresCount: number = play.play_scores?.length || 0;
         const reason = scoresCount === 0 
           ? 'Nessun punteggio associato (partita incompleta o errata)' 
           : `Solo ${scoresCount} punteggio/i (servono almeno 2 per il calcolo ELO)`;
@@ -794,7 +798,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
       }
 
       processedPlays++;
-      const gameId = play.game_id;
+      const gameId: string = play.game_id;
 
       // Inizializza lo stato per questo gioco se non esiste
       if (!playerGameRatings[gameId]) {
@@ -802,9 +806,9 @@ export async function getGeneralELOHistory(supabase, userId = null) {
       }
 
       // Prepara i dati dei giocatori per il calcolo ELO
-      const playersData = play.play_scores.map((score) => {
-        const playerId = score.player_id;
-        const playerName = score.players?.alias || score.players?.name || 'Unknown';
+      const playersData: (PlayerInput & { playerName: string })[] = play.play_scores.map((score: any) => {
+        const playerId: string = score.player_id;
+        const playerName: string = score.players?.alias || score.players?.name || 'Unknown';
 
         // Inizializza il rating per questo gioco se non esiste
         if (!playerGameRatings[gameId][playerId]) {
@@ -832,7 +836,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
         if (a.winner && !b.winner) return -1;
         if (!a.winner && b.winner) return 1;
         if (a.score !== null && b.score !== null) {
-          return b.score - a.score;
+          return (b.score ?? 0) - (a.score ?? 0);
         }
         return 0;
       });
@@ -856,8 +860,8 @@ export async function getGeneralELOHistory(supabase, userId = null) {
       const eloResults = calculateELOForGame(playersData);
 
       // Calcola l'ELO Generale per ogni giocatore PRIMA di aggiornare i rating
-      const playersInPlay = play.play_scores.map(score => score.player_id);
-      const previousGeneralRatings = {};
+      const playersInPlay: string[] = play.play_scores.map((score: any) => score.player_id);
+      const previousGeneralRatings: Record<string, number> = {};
 
       for (const playerId of playersInPlay) {
         // Calcola l'ELO Generale come media ponderata degli ELO specifici per gioco
@@ -867,7 +871,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
         for (const gId in playerGameRatings) {
           if (playerGameRatings[gId][playerId]) {
             const gameRating = playerGameRatings[gId][playerId];
-            const weight = gameRating.gamesPlayed;
+            const weight: number = gameRating.gamesPlayed;
             totalWeightedRating += gameRating.currentRating * weight;
             totalWeight += weight;
           }
@@ -895,7 +899,7 @@ export async function getGeneralELOHistory(supabase, userId = null) {
         for (const gId in playerGameRatings) {
           if (playerGameRatings[gId][playerId]) {
             const gameRating = playerGameRatings[gId][playerId];
-            const weight = gameRating.gamesPlayed;
+            const weight: number = gameRating.gamesPlayed;
             totalWeightedRating += gameRating.currentRating * weight;
             totalWeight += weight;
             totalGamesPlayed += gameRating.gamesPlayed;

@@ -5,12 +5,67 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Trophy, TrendingUp, Users, Calendar, Gamepad2 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+}
+
+interface DbPlayScoreNested {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+}
+
+interface DbPlayNested {
+  id: string
+  played_at: string
+  games?: DbGame
+  play_scores?: DbPlayScoreNested[]
+}
+
+interface DbPlayScore {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+  plays?: DbPlayNested
+}
+
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+  avatar_url?: string | null
+  is_me?: boolean
+}
+
+interface WinHistoryPoint {
+  play: number
+  won: number
+  date: string
+}
+
+interface MostPlayedGame extends DbGame {
+  count: number
+}
+
+interface PlayerStats {
+  totalPlays: number
+  winRate: number
+  winRateVsMe: number
+  mostPlayedGames: MostPlayedGame[]
+  recentPlays: DbPlayScore[]
+  winHistory: WinHistoryPoint[]
+}
+
 const PlayerDetail = () => {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
 
-  const [player, setPlayer] = useState(null)
-  const [stats, setStats] = useState({
+  const [player, setPlayer] = useState<DbPlayer | null>(null)
+  const [stats, setStats] = useState<PlayerStats>({
     totalPlays: 0,
     winRate: 0,
     winRateVsMe: 0,
@@ -18,13 +73,13 @@ const PlayerDetail = () => {
     recentPlays: [],
     winHistory: []
   })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
     fetchPlayerData()
   }, [id])
 
-  const fetchPlayerData = async () => {
+  const fetchPlayerData = async (): Promise<void> => {
     try {
       // Fetch player details
       const { data: playerData } = await supabase
@@ -34,14 +89,14 @@ const PlayerDetail = () => {
         .single()
 
       if (playerData) {
-        setPlayer(playerData)
+        setPlayer(playerData as DbPlayer)
       }
 
       // Fetch my player ID
       const { data: myPlayer } = await supabase
         .from('players')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .eq('is_me', true)
         .maybeSingle()
 
@@ -59,15 +114,16 @@ const PlayerDetail = () => {
         .eq('player_id', id)
 
       if (playScores) {
-        const totalPlays = playScores.length
-        const wins = playScores.filter(s => s.winner).length
+        const scores = playScores as DbPlayScore[]
+        const totalPlays = scores.length
+        const wins = scores.filter(s => s.winner).length
 
         // Calculate win rate vs me
         let winsVsMe = 0
         let totalVsMe = 0
-        const winHistory = []
+        const winHistory: WinHistoryPoint[] = []
 
-        playScores.forEach((score, index) => {
+        scores.forEach((score, index) => {
           const play = score.plays
           if (play) {
             // Check if I was in this play
@@ -92,25 +148,25 @@ const PlayerDetail = () => {
         })
 
         // Most played games
-        const gameCounts = {}
-        playScores.forEach(score => {
+        const gameCounts: Record<string, number> = {}
+        scores.forEach(score => {
           const game = score.plays?.games
           if (game) {
             gameCounts[game.id] = (gameCounts[game.id] || 0) + 1
           }
         })
 
-        const mostPlayedGames = Object.entries(gameCounts)
+        const mostPlayedGames: MostPlayedGame[] = Object.entries(gameCounts)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 5)
           .map(([gameId, count]) => {
-            const game = playScores.find(s => s.plays?.games?.id === gameId)?.plays?.games
-            return { ...game, count }
+            const game = scores.find(s => s.plays?.games?.id === gameId)?.plays?.games
+            return { ...game, count } as MostPlayedGame
           })
 
         // Recent plays
-        const recentPlays = playScores
-          .sort((a, b) => new Date(b.plays?.played_at) - new Date(a.plays?.played_at))
+        const recentPlays = scores
+          .sort((a, b) => new Date(b.plays?.played_at ?? '').getTime() - new Date(a.plays?.played_at ?? '').getTime())
           .slice(0, 10)
 
         setStats({
@@ -129,7 +185,7 @@ const PlayerDetail = () => {
     }
   }
 
-  const getAvatarColor = (name) => {
+  const getAvatarColor = (name: string): string => {
     const colors = [
       'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500',
       'bg-teal-500', 'bg-blue-500', 'bg-indigo-500', 'bg-purple-500',
@@ -139,7 +195,7 @@ const PlayerDetail = () => {
     return colors[index]
   }
 
-  const getInitials = (name) => {
+  const getInitials = (name: string): string => {
     return name
       .split(' ')
       .map(word => word[0])
@@ -257,11 +313,11 @@ const PlayerDetail = () => {
                   stroke="#94a3b8"
                   tick={{ fontSize: 12 }}
                 />
-                <YAxis stroke="#94a3b8" domain={[0, 1]} tickFormatter={(value) => value === 1 ? 'Vinto' : 'Perso'} />
+                <YAxis stroke="#94a3b8" domain={[0, 1]} tickFormatter={(value: number) => value === 1 ? 'Vinto' : 'Perso'} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
                   itemStyle={{ color: '#e2e8f0' }}
-                  formatter={(value) => value === 1 ? 'Vinto' : 'Perso'}
+                  formatter={(value: number | undefined) => value === 1 ? 'Vinto' : 'Perso'}
                 />
                 <Line 
                   type="stepAfter" 

@@ -5,25 +5,68 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Users, TrendingUp, Calendar, Gamepad2, Trophy } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
+interface DbPlayer {
+  id: string
+  name: string
+  alias?: string | null
+}
+
+interface DbPlayScore {
+  id: string
+  player_id: string
+  score?: number | null
+  winner: boolean
+  players?: DbPlayer
+}
+
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+  min_players?: number | null
+  max_players?: number | null
+}
+
+interface DbPlay {
+  id: string
+  game_id: string
+  played_at: string
+  location?: string | null
+  play_scores?: DbPlayScore[]
+}
+
+interface ScoreHistoryPoint {
+  play: number
+  score: number
+  date: string
+}
+
+interface GameStats {
+  totalPlays: number
+  winRate: number
+  avgScore: number | string
+  scoreHistory: ScoreHistoryPoint[]
+}
+
 const GameDetail = () => {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
 
-  const [game, setGame] = useState(null)
-  const [plays, setPlays] = useState([])
-  const [stats, setStats] = useState({
+  const [game, setGame] = useState<DbGame | null>(null)
+  const [plays, setPlays] = useState<DbPlay[]>([])
+  const [stats, setStats] = useState<GameStats>({
     totalPlays: 0,
     winRate: 0,
     avgScore: 0,
     scoreHistory: []
   })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
     fetchGameData()
   }, [id])
 
-  const fetchGameData = async () => {
+  const fetchGameData = async (): Promise<void> => {
     try {
       // Fetch game details
       const { data: gameData } = await supabase
@@ -33,7 +76,7 @@ const GameDetail = () => {
         .single()
 
       if (gameData) {
-        setGame(gameData)
+        setGame(gameData as DbGame)
       }
 
       // Fetch plays for this game
@@ -46,33 +89,33 @@ const GameDetail = () => {
             players(*)
           )
         `)
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .eq('game_id', id)
         .order('played_at', { ascending: true })
 
       if (playsData) {
-        setPlays(playsData)
+        setPlays(playsData as DbPlay[])
 
         // Calculate stats
         const { data: myPlayer } = await supabase
           .from('players')
           .select('id')
-          .eq('user_id', user.id)
+          .eq('user_id', user!.id)
           .eq('is_me', true)
           .maybeSingle()
 
-        let totalPlays = playsData.length
+        const totalPlays = playsData.length
         let wins = 0
         let totalScore = 0
         let scoreCount = 0
-        const scoreHistory = []
+        const scoreHistory: ScoreHistoryPoint[] = []
 
-        playsData.forEach((play, index) => {
+        ;(playsData as DbPlay[]).forEach((play, index) => {
           // Check if I won
           if (myPlayer) {
             const myScore = play.play_scores?.find(s => s.player_id === myPlayer.id)
             if (myScore?.winner) wins++
-            if (myScore?.score !== null) {
+            if (myScore?.score !== null && myScore?.score !== undefined) {
               totalScore += myScore.score
               scoreCount++
               scoreHistory.push({

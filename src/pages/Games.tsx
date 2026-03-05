@@ -4,54 +4,36 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { XMLParser } from 'fast-xml-parser'
 
-// ─── BoardGameGeek (BGG) Image Fetcher ───────────────────────────────────────
-const parser = new XMLParser()
+interface DbGame {
+  id: string
+  name: string
+  image_url?: string | null
+  min_players?: number | null
+  max_players?: number | null
+}
 
-const fetchGameImageFromBGG = async (gameName) => {
-  try {
-    // Search for the game on BGG
-    const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(gameName)}&type=boardgame`
-    const searchResponse = await fetch(searchUrl)
-    const searchXml = await searchResponse.text()
-    const searchResult = parser.parse(searchXml)
+interface DbGameWithStats extends DbGame {
+  playCount: number
+  lastPlayed: string | null
+}
 
-    // Check if we found any games
-    const items = searchResult?.items?.item
-    if (!items) return null
-
-    // Get the first game ID (most relevant result)
-    const gameId = Array.isArray(items) ? items[0].id : items.id
-    if (!gameId) return null
-
-    // Fetch game details including image
-    const detailsUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${gameId}&stats=1`
-    const detailsResponse = await fetch(detailsUrl)
-    const detailsXml = await detailsResponse.text()
-    const detailsResult = parser.parse(detailsXml)
-
-    // Extract image URL
-    const items2 = detailsResult?.items?.item
-    if (!items2) return null
-
-    const game = Array.isArray(items2) ? items2[0] : items2
-    return game?.image || null
-  } catch (error) {
-    console.error('Error fetching game image from BGG:', error)
-    return null
-  }
+interface NewGameForm {
+  name: string
+  min_players: string
+  max_players: string
+  image_url: string
 }
 
 const Games = () => {
   const { user } = useAuth()
-  const [games, setGames] = useState([])
-  const [filteredGames, setFilteredGames] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortBy, setSortBy] = useState('name')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newGame, setNewGame] = useState({
+  const [games, setGames] = useState<DbGameWithStats[]>([])
+  const [filteredGames, setFilteredGames] = useState<DbGameWithStats[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [sortBy, setSortBy] = useState<string>('name')
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
+  const [newGame, setNewGame] = useState<NewGameForm>({
     name: '',
     min_players: '',
     max_players: '',
@@ -66,7 +48,7 @@ const Games = () => {
     applyFilters()
   }, [games, searchTerm, sortBy])
 
-  const fetchGames = async () => {
+  const fetchGames = async (): Promise<void> => {
     try {
       // Check if user is authenticated
       if (!user?.id) {
@@ -94,9 +76,9 @@ const Games = () => {
         .select('game_id, played_at')
         .eq('user_id', user.id)
 
-      const gameStats = {}
+      const gameStats: Record<string, { count: number; lastPlayed: string | null }> = {}
       if (playsData) {
-        playsData.forEach(play => {
+        ;(playsData as { game_id: string; played_at: string }[]).forEach(play => {
           if (!gameStats[play.game_id]) {
             gameStats[play.game_id] = {
               count: 0,
@@ -104,13 +86,13 @@ const Games = () => {
             }
           }
           gameStats[play.game_id].count++
-          if (!gameStats[play.game_id].lastPlayed || new Date(play.played_at) > new Date(gameStats[play.game_id].lastPlayed)) {
+          if (!gameStats[play.game_id].lastPlayed || new Date(play.played_at) > new Date(gameStats[play.game_id].lastPlayed!)) {
             gameStats[play.game_id].lastPlayed = play.played_at
           }
         })
       }
 
-      const gamesWithStats = gamesData.map(game => ({
+      const gamesWithStats: DbGameWithStats[] = (gamesData as DbGame[]).map(game => ({
         ...game,
         playCount: gameStats[game.id]?.count || 0,
         lastPlayed: gameStats[game.id]?.lastPlayed || null
@@ -124,7 +106,7 @@ const Games = () => {
     }
   }
 
-  const applyFilters = () => {
+  const applyFilters = (): void => {
     let result = [...games]
 
     if (searchTerm) {
@@ -144,7 +126,7 @@ const Games = () => {
         result.sort((a, b) => {
           if (!a.lastPlayed) return 1
           if (!b.lastPlayed) return -1
-          return new Date(b.lastPlayed) - new Date(a.lastPlayed)
+          return new Date(b.lastPlayed).getTime() - new Date(a.lastPlayed).getTime()
         })
         break
       default:
@@ -154,15 +136,15 @@ const Games = () => {
     setFilteredGames(result)
   }
 
-  const handleCreateGame = async (e) => {
+  const handleCreateGame = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
-    
+
     // Check if user is authenticated
     if (!user?.id) {
       toast.error('Devi essere autenticato per aggiungere un gioco')
       return
     }
-    
+
     try {
       const { error } = await supabase
         .from('games')
@@ -190,7 +172,7 @@ const Games = () => {
     }
   }
 
-  const handleDeleteGame = async (gameId, gameName) => {
+  const handleDeleteGame = async (gameId: string, gameName: string): Promise<void> => {
     // Check if user is authenticated
     if (!user?.id) {
       toast.error('Devi essere autenticato per eliminare un gioco')
@@ -264,12 +246,12 @@ const Games = () => {
       }
 
       toast.success(`Gioco "${gameName}" eliminato con successo!${hasPlays ? ` (${playCount} partite eliminate)` : ''}`)
-      
+
       // Refresh games list
       await fetchGames()
     } catch (error) {
       console.error('Error deleting game:', error)
-      toast.error(`Errore durante l'eliminazione del gioco: ${error.message}`)
+      toast.error(`Errore durante l'eliminazione del gioco: ${(error as Error).message}`)
     }
   }
 
@@ -315,7 +297,7 @@ const Games = () => {
               type="text"
               placeholder="Cerca un gioco..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -323,7 +305,7 @@ const Games = () => {
           {/* Sort */}
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSortBy(e.target.value)}
             className="px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option value="name">Ordina per nome</option>
@@ -339,8 +321,8 @@ const Games = () => {
           <Gamepad2 className="w-16 h-16 mx-auto mb-4 text-slate-600" />
           <h3 className="text-xl font-semibold text-white mb-2">Nessun gioco trovato</h3>
           <p className="text-slate-400">
-            {games.length === 0 
-              ? 'Inizia aggiungendo la tua prima partita!' 
+            {games.length === 0
+              ? 'Inizia aggiungendo la tua prima partita!'
               : 'Prova a cambiare i filtri'}
           </p>
         </div>
@@ -354,7 +336,7 @@ const Games = () => {
               {/* Delete Button */}
               {user && (
                 <button
-                  onClick={(e) => {
+                  onClick={(e: React.MouseEvent) => {
                     e.stopPropagation()
                     handleDeleteGame(game.id, game.name)
                   }}
@@ -447,7 +429,7 @@ const Games = () => {
                   type="text"
                   required
                   value={newGame.name}
-                  onChange={(e) => setNewGame({ ...newGame, name: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame({ ...newGame, name: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="Es. Catan"
                 />
@@ -462,7 +444,7 @@ const Games = () => {
                     type="number"
                     min="1"
                     value={newGame.min_players}
-                    onChange={(e) => setNewGame({ ...newGame, min_players: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame({ ...newGame, min_players: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     placeholder="1"
                   />
@@ -476,7 +458,7 @@ const Games = () => {
                     type="number"
                     min="1"
                     value={newGame.max_players}
-                    onChange={(e) => setNewGame({ ...newGame, max_players: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame({ ...newGame, max_players: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     placeholder="4"
                   />
@@ -490,7 +472,7 @@ const Games = () => {
                 <input
                   type="url"
                   value={newGame.image_url}
-                  onChange={(e) => setNewGame({ ...newGame, image_url: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGame({ ...newGame, image_url: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="https://..."
                 />
