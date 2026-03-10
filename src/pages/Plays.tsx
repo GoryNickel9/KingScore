@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy } from 'lucide-react'
+import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy, Users } from 'lucide-react'
 import { Spinner } from '../components/Spinner'
+import { Pagination } from '../components/Pagination'
 
 interface DbPlayer {
   id: string
@@ -33,6 +34,8 @@ interface DbPlay {
   duration_minutes?: number | null
   source?: string
   notes?: string | null
+  is_cooperative?: boolean
+  team_won?: boolean | null
   games?: DbGame
   play_scores?: DbPlayScore[]
 }
@@ -51,6 +54,7 @@ const Plays = () => {
   const [plays, setPlays] = useState<DbPlay[]>([])
   const [filteredPlays, setFilteredPlays] = useState<DbPlay[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+  const [currentPage, setCurrentPage] = useState<number>(1)
   const [filters, setFilters] = useState<Filters>({
     search: '',
     game: '',
@@ -60,6 +64,8 @@ const Plays = () => {
     year: ''
   })
 
+  const PLAYS_PER_PAGE = 20
+
   useEffect(() => {
     fetchPlays()
   }, [user])
@@ -67,6 +73,11 @@ const Plays = () => {
   useEffect(() => {
     applyFilters()
   }, [plays, filters])
+
+  // Reset pagina quando cambiano i filtri
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters])
 
   const fetchPlays = async (): Promise<void> => {
     try {
@@ -136,10 +147,23 @@ const Plays = () => {
     return years.sort((a, b) => b - a)
   }
 
-  const getWinner = (play: DbPlay): string | undefined => {
-    const winner = play.play_scores?.find(s => s.winner)
-    return winner?.players?.alias || winner?.players?.name
+  const getWinners = (play: DbPlay): string => {
+    const winners = play.play_scores?.filter(s => s.winner) || []
+    if (winners.length === 0) return '—'
+    const names = winners.map(s => s.players?.alias || s.players?.name || 'Unknown')
+    if (names.length === 1) return names[0]
+    if (names.length === 2) return `${names[0]} e ${names[1]}`
+    return `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`
   }
+
+  // Calcola paginazione
+  const totalPages = Math.ceil(filteredPlays.length / PLAYS_PER_PAGE)
+  const paginatedPlays = filteredPlays.slice(
+    (currentPage - 1) * PLAYS_PER_PAGE,
+    currentPage * PLAYS_PER_PAGE
+  )
+  const startItem = filteredPlays.length === 0 ? 0 : (currentPage - 1) * PLAYS_PER_PAGE + 1
+  const endItem = Math.min(currentPage * PLAYS_PER_PAGE, filteredPlays.length)
 
   if (loading) {
     return <Spinner className="h-64" />
@@ -260,7 +284,12 @@ const Plays = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredPlays.map((play) => (
+          {/* Pagination info */}
+          <div className="text-sm text-slate-400 text-center">
+            Pagina {currentPage} di {totalPages} — Mostrando {startItem}-{endItem} di {filteredPlays.length}
+          </div>
+
+          {paginatedPlays.map((play) => (
             <Link
               key={play.id}
               to={`/plays/${play.id}`}
@@ -332,20 +361,42 @@ const Plays = () => {
                 </div>
 
                 {/* Winner Badge */}
-                {getWinner(play) && (
-                  <div className="flex-shrink-0">
-                    <div className="bg-emerald-500/20 px-4 py-2 rounded-lg">
-                      <div className="flex items-center text-emerald-500">
-                        <Trophy className="w-4 h-4 mr-1" />
-                        <span className="text-sm font-medium">{getWinner(play)}</span>
+                {(() => {
+                  const winners = play.play_scores?.filter(s => s.winner) || []
+                  if (winners.length === 0) return null
+                  
+                  if (winners.length === 1) {
+                    return (
+                      <div className="flex-shrink-0">
+                        <div className="bg-emerald-500/20 px-4 py-2 rounded-lg">
+                          <div className="flex items-center text-emerald-500">
+                            <Trophy className="w-4 h-4 mr-1" />
+                            <span className="text-sm font-medium">{getWinners(play)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+                  
+                  return (
+                    <div className="flex-shrink-0">
+                      <div className="bg-amber-500/20 px-4 py-2 rounded-lg">
+                        <div className="flex flex-col">
+                          <span className="inline-flex items-center text-amber-400 text-xs font-semibold mb-1">
+                            <Trophy className="w-3 h-3 mr-1" />
+                            Pareggio
+                          </span>
+                          <span className="text-sm font-medium text-amber-400">                            {getWinners(play)}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
               </div>
 
               {/* Source Badge */}
-              <div className="mt-4">
+              <div className="mt-4 flex items-center space-x-2">
                 <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
                   play.source === 'online' ? 'bg-blue-500/20 text-blue-500' :
                   play.source === 'offline' ? 'bg-orange-500/20 text-orange-500' :
@@ -353,9 +404,36 @@ const Plays = () => {
                 }`}>
                   {play.source === 'online' ? 'Online' : play.source === 'offline' ? 'IRL' : play.source?.toUpperCase()}
                 </span>
+                
+                {play.is_cooperative && (
+                  <>
+                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-500">
+                      <Users className="w-3 h-3 mr-1" />
+                      Coop
+                    </span>
+                    {play.team_won === true && (
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-500">
+                        Team ha vinto
+                      </span>
+                    )}
+                    {play.team_won === false && (
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-500">
+                        Team ha perso
+                      </span>
+                    )}
+                  </>
+                )}
               </div>
             </Link>
           ))}
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="mt-6"
+          />
         </div>
       )}
     </div>

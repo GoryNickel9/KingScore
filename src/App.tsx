@@ -23,6 +23,7 @@ const Stats = lazy(() => import('./pages/Stats'))
 const ELO = lazy(() => import('./pages/ELO'))
 const Images = lazy(() => import('./pages/Images'))
 const Register = lazy(() => import('./pages/Register'))
+const Wrapped = lazy(() => import('./pages/Wrapped'))
 
 function App() {
   return (
@@ -98,6 +99,14 @@ function App() {
             element={
               <Layout>
                 <Images />
+              </Layout>
+            }
+          />
+          <Route
+            path="/wrapped"
+            element={
+              <Layout>
+                <Wrapped />
               </Layout>
             }
           />

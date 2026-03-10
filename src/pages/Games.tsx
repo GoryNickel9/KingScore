@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '../components/Spinner'
+import { Pagination } from '../components/Pagination'
 
 interface DbGame {
   id: string
@@ -33,6 +34,7 @@ const Games = () => {
   const [loading, setLoading] = useState<boolean>(true)
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('name')
+  const [currentPage, setCurrentPage] = useState<number>(1)
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
   const [newGame, setNewGame] = useState<NewGameForm>({
     name: '',
@@ -41,6 +43,8 @@ const Games = () => {
     image_url: ''
   })
 
+  const GAMES_PER_PAGE = 24
+
   useEffect(() => {
     fetchGames()
   }, [])
@@ -48,6 +52,11 @@ const Games = () => {
   useEffect(() => {
     applyFilters()
   }, [games, searchTerm, sortBy])
+
+  // Reset pagina quando cambiano ricerca o ordinamento
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, sortBy])
 
   const fetchGames = async (): Promise<void> => {
     try {
@@ -256,6 +265,15 @@ const Games = () => {
     }
   }
 
+  // Calcola paginazione
+  const totalPages = Math.ceil(filteredGames.length / GAMES_PER_PAGE)
+  const paginatedGames = filteredGames.slice(
+    (currentPage - 1) * GAMES_PER_PAGE,
+    currentPage * GAMES_PER_PAGE
+  )
+  const startItem = filteredGames.length === 0 ? 0 : (currentPage - 1) * GAMES_PER_PAGE + 1
+  const endItem = Math.min(currentPage * GAMES_PER_PAGE, filteredGames.length)
+
   if (loading) {
     return <Spinner className="h-64" />
   }
@@ -318,8 +336,14 @@ const Games = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredGames.map((game) => (
+        <>
+          {/* Pagination info */}
+          <div className="text-sm text-slate-400 text-center mb-4">
+            Pagina {currentPage} di {totalPages} — Mostrando {startItem}-{endItem} di {filteredGames.length}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {paginatedGames.map((game) => (
             <div
               key={game.id}
               className="bg-slate-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition group relative"
@@ -394,7 +418,16 @@ const Games = () => {
               </Link>
             </div>
           ))}
-        </div>
+          </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            className="mt-6"
+          />
+        </>
       )}
 
       {/* Modal per aggiungere nuovo gioco */}

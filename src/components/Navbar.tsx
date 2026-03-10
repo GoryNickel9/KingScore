@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown } from 'lucide-react'
+import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown, Sparkles } from 'lucide-react'
 import type { NavItem } from '../types'
 
 const publicNavItems: NavItem[] = [
@@ -9,6 +9,7 @@ const publicNavItems: NavItem[] = [
   { path: '/plays', icon: Calendar, label: 'Partite' },
   { path: '/stats', icon: BarChart3, label: 'Statistiche' },
   { path: '/elo', icon: Trophy, label: 'Rating ELO' },
+  { path: '/wrapped', icon: Sparkles, label: 'Wrapped' },
 ]
 
 const profileNavItems: NavItem[] = [

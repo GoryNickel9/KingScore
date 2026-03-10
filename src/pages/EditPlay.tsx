@@ -36,6 +36,8 @@ interface EditFormData {
   source: string
   notes: string
   players: EditPlayerRow[]
+  isCooperative: boolean
+  teamWon: boolean | null
 }
 
 const EditPlay = () => {
@@ -51,7 +53,9 @@ const EditPlay = () => {
     durationMinutes: '',
     source: 'offline',
     notes: '',
-    players: []
+    players: [],
+    isCooperative: false,
+    teamWon: null
   })
 
   const [games, setGames] = useState<DbGame[]>([])
@@ -92,11 +96,13 @@ const EditPlay = () => {
           durationMinutes: data.duration_minutes !== null && data.duration_minutes !== undefined ? String(data.duration_minutes) : '',
           source: data.source || 'offline',
           notes: data.notes || '',
+          isCooperative: data.is_cooperative || false,
+          teamWon: data.team_won ?? null,
           players: data.play_scores?.map((score: { id: string; player_id: string; players?: DbPlayer; score: number | null; winner: boolean; position: number | null }) => ({
             id: score.id,
             playerId: score.player_id,
             playerName: score.players?.alias || score.players?.name || '',
-            score: score.score !== null ? score.score : '',
+            score: score.score ?? '',
             winner: score.winner || false,
             position: score.position || null
           })) || []
@@ -211,7 +217,9 @@ const EditPlay = () => {
           location: formData.location || null,
           duration_minutes: formData.durationMinutes === '' ? null : Number.parseInt(formData.durationMinutes, 10),
           source: formData.source,
-          notes: formData.notes || null
+          notes: formData.notes || null,
+          is_cooperative: formData.isCooperative,
+          team_won: formData.isCooperative ? formData.teamWon : null
         })
         .eq('id', id)
         .eq('user_id', user!.id)
@@ -232,12 +240,26 @@ const EditPlay = () => {
         if (scoreValue === null || Number.isNaN(scoreValue)) {
           throw new Error(`Il punteggio per "${player.playerName}" non è valido`)
         }
+        
+        // Se cooperativo e teamWon è definito, sovrascrive il winner individuale
+        const winner = formData.isCooperative && formData.teamWon !== null
+          ? formData.teamWon
+          : player.winner
+        
+        // Calcola position in base alla modalità
+        let position
+        if (formData.isCooperative && formData.teamWon !== null) {
+          position = formData.teamWon ? 1 : 2
+        } else {
+          position = player.position || index + 1
+        }
+        
         return {
           play_id: id,
           player_id: player.playerId,
           score: scoreValue,
-          winner: player.winner,
-          position: player.position || index + 1
+          winner,
+          position
         }
       })
 
@@ -336,6 +358,24 @@ const EditPlay = () => {
               />
             </div>
           </div>
+
+          {/* Indicatore Vincitori */}
+          {!formData.isCooperative && formData.players.length > 0 && (() => {
+            const winnersCount = formData.players.filter(p => p.winner).length
+            if (winnersCount === 0) return null
+            if (winnersCount === 1) {
+              return (
+                <div className="mt-4 text-sm text-slate-300">
+                  1 vincitore selezionato
+                </div>
+              )
+            }
+            return (
+              <div className="mt-4 px-3 py-2 bg-amber-500/20 text-amber-400 text-sm rounded-lg inline-block">
+                {winnersCount} vincitori selezionati — Pareggio!
+              </div>
+            )
+          })()}
         </div>
 
         {/* Play Details */}
@@ -385,6 +425,72 @@ const EditPlay = () => {
               placeholder="Aggiungi note sulla partita..."
             />
           </div>
+        </div>
+
+        {/* Game Mode */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-bold text-white mb-4">Modalità di Gioco</h2>
+          
+          <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+            <div>
+              <p className="text-white font-medium">Partita Cooperativa</p>
+              <p className="text-sm text-slate-400">Tutti i giocatori vincono o perdono insieme</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, isCooperative: !prev.isCooperative, teamWon: null }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.isCooperative ? 'bg-emerald-500' : 'bg-slate-600'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                formData.isCooperative ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          {formData.isCooperative && (
+            <div className="mt-4 p-4 bg-slate-700 rounded-lg">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Il team ha vinto?
+              </label>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, teamWon: true }))}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    formData.teamWon === true
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                  }`}
+                >
+                  Sì
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, teamWon: false }))}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    formData.teamWon === false
+                      ? 'bg-red-500 text-white'
+                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                  }`}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, teamWon: null }))}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    formData.teamWon === null
+                      ? 'bg-slate-500 text-white'
+                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                  }`}
+                >
+                  Non specificato
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Players */}
@@ -446,20 +552,22 @@ const EditPlay = () => {
                       placeholder="Punteggio"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Vincitore</label>
-                    <button
-                      type="button"
-                      onClick={() => handlePlayerChange(index, 'winner', !player.winner)}
-                      className={`w-full px-3 py-2 rounded-lg font-medium transition ${
-                        player.winner
-                          ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                          : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                      }`}
-                    >
-                      {player.winner ? 'Vincitore' : 'Non vincitore'}
-                    </button>
-                  </div>
+                  {!formData.isCooperative && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Vincitore / Pareggio</label>
+                      <button
+                        type="button"
+                        onClick={() => handlePlayerChange(index, 'winner', !player.winner)}
+                        className={`w-full px-3 py-2 rounded-lg font-medium transition ${
+                          player.winner
+                            ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                            : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                        }`}
+                      >
+                        {player.winner ? 'Vincitore' : 'Non vincitore'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

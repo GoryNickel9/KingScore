@@ -6,6 +6,7 @@ import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { updateELOAfterGame } from '../utils/eloCalculator'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
+import { XMLParser } from 'fast-xml-parser'
 
 interface DbGame {
   id: string
@@ -40,6 +41,8 @@ interface AddPlayFormData {
   source: string
   notes: string
   players: string[]
+  isCooperative: boolean
+  teamWon: boolean | null
 }
 
 interface NewGameForm {
@@ -47,6 +50,13 @@ interface NewGameForm {
   minPlayers: string
   maxPlayers: string
   imageUrl: string
+}
+
+interface BGGResult {
+  id: number
+  name: string
+  thumbnail: string | null
+  yearPublished: number | null
 }
 
 const AddPlay = () => {
@@ -61,7 +71,9 @@ const AddPlay = () => {
     durationMinutes: '',
     source: 'offline',
     notes: '',
-    players: []
+    players: [],
+    isCooperative: false,
+    teamWon: null
   })
 
   const [playerScores, setPlayerScores] = useState<Record<string, PlayerScore>>({})
@@ -80,6 +92,9 @@ const AddPlay = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(false)
+  const [bggQuery, setBggQuery] = useState<string>('')
+  const [bggResults, setBggResults] = useState<BGGResult[]>([])
+  const [bggLoading, setBggLoading] = useState<boolean>(false)
 
   useEffect(() => {
     fetchGames()
@@ -151,6 +166,81 @@ const AddPlay = () => {
     setImageFile(null)
     setImagePreview(null)
     setNewGame(prev => ({ ...prev, imageUrl: '' }))
+  }
+
+  const searchBGG = async (query: string): Promise<void> => {
+    if (!query.trim()) return
+
+    setBggLoading(true)
+    try {
+      const parser = new XMLParser()
+      
+      // Step 1: Search for games
+      const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(query)}&type=boardgame`
+      const searchResponse = await fetch(searchUrl)
+      const searchXml = await searchResponse.text()
+      const searchResult = parser.parse(searchXml)
+
+      const items = searchResult?.items?.item
+      if (!items) {
+        setBggResults([])
+        toast.error('Nessun risultato trovato su BGG')
+        return
+      }
+
+      // Get first 5 results
+      const gameIds = (Array.isArray(items) ? items.slice(0, 5) : [items]).map(item => item.id)
+      
+      if (gameIds.length === 0) {
+        setBggResults([])
+        toast.error('Nessun risultato trovato su BGG')
+        return
+      }
+
+      // Step 2: Fetch details for all games
+      const detailsUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${gameIds.join(',')}`
+      const detailsResponse = await fetch(detailsUrl)
+      const detailsXml = await detailsResponse.text()
+      const detailsResult = parser.parse(detailsXml)
+
+      const detailItems = detailsResult?.items?.item
+      if (!detailItems) {
+        setBggResults([])
+        return
+      }
+
+      // Parse results
+      const games = (Array.isArray(detailItems) ? detailItems : [detailItems]).map(game => {
+        const name = Array.isArray(game.name) 
+          ? game.name.find((n: any) => n['@_type'] === 'primary')?.['@_value'] || game.name[0]?.['@_value']
+          : game.name?.['@_value'] || 'Unknown'
+        
+        return {
+          id: parseInt(game['@_id']),
+          name,
+          thumbnail: game.thumbnail || null,
+          yearPublished: game.yearpublished?.['@_value'] ? parseInt(game.yearpublished['@_value']) : null
+        }
+      })
+
+      setBggResults(games)
+    } catch (error) {
+      console.error('Error searching BGG:', error)
+      toast.error('Errore durante la ricerca su BGG')
+      setBggResults([])
+    } finally {
+      setBggLoading(false)
+    }
+  }
+
+  const handleBggSelect = (result: BGGResult): void => {
+    setNewGame(prev => ({
+      ...prev,
+      name: result.name,
+      imageUrl: result.thumbnail || ''
+    }))
+    setBggResults([])
+    setBggQuery('')
   }
 
   const handleAddGame = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
@@ -300,7 +390,9 @@ const AddPlay = () => {
           location: formData.location || null,
           duration_minutes: formData.durationMinutes ? parseInt(formData.durationMinutes) : null,
           source: formData.source,
-          notes: formData.notes || null
+          notes: formData.notes || null,
+          is_cooperative: formData.isCooperative,
+          team_won: formData.isCooperative ? formData.teamWon : null
         })
         .select()
         .single()
@@ -311,43 +403,57 @@ const AddPlay = () => {
       // Calcola le posizioni prima di salvare
       const playersWithScores = mappedPlayers.map(playerId => {
         const playerData = playerScores[playerId] || { score: undefined, winner: false }
+        
+        // Se è cooperativo e il risultato del team è definito, sovrascrive il winner individuale
+        const winner = formData.isCooperative && formData.teamWon !== null 
+          ? formData.teamWon 
+          : playerData.winner || false
+        
         return {
           playerId,
           score: playerData.score ? parseFloat(playerData.score) : null,
-          winner: playerData.winner || false
+          winner
         }
       })
 
       // Calcola le posizioni
-      // I vincitori hanno posizione 1
-      // Gli altri sono ordinati per punteggio decrescente (se disponibile) o per ordine di inserimento
-      const winners = playersWithScores.filter(p => p.winner)
-      const nonWinners = playersWithScores.filter(p => !p.winner)
-
-      // Ordina i non vincitori per punteggio decrescente (se disponibile)
-      nonWinners.sort((a, b) => {
-        if (a.score !== null && b.score !== null) {
-          return b.score - a.score
-        }
-        if (a.score !== null) return -1
-        if (b.score !== null) return 1
-        return 0
-      })
-
-      // Assegna le posizioni
-      let currentPosition = 1
-      const playersWithPositions = [...winners, ...nonWinners].map((player, index) => {
-        // Se è il primo non vincitore, inizia dalla posizione 2 (o più se ci sono più vincitori)
-        if (!player.winner && index === winners.length) {
-          currentPosition = winners.length + 1
-        } else if (!player.winner && index > winners.length) {
-          currentPosition++
-        }
-        return {
+      // Se cooperativo: position = 1 se vinto, 2 se perso
+      // Se competitivo: i vincitori hanno posizione 1, gli altri ordinati per punteggio
+      let playersWithPositions
+      if (formData.isCooperative && formData.teamWon !== null) {
+        playersWithPositions = playersWithScores.map(player => ({
           ...player,
-          position: player.winner ? 1 : currentPosition
-        }
-      })
+          position: formData.teamWon ? 1 : 2
+        }))
+      } else {
+        const winners = playersWithScores.filter(p => p.winner)
+        const nonWinners = playersWithScores.filter(p => !p.winner)
+
+        // Ordina i non vincitori per punteggio decrescente (se disponibile)
+        nonWinners.sort((a, b) => {
+          if (a.score !== null && b.score !== null) {
+            return b.score - a.score
+          }
+          if (a.score !== null) return -1
+          if (b.score !== null) return 1
+          return 0
+        })
+
+        // Assegna le posizioni
+        let currentPosition = 1
+        playersWithPositions = [...winners, ...nonWinners].map((player, index) => {
+          // Se è il primo non vincitore, inizia dalla posizione 2 (o più se ci sono più vincitori)
+          if (!player.winner && index === winners.length) {
+            currentPosition = winners.length + 1
+          } else if (!player.winner && index > winners.length) {
+            currentPosition++
+          }
+          return {
+            ...player,
+            position: player.winner ? 1 : currentPosition
+          }
+        })
+      }
 
       const playScoresData = playersWithPositions.map(player => ({
         play_id: play.id,
@@ -486,6 +592,72 @@ const AddPlay = () => {
             <div className="mt-4 p-4 bg-slate-700 rounded-lg">
               <h3 className="text-lg font-semibold text-white mb-4">Aggiungi Nuovo Gioco</h3>
               <div className="space-y-4">
+                {/* BGG Search Section */}
+                <div className="p-4 bg-slate-600 rounded-lg border border-slate-500">
+                  <label className="block text-sm text-slate-300 mb-2">Cerca su BoardGameGeek</label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      placeholder="Cerca su BoardGameGeek..."
+                      value={bggQuery}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBggQuery(e.target.value)}
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          searchBGG(bggQuery)
+                        }
+                      }}
+                      className="flex-1 px-4 py-2 bg-slate-700 border border-slate-500 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => searchBGG(bggQuery)}
+                      disabled={bggLoading || !bggQuery.trim()}
+                      className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    >
+                      {bggLoading ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4 mr-2" />
+                          Cerca
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* BGG Results */}
+                  {bggResults.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {bggResults.map((result) => (
+                        <div
+                          key={result.id}
+                          onClick={() => handleBggSelect(result)}
+                          className="flex items-center p-3 bg-slate-700 rounded-lg hover:bg-slate-600 cursor-pointer transition"
+                        >
+                          {result.thumbnail ? (
+                            <img
+                              src={result.thumbnail}
+                              alt={result.name}
+                              className="w-10 h-10 object-cover rounded"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 bg-slate-600 rounded flex items-center justify-center">
+                              <Gamepad2 className="w-5 h-5 text-slate-400" />
+                            </div>
+                          )}
+                          <div className="ml-3">
+                            <span className="text-white font-medium">{result.name}</span>
+                            {result.yearPublished && (
+                              <span className="text-slate-400 text-sm ml-2">({result.yearPublished})</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm text-slate-300 mb-1">Nome *</label>
                   <input
@@ -664,6 +836,74 @@ const AddPlay = () => {
           </div>
         </div>
 
+        {/* Game Mode */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+          <label className="block text-sm font-medium text-slate-300 mb-4">
+            Modalità di Gioco
+          </label>
+          
+          <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+            <div>
+              <p className="text-white font-medium">Partita Cooperativa</p>
+              <p className="text-sm text-slate-400">Tutti i giocatori vincono o perdono insieme</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, isCooperative: !prev.isCooperative, teamWon: null }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                formData.isCooperative ? 'bg-emerald-500' : 'bg-slate-600'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                formData.isCooperative ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          {formData.isCooperative && (
+            <div className="mt-4 p-4 bg-slate-700 rounded-lg">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Il team ha vinto?
+              </label>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, teamWon: true }))}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    formData.teamWon === true
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                  }`}
+                >
+                  Sì
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, teamWon: false }))}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    formData.teamWon === false
+                      ? 'bg-red-500 text-white'
+                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                  }`}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, teamWon: null }))}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    formData.teamWon === null
+                      ? 'bg-slate-500 text-white'
+                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                  }`}
+                >
+                  Non specificato
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Players */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -696,7 +936,9 @@ const AddPlay = () => {
                   </div>
 
                   {formData.players.includes(player.id) && (
-                    <div className="grid grid-cols-2 gap-4 ml-7">
+                    <div className={`gap-4 ml-7 ${
+                      formData.isCooperative ? 'grid grid-cols-1' : 'grid grid-cols-2'
+                    }`}>
                       <div>
                         <label className="block text-xs text-slate-400 mb-1">Punteggio</label>
                         <input
@@ -708,23 +950,43 @@ const AddPlay = () => {
                           className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                       </div>
-                      <div>
-                        <label className="flex items-center space-x-2 cursor-pointer mt-5">
-                          <input
-                            type="checkbox"
-                            checked={playerScores[player.id]?.winner || false}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerScoreChange(player.id, 'winner', e.target.checked)}
-                            className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
-                          />
-                          <span className="text-white text-sm">Vincitore</span>
-                        </label>
-                      </div>
+                      {!formData.isCooperative && (
+                        <div>
+                          <label className="flex items-center space-x-2 cursor-pointer mt-5">
+                            <input
+                              type="checkbox"
+                              checked={playerScores[player.id]?.winner || false}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerScoreChange(player.id, 'winner', e.target.checked)}
+                              className="w-4 h-4 text-emerald-500 focus:ring-emerald-500"
+                            />
+                            <span className="text-white text-sm">Vincitore / Pareggio</span>
+                          </label>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )
             })}
           </div>
+
+          {/* Indicatore Vincitori */}
+          {!formData.isCooperative && formData.players.length > 0 && (() => {
+            const winnersCount = formData.players.filter(playerId => playerScores[playerId]?.winner).length
+            if (winnersCount === 0) return null
+            if (winnersCount === 1) {
+              return (
+                <div className="mt-4 text-sm text-slate-300">
+                  1 vincitore selezionato
+                </div>
+              )
+            }
+            return (
+              <div className="mt-4 px-3 py-2 bg-amber-500/20 text-amber-400 text-sm rounded-lg inline-block">
+                {winnersCount} vincitori selezionati — Pareggio!
+              </div>
+            )
+          })()}
 
           <form onSubmit={handleAddQuickPlayer} className="mt-4 flex space-x-2">
             <input

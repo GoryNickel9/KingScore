@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 import { Spinner } from '../components/Spinner'
@@ -38,6 +38,8 @@ interface DbPlay {
   source?: string
   notes?: string | null
   user_id?: string
+  is_cooperative?: boolean
+  team_won?: boolean | null
   games?: DbGame
   play_scores?: DbPlayScore[]
 }
@@ -291,7 +293,7 @@ const PlayDetail = () => {
               )}
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 flex items-center space-x-2">
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                 play.source === 'online' ? 'bg-blue-500/20 text-blue-500' :
                 play.source === 'offline' ? 'bg-orange-500/20 text-orange-500' :
@@ -299,6 +301,26 @@ const PlayDetail = () => {
               }`}>
                 {play.source === 'online' ? 'Online' : play.source === 'offline' ? 'IRL' : play.source?.toUpperCase()}
               </span>
+              
+              {play.is_cooperative && (
+                <>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-500">
+                    <Users className="w-4 h-4 mr-1" />
+                    Cooperativa
+                  </span>
+                  {play.team_won === true && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-500/20 text-emerald-500">
+                      <Trophy className="w-4 h-4 mr-1" />
+                      Team ha vinto
+                    </span>
+                  )}
+                  {play.team_won === false && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-500/20 text-red-500">
+                      Team ha perso
+                    </span>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -339,51 +361,54 @@ const PlayDetail = () => {
                     }
                     return 0
                   })
-                  .map((score, index) => (
-                    <tr
-                      key={score.id}
-                      className={`border-b border-slate-700 ${
-                        score.winner ? 'bg-emerald-500/10' : ''
-                      }`}
-                    >
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                          index === 0 ? 'bg-yellow-500 text-white' :
-                          index === 1 ? 'bg-slate-400 text-white' :
-                          index === 2 ? 'bg-orange-600 text-white' :
-                          'bg-slate-700 text-slate-300'
-                        }`}>
-                          {index + 1}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center">
-                          <span className="text-white font-medium">
-                            {score.players?.alias || score.players?.name || 'Sconosciuto'}
+                  .map((score, index) => {
+                    const winnersCount = play.play_scores?.filter(s => s.winner).length || 0
+                    const isTie = winnersCount > 1
+                    return (
+                      <tr
+                        key={score.id}
+                        className={`border-b border-slate-700 ${
+                          score.winner ? 'bg-emerald-500/10' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                            index === 0 ? 'bg-yellow-500 text-white' :
+                            index === 1 ? 'bg-slate-400 text-white' :
+                            index === 2 ? 'bg-orange-600 text-white' :
+                            'bg-slate-700 text-slate-300'
+                          }`}>
+                            {index + 1}
                           </span>
-                          {score.players?.alias && score.players?.name && score.players.alias !== score.players.name && (
-                            <span className="ml-2 text-xs text-slate-400">
-                              ({score.players.name})
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center">
+                            <span className="text-white font-medium">
+                              {score.players?.alias || score.players?.name || 'Sconosciuto'}
                             </span>
-                          )}
-                          {score.players?.is_me && (
-                            <span className="ml-2 px-2 py-0.5 bg-emerald-500/20 text-emerald-500 text-xs rounded-full">
-                              Sei tu
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-white">
-                        {score.score !== null && score.score !== undefined ? score.score : '-'}
-                      </td>
-                      <td className="py-3 px-4">
-                        {score.winner && (
-                          <div className="flex items-center text-emerald-500">
-                            <Trophy className="w-4 h-4 mr-1" />
-                            <span className="text-sm font-medium">Vincitore</span>
+                            {score.players?.alias && score.players?.name && score.players.alias !== score.players.name && (
+                              <span className="ml-2 text-xs text-slate-400">
+                                ({score.players.name})
+                              </span>
+                            )}
+                            {score.players?.is_me && (
+                              <span className="ml-2 px-2 py-0.5 bg-emerald-500/20 text-emerald-500 text-xs rounded-full">
+                                Sei tu
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </td>
+                        </td>
+                        <td className="py-3 px-4 text-white">
+                          {score.score !== null && score.score !== undefined ? score.score : '-'}
+                        </td>
+                        <td className="py-3 px-4">
+                          {score.winner && (
+                            <div className={`flex items-center ${isTie ? 'text-amber-400' : 'text-emerald-500'}`}>
+                              <Trophy className="w-4 h-4 mr-1" />
+                              <span className="text-sm font-medium">{isTie ? 'Pareggio' : 'Vincitore'}</span>
+                            </div>
+                          )}
+                        </td>
                       <td className="py-3 px-4">
                         {loadingElo ? (
                           <span className="text-slate-400">Caricamento...</span>
@@ -441,7 +466,7 @@ const PlayDetail = () => {
                         })()}
                       </td>
                     </tr>
-                  ))}
+                  )})}
               </tbody>
             </table>
           </div>
