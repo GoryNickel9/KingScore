@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { invalidateELOHistory } from '../utils/eloCalculator'
 import { Save, ArrowLeft, Gamepad2, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -87,7 +88,7 @@ const EditPlay = () => {
           gameName: data.games?.name || '',
           playedAt: data.played_at ? data.played_at.split('T')[0] : new Date().toISOString().split('T')[0],
           location: data.location || '',
-          durationMinutes: data.duration_minutes || '',
+          durationMinutes: data.duration_minutes !== null && data.duration_minutes !== undefined ? String(data.duration_minutes) : '',
           source: data.source || 'offline',
           notes: data.notes || '',
           players: data.play_scores?.map((score: { id: string; player_id: string; players?: DbPlayer; score: number | null; winner: boolean; position: number | null }) => ({
@@ -188,54 +189,91 @@ const EditPlay = () => {
       return
     }
 
+    // Verifica che tutti i giocatori abbiano un playerId valido
+    const invalidPlayers = formData.players.filter(player => !player.playerId)
+    if (invalidPlayers.length > 0) {
+      toast.error('Seleziona un giocatore per ogni riga')
+      return
+    }
+
     try {
       setSaving(true)
 
-      // Aggiorna la partita
-      const { error: playError } = await supabase
+      // Aggiorna la partita — NON usare .single() con UPDATE...RETURNING quando ci sono
+      // più policy RLS SELECT attive: PostgREST riceve righe duplicate e risponde 406.
+      // Invece: .select() restituisce un array, controlliamo data[0].
+      const { data: updatedPlayData, error: playError } = await supabase
         .from('plays')
         .update({
           game_id: formData.gameId,
           played_at: formData.playedAt,
           location: formData.location || null,
-          duration_minutes: formData.durationMinutes ? parseInt(formData.durationMinutes as string) : null,
+          duration_minutes: formData.durationMinutes === '' ? null : Number.parseInt(formData.durationMinutes, 10),
           source: formData.source,
           notes: formData.notes || null
         })
         .eq('id', id)
         .eq('user_id', user!.id)
+        .select()
 
-      if (playError) throw playError
+      if (playError) {
+        throw new Error(`Errore aggiornamento partita: ${playError.message}`)
+      }
 
-      // Aggiorna i punteggi
+      const updatedPlay = updatedPlayData?.[0]
+      if (!updatedPlay) {
+        throw new Error('Partita non trovata o permesso negato: nessuna riga aggiornata')
+      }
+
+      // Valida gli score prima di modificare il DB per evitare data loss
+      const scoresToInsert = formData.players.map((player, index) => {
+        const scoreValue = player.score === '' ? null : Number.parseInt(String(player.score), 10)
+        if (scoreValue === null || Number.isNaN(scoreValue)) {
+          throw new Error(`Il punteggio per "${player.playerName}" non è valido`)
+        }
+        return {
+          play_id: id,
+          player_id: player.playerId,
+          score: scoreValue,
+          winner: player.winner,
+          position: player.position || index + 1
+        }
+      })
+
       // Prima elimina tutti i punteggi esistenti
       const { error: deleteError } = await supabase
         .from('play_scores')
         .delete()
         .eq('play_id', id)
 
-      if (deleteError) throw deleteError
+      if (deleteError) {
+        throw new Error(`Errore eliminazione punteggi: ${deleteError.message}`)
+      }
 
       // Poi inserisci i nuovi punteggi
-      const scoresToInsert = formData.players.map((player, index) => ({
-        play_id: id,
-        player_id: player.playerId,
-        score: player.score !== '' ? parseInt(player.score as string) : null,
-        winner: player.winner,
-        position: player.position || index + 1
-      }))
-
-      const { error: insertError } = await supabase
+      const { error: insertError, data: insertData } = await supabase
         .from('play_scores')
         .insert(scoresToInsert)
+        .select()
 
-      if (insertError) throw insertError
+      if (insertError) {
+        throw new Error(`Errore inserimento punteggi: ${insertError.message}`)
+      }
+
+      // Verifica che i punteggi siano stati inseriti correttamente
+      if (insertData?.length !== formData.players.length) {
+        throw new Error('Errore: non tutti i punteggi sono stati inseriti correttamente')
+      }
+
+      // Invalida la cache ELO: la partita modificata rende obsoleto lo storico
+      // calcolato in precedenza per questo gioco e per l'ELO Generale.
+      try { await invalidateELOHistory(supabase, id!) } catch { /* non bloccare il flusso */ }
 
       toast.success('Partita aggiornata con successo!')
       navigate(`/plays/${id}`)
     } catch (error) {
-      console.error('Error updating play:', error)
-      toast.error("Errore durante l'aggiornamento della partita")
+      const errorMessage = error instanceof Error ? error.message : "Errore sconosciuto durante l'aggiornamento della partita"
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }

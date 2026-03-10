@@ -84,6 +84,20 @@ interface PlayerGameRating {
   gamesPlayed: number
 }
 
+// Riga da persistere nella tabella elo_history (cache)
+interface ELOHistoryDBEntry {
+  play_id: string
+  game_id: string | null   // null per ELO Generale
+  player_id: string
+  player_name: string
+  rating: number
+  rating_change: number
+  date: string
+  is_general: boolean
+  games_played: number | null  // valorizzato solo per is_general = true
+  user_id: string | null       // valorizzato per ELO Generale, per filtrare per utente
+}
+
 // ─── Functions ────────────────────────────────────────────────────────────────
 
 /**
@@ -628,11 +642,57 @@ export async function recalculateAllELOForGame(supabase: SupabaseClient, gameId:
 }
 
 /**
+ * Salva in batch le entry della storia ELO nella tabella elo_history.
+ * Viene chiamata da getELOHistoryForGame e getGeneralELOHistory in caso di cache miss.
+ * Gli errori di chiave duplicata (es. chiamate concorrenti) vengono ignorati silenziosamente.
+ */
+export async function saveELOHistoryEntries(supabase: SupabaseClient, entries: ELOHistoryDBEntry[]): Promise<void> {
+  if (entries.length === 0) return
+  const BATCH_SIZE = 500
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+    const batch = entries.slice(i, i + BATCH_SIZE)
+    // upsert con ignoreDuplicates evita il 409 quando i dati esistono già
+    // (es. doppio rendering in React StrictMode o sessioni concorrenti)
+    const { error } = await supabase
+      .from('elo_history')
+      .upsert(batch, { ignoreDuplicates: true })
+    if (error) {
+      console.error('[saveELOHistoryEntries] Errore nel salvataggio della storia ELO:', error)
+    }
+  }
+}
+
+/**
  * Calcola lo storico degli ELO per un gioco specifico
  * Questa funzione simula il calcolo degli ELO nel tempo senza salvare nel database
  */
 export async function getELOHistoryForGame(supabase: SupabaseClient, gameId: string, userId: string | null = null): Promise<ELOHistoryEntry[]> {
   try {
+    // ── Controllo cache ───────────────────────────────────────────────────────
+    const { data: cached, error: cacheError } = await supabase
+      .from('elo_history')
+      .select('play_id, player_id, player_name, rating, rating_change, date')
+      .eq('game_id', gameId)
+      .eq('is_general', false)
+      .order('date', { ascending: true })
+      .limit(10000)
+
+    if (cacheError) {
+      console.warn('[getELOHistoryForGame] Cache read failed (RLS/policy issue?), recomputing:', cacheError.message)
+    }
+
+    if (cached && cached.length > 0) {
+      return cached.map(entry => ({
+        date: entry.date,
+        playId: entry.play_id,
+        playerId: entry.player_id,
+        playerName: entry.player_name,
+        rating: entry.rating,
+        ratingChange: entry.rating_change
+      }))
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Recupera tutte le partite per questo gioco ordinate cronologicamente
     let query = supabase
       .from('plays')
@@ -737,6 +797,24 @@ export async function getELOHistoryForGame(supabase: SupabaseClient, gameId: str
       });
     }
 
+    // ── Salva in cache (solo per utenti autenticati, il cui token autorizza INSERT) ──
+    if (userId && eloHistory.length > 0) {
+      const dbEntries: ELOHistoryDBEntry[] = eloHistory.map(entry => ({
+        play_id: entry.playId,
+        game_id: gameId,
+        player_id: entry.playerId,
+        player_name: entry.playerName,
+        rating: entry.rating,
+        rating_change: entry.ratingChange,
+        date: entry.date,
+        is_general: false,
+        games_played: null,
+        user_id: userId
+      }))
+      await saveELOHistoryEntries(supabase, dbEntries)
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return eloHistory;
   } catch (error) {
     console.error('Errore nel calcolo dello storico ELO:', error);
@@ -750,6 +828,34 @@ export async function getELOHistoryForGame(supabase: SupabaseClient, gameId: str
  */
 export async function getGeneralELOHistory(supabase: SupabaseClient, userId: string | null = null): Promise<GeneralELOHistoryEntry[]> {
   try {
+    // ── Controllo cache (solo per utenti autenticati) ─────────────────────────
+    if (userId) {
+      const { data: cached, error: cacheError } = await supabase
+        .from('elo_history')
+        .select('play_id, player_id, player_name, rating, rating_change, date, games_played')
+        .eq('is_general', true)
+        .eq('user_id', userId)
+        .order('date', { ascending: true })
+        .limit(10000)
+
+      if (cacheError) {
+        console.warn('[getGeneralELOHistory] Cache read failed (RLS/policy issue?), recomputing:', cacheError.message)
+      }
+
+      if (cached && cached.length > 0) {
+        return cached.map(entry => ({
+          date: entry.date,
+          playId: entry.play_id,
+          playerId: entry.player_id,
+          playerName: entry.player_name,
+          rating: entry.rating,
+          ratingChange: entry.rating_change,
+          gamesPlayed: entry.games_played ?? 0
+        }))
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Recupera tutte le partite ordinate cronologicamente
     let query = supabase
       .from('plays')
@@ -935,9 +1041,72 @@ export async function getGeneralELOHistory(supabase: SupabaseClient, userId: str
 
     console.log(`[getGeneralELOHistory] Riepilogo: ${plays.length} partite totali, ${processedPlays} processate, ${skippedPlays} saltate, ${generalELOHistory.length} punti nel grafico`);
 
+    // ── Salva in cache (solo per utenti autenticati) ──────────────────────────
+    if (userId && generalELOHistory.length > 0) {
+      const dbEntries: ELOHistoryDBEntry[] = generalELOHistory.map(entry => ({
+        play_id: entry.playId,
+        game_id: null,
+        player_id: entry.playerId,
+        player_name: entry.playerName,
+        rating: entry.rating,
+        rating_change: entry.ratingChange,
+        date: entry.date,
+        is_general: true,
+        games_played: entry.gamesPlayed,
+        user_id: userId
+      }))
+      await saveELOHistoryEntries(supabase, dbEntries)
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return generalELOHistory;
   } catch (error) {
     console.error('Errore nel calcolo dello storico ELO Generale:', error);
     throw error;
+  }
+}
+
+/**
+ * Invalida (elimina) la storia ELO cached per il gioco della partita modificata.
+ * Da chiamare in EditPlay subito dopo aver salvato le modifiche alla partita.
+ *
+ * Perché si elimina l'intero gioco e non solo la singola partita:
+ * l'ELO è cumulativo — modificare la partita N rende obsoleti i rating
+ * di tutte le partite N+1, N+2, … per lo stesso gioco.
+ * Il ricalcolo completo avverrà alla prossima apertura di Stats.
+ */
+export async function invalidateELOHistory(supabase: SupabaseClient, playId: string): Promise<void> {
+  try {
+    // Recupera il game_id della partita modificata
+    const { data: play, error: playError } = await supabase
+      .from('plays')
+      .select('game_id')
+      .eq('id', playId)
+      .maybeSingle()
+
+    if (playError) throw playError
+    if (!play) return  // partita non trovata: nulla da invalidare
+
+    // Elimina tutte le entry game-specific per questo gioco
+    // (RLS garantisce che vengano eliminati solo i record dell'utente corrente)
+    const { error: gameDeleteError } = await supabase
+      .from('elo_history')
+      .delete()
+      .eq('game_id', play.game_id)
+      .eq('is_general', false)
+
+    if (gameDeleteError) throw gameDeleteError
+
+    // Elimina tutte le entry di ELO Generale dell'utente corrente
+    // (qualsiasi modifica a una partita impatta l'intera storia ELO Generale)
+    const { error: generalDeleteError } = await supabase
+      .from('elo_history')
+      .delete()
+      .eq('is_general', true)
+
+    if (generalDeleteError) throw generalDeleteError
+  } catch (error) {
+    console.error('[invalidateELOHistory] Errore nella invalidazione della storia ELO:', error)
+    throw error
   }
 }

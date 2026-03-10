@@ -160,6 +160,8 @@ const Stats = () => {
       setLoading(true)
 
       // Fetch all plays with games and scores (public data)
+      // NOTE: Supabase default limit is 1000 rows — override to avoid silently
+      // truncating larger collections and returning incorrect play totals per game.
       const { data: playsData, error: playsError } = await supabase
         .from('plays')
         .select(`
@@ -171,6 +173,7 @@ const Stats = () => {
           )
         `)
         .order('played_at', { ascending: false })
+        .limit(10000)
 
       if (playsError) {
         console.error('[Stats] Error fetching plays:', playsError)
@@ -426,47 +429,8 @@ const Stats = () => {
     // Ordina per data
     const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // Raggruppa per data mantenendo l'ordine cronologico
-    const groupedByDate: Record<string, Record<string, number | string>> = {}
-    sorted.forEach(entry => {
-      const dateObj = new Date(entry.date)
-      const dateKey = dateObj.toISOString().split('T')[0]
-      if (!groupedByDate[dateKey]) {
-        groupedByDate[dateKey] = { dateKey }
-      }
-      groupedByDate[dateKey][entry.playerName] = entry.rating
-      uniquePlayers.add(entry.playerName)
-    })
-
-    const players = Array.from(uniquePlayers)
-    const dateEntries = Object.values(groupedByDate).sort((a, b) => (a.dateKey as string).localeCompare(b.dateKey as string))
-
-    // Forward-fill: propaga l'ultimo valore noto per ogni giocatore
-    const lastKnown: Record<string, number> = {}
-    const chartData: ChartPoint[] = dateEntries.map((entry, index) => {
-      const point: ChartPoint = { date: index + 1 }
-      players.forEach(player => {
-        if (entry[player] !== undefined) {
-          lastKnown[player] = entry[player] as number
-        }
-        point[player] = lastKnown[player] ?? null
-      })
-      return point
-    })
-
-    return { chartData, players }
-  }
-
-  // Prepara i dati per il grafico ELO Generale (senza raggruppamento per data)
-  const prepareGeneralELOChartData = (history: EloHistoryEntry[]): PreparedChartData => {
-    if (!history || history.length === 0) return { chartData: [], players: [] }
-
-    const uniquePlayers = new Set<string>()
-
-    // Ordina per data
-    const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-    // Raggruppa per play_id per mantenere ogni partita separata
+    // Raggruppa per play_id per mostrare un punto per ogni partita
+    // (evita di collassare più partite dello stesso giorno in un singolo punto)
     const groupedByPlay: Record<string, Record<string, number | string>> = {}
     sorted.forEach(entry => {
       const playId = entry.playId || entry.date
@@ -615,7 +579,7 @@ const Stats = () => {
           </div>
         ) : generalEloHistory && generalEloHistory.length > 0 ? (
           (() => {
-            const { chartData, players } = prepareGeneralELOChartData(generalEloHistory)
+            const { chartData, players } = prepareELOChartData(generalEloHistory)
             const playerColors = getPlayerColors(players)
 
             return (
