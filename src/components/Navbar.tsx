@@ -4,13 +4,30 @@ import { useAuth } from '../contexts/AuthContext'
 import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown } from 'lucide-react'
 import type { NavItem } from '../types'
 
+const publicNavItems: NavItem[] = [
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/plays', icon: Calendar, label: 'Partite' },
+  { path: '/stats', icon: BarChart3, label: 'Statistiche' },
+  { path: '/elo', icon: Trophy, label: 'Rating ELO' },
+]
+
+const profileNavItems: NavItem[] = [
+  { path: '/games', icon: Library, label: 'Giochi' },
+  { path: '/images', icon: ImageIcon, label: 'Immagini' },
+  { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },
+  { path: '/players', icon: Users, label: 'Giocatori' },
+  { path: '/import', icon: Download, label: 'Import' },
+]
+
+function isActive(pathname: string, path: string): boolean {
+  return pathname === path
+}
+
 const Navbar = () => {
   const { user, signOut } = useAuth()
   const location = useLocation()
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  const isActive = (path: string): boolean => location.pathname === path
 
   // Chiudi il dropdown quando si clicca fuori
   useEffect(() => {
@@ -22,21 +39,6 @@ const Navbar = () => {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  const publicNavItems: NavItem[] = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/plays', icon: Calendar, label: 'Partite' },
-    { path: '/stats', icon: BarChart3, label: 'Statistiche' },
-    { path: '/elo', icon: Trophy, label: 'Rating ELO' },
-  ]
-
-  const profileNavItems: NavItem[] = [
-    { path: '/games', icon: Library, label: 'Giochi' },
-    { path: '/images', icon: ImageIcon, label: 'Immagini' },
-    { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },
-    { path: '/players', icon: Users, label: 'Giocatori' },
-    { path: '/import', icon: Download, label: 'Import' },
-  ]
 
   return (
     <nav className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
@@ -57,7 +59,7 @@ const Navbar = () => {
                 key={item.path}
                 to={item.path}
                 className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                  isActive(item.path)
+                  isActive(location.pathname, item.path)
                     ? 'bg-emerald-500 text-white'
                     : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`}
@@ -98,7 +100,7 @@ const Navbar = () => {
                         to={item.path}
                         onClick={() => setIsDropdownOpen(false)}
                         className={`flex items-center space-x-3 px-4 py-2 text-sm font-medium transition ${
-                          isActive(item.path)
+                          isActive(location.pathname, item.path)
                             ? 'bg-emerald-500 text-white'
                             : 'text-slate-300 hover:bg-slate-600 hover:text-white'
                         }`}
@@ -142,7 +144,7 @@ const Navbar = () => {
                 key={item.path}
                 to={item.path}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
-                  isActive(item.path)
+                  isActive(location.pathname, item.path)
                     ? 'bg-emerald-500 text-white'
                     : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`}
@@ -156,7 +158,7 @@ const Navbar = () => {
                 key={item.path}
                 to={item.path}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
-                  isActive(item.path)
+                  isActive(location.pathname, item.path)
                     ? 'bg-emerald-500 text-white'
                     : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`}

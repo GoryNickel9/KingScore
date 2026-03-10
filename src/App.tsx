@@ -1,26 +1,28 @@
+import React, { Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { Toaster } from 'react-hot-toast'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
+import Spinner from './components/Spinner'
 
-// Pages
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Plays from './pages/Plays'
-import AddPlay from './pages/AddPlay'
-import EditPlay from './pages/EditPlay'
-import PlayDetail from './pages/PlayDetail'
-import Games from './pages/Games'
-import GameDetail from './pages/GameDetail'
-import Players from './pages/Players'
-import PlayerDetail from './pages/PlayerDetail'
-import Import from './pages/Import'
-import Stats from './pages/Stats'
-import ELO from './pages/ELO'
-import Images from './pages/Images'
-import Register from './pages/Register'
+// Pages (lazy loaded)
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Plays = lazy(() => import('./pages/Plays'))
+const AddPlay = lazy(() => import('./pages/AddPlay'))
+const EditPlay = lazy(() => import('./pages/EditPlay'))
+const PlayDetail = lazy(() => import('./pages/PlayDetail'))
+const Games = lazy(() => import('./pages/Games'))
+const GameDetail = lazy(() => import('./pages/GameDetail'))
+const Players = lazy(() => import('./pages/Players'))
+const PlayerDetail = lazy(() => import('./pages/PlayerDetail'))
+const Import = lazy(() => import('./pages/Import'))
+const Stats = lazy(() => import('./pages/Stats'))
+const ELO = lazy(() => import('./pages/ELO'))
+const Images = lazy(() => import('./pages/Images'))
+const Register = lazy(() => import('./pages/Register'))
 
 function App() {
   return (
@@ -28,6 +30,7 @@ function App() {
       <AuthProvider>
       <Router>
         <Toaster position="top-right" />
+        <Suspense fallback={<Spinner />}>
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
@@ -154,6 +157,7 @@ function App() {
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </Router>
       </AuthProvider>
     </ErrorBoundary>

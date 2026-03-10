@@ -17,4 +17,15 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'recharts': ['recharts'],
+          'xml-parser': ['fast-xml-parser'],
+          'supabase': ['@supabase/supabase-js'],
+        }
+      }
+    }
+  }
 })

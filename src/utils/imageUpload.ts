@@ -2,19 +2,25 @@ import { supabase } from '../lib/supabase'
 import type { UploadResult } from '../types'
 
 /**
- * Upload un'immagine del gioco su Supabase Storage
+ * Helper privato per l'upload di un'immagine su Supabase Storage
  */
-export const uploadGameImage = async (file: File, userId: string, _gameId: string | null = null): Promise<UploadResult> => {
+const uploadImage = async (
+  file: File,
+  userId: string,
+  bucket: string,
+  maxSizeMB: number,
+  pathPrefix: string = ''
+): Promise<UploadResult> => {
   try {
     // Valida il file
     if (!file) {
       throw new Error('Nessun file selezionato')
     }
 
-    // Controlla la dimensione del file (max 5MB)
-    const maxSize = 5 * 1024 * 1024 // 5MB
+    // Controlla la dimensione del file
+    const maxSize = maxSizeMB * 1024 * 1024
     if (file.size > maxSize) {
-      throw new Error('Il file è troppo grande. La dimensione massima è 5MB')
+      throw new Error(`Il file è troppo grande. La dimensione massima è ${maxSizeMB}MB`)
     }
 
     // Controlla il tipo MIME
@@ -24,13 +30,13 @@ export const uploadGameImage = async (file: File, userId: string, _gameId: strin
     }
 
     // Genera un nome file unico
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-    const filePath = `${userId}/${fileName}`
+    const fileExt = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : 'bin'
+    const fileName = `${crypto.randomUUID()}.${fileExt}`
+    const filePath = pathPrefix ? `${userId}/${pathPrefix}/${fileName}` : `${userId}/${fileName}`
 
     // Carica il file su Supabase Storage
     const { error } = await supabase.storage
-      .from('game-images')
+      .from(bucket)
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false
@@ -43,7 +49,7 @@ export const uploadGameImage = async (file: File, userId: string, _gameId: strin
 
     // Ottieni l'URL pubblico dell'immagine
     const { data: { publicUrl } } = supabase.storage
-      .from('game-images')
+      .from(bucket)
       .getPublicUrl(filePath)
 
     return {
@@ -57,12 +63,12 @@ export const uploadGameImage = async (file: File, userId: string, _gameId: strin
 }
 
 /**
- * Elimina un'immagine del gioco da Supabase Storage
+ * Helper privato per eliminare un'immagine da Supabase Storage
  */
-export const deleteGameImage = async (filePath: string): Promise<void> => {
+const deleteImage = async (filePath: string, bucket: string): Promise<void> => {
   try {
     const { error } = await supabase.storage
-      .from('game-images')
+      .from(bucket)
       .remove([filePath])
 
     if (error) {
@@ -76,103 +82,58 @@ export const deleteGameImage = async (filePath: string): Promise<void> => {
 }
 
 /**
- * Ottiene l'URL pubblico di un'immagine dal path
+ * Helper privato per ottenere l'URL pubblico di un'immagine
  */
-export const getGameImageUrl = (filePath: string): string | null => {
+const getImageUrl = (filePath: string, bucket: string): string | null => {
   if (!filePath) return null
   
   const { data: { publicUrl } } = supabase.storage
-    .from('game-images')
+    .from(bucket)
     .getPublicUrl(filePath)
   
   return publicUrl
+}
+
+/**
+ * Upload un'immagine del gioco su Supabase Storage
+ */
+export const uploadGameImage = async (file: File, userId: string, _gameId: string | null = null): Promise<UploadResult> => {
+  return uploadImage(file, userId, 'game-images', 5)
+}
+
+/**
+ * Elimina un'immagine del gioco da Supabase Storage
+ */
+export const deleteGameImage = async (filePath: string): Promise<void> => {
+  return deleteImage(filePath, 'game-images')
+}
+
+/**
+ * Ottiene l'URL pubblico di un'immagine dal path
+ */
+export const getGameImageUrl = (filePath: string): string | null => {
+  return getImageUrl(filePath, 'game-images')
 }
 
 /**
  * Upload un'immagine del profilo del giocatore su Supabase Storage
  */
 export const uploadPlayerImage = async (file: File, userId: string, _playerId: string | null = null): Promise<UploadResult> => {
-  try {
-    // Valida il file
-    if (!file) {
-      throw new Error('Nessun file selezionato')
-    }
-
-    // Controlla la dimensione del file (max 2MB per avatar)
-    const maxSize = 2 * 1024 * 1024 // 2MB
-    if (file.size > maxSize) {
-      throw new Error('Il file è troppo grande. La dimensione massima è 2MB')
-    }
-
-    // Controlla il tipo MIME
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
-    if (!allowedTypes.includes(file.type)) {
-      throw new Error('Tipo di file non supportato. Usa: JPG, PNG, WebP o GIF')
-    }
-
-    // Genera un nome file unico
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-    const filePath = `${userId}/avatars/${fileName}`
-
-    // Carica il file su Supabase Storage
-    const { error } = await supabase.storage
-      .from('player-images')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      })
-
-    if (error) {
-      console.error('Errore durante l\'upload:', error)
-      throw error
-    }
-
-    // Ottieni l'URL pubblico dell'immagine
-    const { data: { publicUrl } } = supabase.storage
-      .from('player-images')
-      .getPublicUrl(filePath)
-
-    return {
-      publicUrl,
-      path: filePath
-    }
-  } catch (error) {
-    console.error('Errore durante l\'upload dell\'immagine del profilo:', error)
-    throw error
-  }
+  return uploadImage(file, userId, 'player-images', 2, 'avatars')
 }
 
 /**
  * Elimina un'immagine del profilo del giocatore da Supabase Storage
  */
 export const deletePlayerImage = async (filePath: string): Promise<void> => {
-  try {
-    const { error } = await supabase.storage
-      .from('player-images')
-      .remove([filePath])
-
-    if (error) {
-      console.error('Errore durante l\'eliminazione:', error)
-      throw error
-    }
-  } catch (error) {
-    console.error('Errore durante l\'eliminazione dell\'immagine del profilo:', error)
-    throw error
-  }
+  return deleteImage(filePath, 'player-images')
 }
 
 /**
  * Ottiene l'URL pubblico di un'immagine del profilo dal path
  */
 export const getPlayerImageUrl = (filePath: string): string | null => {
-  if (!filePath) return null
-  
-  const { data: { publicUrl } } = supabase.storage
-    .from('player-images')
-    .getPublicUrl(filePath)
-  
-  return publicUrl
+  return getImageUrl(filePath, 'player-images')
 }
 
 /**

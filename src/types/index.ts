@@ -134,7 +134,3 @@ export interface NavItem {
   icon: ComponentType<{ className?: string }>
   label: string
 }
-
-// ─── Utilità ─────────────────────────────────────────────────────────────────
-export type Nullable<T> = T | null
-export type Optional<T> = T | undefined

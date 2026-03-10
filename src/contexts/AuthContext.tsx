@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -90,8 +90,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }
 
+  const value = useMemo(
+    () => ({ user, loading, signUp, signIn, signOut }),
+    [user, loading, signUp, signIn, signOut]
+  )
+
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )
