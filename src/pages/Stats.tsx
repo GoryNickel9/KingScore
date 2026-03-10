@@ -14,6 +14,7 @@ interface DbPlayer {
   name: string
   alias?: string | null
   avatar_url?: string | null
+  color?: string | null
 }
 
 interface DbGame {
@@ -127,6 +128,7 @@ const Stats = () => {
   const [loadingEloHistory, setLoadingEloHistory] = useState<Record<string, boolean>>({})
   const [generalEloHistory, setGeneralEloHistory] = useState<EloHistoryEntry[]>([])
   const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState<boolean>(false)
+  const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetchStats()
@@ -378,6 +380,19 @@ const Stats = () => {
         gameOfTheMonthTrend: trend,
         allGamesStats: gamesWithStats
       })
+
+      // Build player display-name → color map from fetched play data
+      const colorMap: Record<string, string> = {}
+      plays.forEach(play => {
+        play.play_scores?.forEach(score => {
+          const player = score.players
+          if (player?.color) {
+            const displayName = player.alias || player.name
+            colorMap[displayName] = player.color
+          }
+        })
+      })
+      setPlayerColorMap(colorMap)
     } catch (error) {
       console.error('[Stats] Error fetching stats:', error)
     } finally {
@@ -476,8 +491,14 @@ const Stats = () => {
     ]
 
     const playerColors: Record<string, string> = {}
-    players.forEach((player, index) => {
-      playerColors[player] = colors[index % colors.length]
+    let fallbackIndex = 0
+    players.forEach((player) => {
+      if (playerColorMap[player]) {
+        playerColors[player] = playerColorMap[player]
+      } else {
+        playerColors[player] = colors[fallbackIndex % colors.length]
+        fallbackIndex++
+      }
     })
 
     return playerColors

@@ -38,6 +38,7 @@ interface DbPlayer {
   name: string
   alias?: string | null
   avatar_url?: string | null
+  color?: string | null
   is_me?: boolean
 }
 
@@ -230,6 +231,11 @@ const PlayerDetail = () => {
     )
   }
 
+  const avatarClass = player.color
+    ? 'w-16 h-16 rounded-full flex items-center justify-center'
+    : `w-16 h-16 rounded-full flex items-center justify-center ${getAvatarColor(player.alias || player.name)}`
+  const avatarStyle = player.color ? { backgroundColor: player.color } : undefined
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -241,7 +247,10 @@ const PlayerDetail = () => {
           <ArrowLeft className="w-5 h-5 text-slate-400" />
         </Link>
         <div className="flex items-center space-x-4">
-          <div className={`w-16 h-16 rounded-full ${getAvatarColor(player.alias || player.name)} flex items-center justify-center`}>
+          <div
+            className={avatarClass}
+            style={avatarStyle}
+          >
             <span className="text-white text-xl font-bold">{getInitials(player.alias || player.name)}</span>
           </div>
           <div>

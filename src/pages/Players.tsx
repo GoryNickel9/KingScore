@@ -11,6 +11,7 @@ interface DbPlayer {
   name: string
   alias?: string | null
   avatar_url?: string | null
+  color?: string | null
   is_me?: boolean
   user_id?: string
 }
@@ -24,6 +25,7 @@ interface PlayerFormData {
   name: string
   alias: string
   avatar_url: string
+  color: string
 }
 
 const Players = () => {
@@ -35,7 +37,7 @@ const Players = () => {
   const [showEditModal, setShowEditModal] = useState<boolean>(false)
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
   const [selectedPlayer, setSelectedPlayer] = useState<DbPlayer | null>(null)
-  const [formData, setFormData] = useState<PlayerFormData>({ name: '', alias: '', avatar_url: '' })
+  const [formData, setFormData] = useState<PlayerFormData>({ name: '', alias: '', avatar_url: '', color: '' })
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false)
@@ -119,6 +121,7 @@ const Players = () => {
           name: formData.name.trim(),
           alias: formData.alias.trim() || null,
           avatar_url: avatarUrl,
+          color: formData.color || null,
           is_me: false
         })
 
@@ -126,7 +129,7 @@ const Players = () => {
 
       toast.success('Giocatore aggiunto con successo!')
       setShowAddModal(false)
-      setFormData({ name: '', alias: '', avatar_url: '' })
+      setFormData({ name: '', alias: '', avatar_url: '', color: '' })
       setAvatarFile(null)
       setAvatarPreview(null)
       fetchPlayers()
@@ -168,7 +171,8 @@ const Players = () => {
         .update({
           name: formData.name.trim(),
           alias: formData.alias.trim() || null,
-          avatar_url: avatarUrl
+          avatar_url: avatarUrl,
+          color: formData.color || null
         })
         .eq('id', selectedPlayer!.id)
 
@@ -177,7 +181,7 @@ const Players = () => {
       toast.success('Giocatore aggiornato con successo!')
       setShowEditModal(false)
       setSelectedPlayer(null)
-      setFormData({ name: '', alias: '', avatar_url: '' })
+      setFormData({ name: '', alias: '', avatar_url: '', color: '' })
       setAvatarFile(null)
       setAvatarPreview(null)
       fetchPlayers()
@@ -342,7 +346,10 @@ const Players = () => {
                       className="w-16 h-16 rounded-full object-cover flex-shrink-0"
                     />
                   ) : (
-                    <div className={`w-16 h-16 rounded-full ${getAvatarColor(player.name)} flex items-center justify-center flex-shrink-0`}>
+                    <div
+                      className={`w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 ${player.color ? '' : getAvatarColor(player.name)}`}
+                      style={player.color ? { backgroundColor: player.color } : {}}
+                    >
                       <span className="text-white text-xl font-bold">{getInitials(player.name)}</span>
                     </div>
                   )}
@@ -367,7 +374,7 @@ const Players = () => {
                       <button
                         onClick={() => {
                           setSelectedPlayer(player)
-                          setFormData({ name: player.name, alias: player.alias || '', avatar_url: player.avatar_url || '' })
+                          setFormData({ name: player.name, alias: player.alias || '', avatar_url: player.avatar_url || '', color: player.color || '' })
                           setAvatarPreview(player.avatar_url ? getPlayerImageUrl(player.avatar_url) : null)
                           setShowEditModal(true)
                         }}
@@ -454,6 +461,27 @@ const Players = () => {
                 />
               </div>
               <div className="mb-4">
+                <label className="block text-sm text-slate-300 mb-2">Colore giocatore (opzionale)</label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={formData.color || '#10b981'}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, color: e.target.value })}
+                    className="w-10 h-10 rounded cursor-pointer bg-transparent border-0"
+                  />
+                  <span className="text-sm text-slate-400">Usato nei grafici per identificare il giocatore</span>
+                  {formData.color && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, color: '' })}
+                      className="text-xs text-slate-500 hover:text-slate-300 underline"
+                    >
+                      Rimuovi
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="mb-4">
                 <label className="block text-sm text-slate-300 mb-2">Immagine del profilo (opzionale)</label>
                 <div className="flex items-center space-x-4">
                   {avatarPreview ? (
@@ -500,7 +528,7 @@ const Players = () => {
                   type="button"
                   onClick={() => {
                     setShowAddModal(false)
-                    setFormData({ name: '', alias: '', avatar_url: '' })
+                    setFormData({ name: '', alias: '', avatar_url: '', color: '' })
                     setAvatarFile(null)
                     setAvatarPreview(null)
                   }}
@@ -545,6 +573,27 @@ const Players = () => {
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="Nickname o alias"
                 />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm text-slate-300 mb-2">Colore giocatore (opzionale)</label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={formData.color || '#10b981'}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, color: e.target.value })}
+                    className="w-10 h-10 rounded cursor-pointer bg-transparent border-0"
+                  />
+                  <span className="text-sm text-slate-400">Usato nei grafici per identificare il giocatore</span>
+                  {formData.color && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, color: '' })}
+                      className="text-xs text-slate-500 hover:text-slate-300 underline"
+                    >
+                      Rimuovi
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="mb-4">
                 <label className="block text-sm text-slate-300 mb-2">Immagine del profilo (opzionale)</label>
@@ -594,7 +643,7 @@ const Players = () => {
                   onClick={() => {
                     setShowEditModal(false)
                     setSelectedPlayer(null)
-                    setFormData({ name: '', alias: '', avatar_url: '' })
+                    setFormData({ name: '', alias: '', avatar_url: '', color: '' })
                     setAvatarFile(null)
                     setAvatarPreview(null)
                   }}

@@ -23,6 +23,7 @@ export interface Player {
   name: string
   alias?: string | null
   avatar_url?: string | null
+  color?: string | null
   created_at: string
 }
 
