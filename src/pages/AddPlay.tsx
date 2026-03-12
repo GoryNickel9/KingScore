@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { updateELOAfterGame } from '../utils/eloCalculator'
+import { updateELOAfterGame, invalidateELOHistory } from '../utils/eloCalculator'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
 
@@ -491,6 +491,8 @@ const AddPlay = () => {
 
           // Aggiorna gli ELO (incluso l'ELO Generale)
           await updateELOAfterGame(supabase, play.game_id, playersData, user!.id)
+          // Invalida la cache ELO: la nuova partita rende obsoleto lo storico
+          try { await invalidateELOHistory(supabase, play.id) } catch { /* non bloccare il flusso */ }
         }
       } catch (eloError) {
         // Non bloccare il salvataggio se l'aggiornamento ELO fallisce
