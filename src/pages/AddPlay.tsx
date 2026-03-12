@@ -271,6 +271,7 @@ const AddPlay = () => {
       const { data, error } = await supabase
         .from('games')
         .insert({
+          user_id: user!.id,
           name: newGame.name,
           min_players: newGame.minPlayers ? parseInt(newGame.minPlayers) : null,
           max_players: newGame.maxPlayers ? parseInt(newGame.maxPlayers) : null,
@@ -346,6 +347,11 @@ const AddPlay = () => {
     e.preventDefault()
     if (!formData.gameId || formData.players.length === 0) {
       toast.error('Seleziona un gioco e almeno un giocatore')
+      return
+    }
+
+    if (!formData.playedAt) {
+      toast.error('Inserisci la data della partita')
       return
     }
 
@@ -458,7 +464,7 @@ const AddPlay = () => {
       const playScoresData = playersWithPositions.map(player => ({
         play_id: play.id,
         player_id: player.playerId,
-        score: player.score,
+        score: player.score ?? null,
         winner: player.winner,
         position: player.position
       }))
@@ -495,7 +501,8 @@ const AddPlay = () => {
       navigate('/plays')
     } catch (error) {
       toast.error('Errore durante il salvataggio della partita')
-      console.error('Error saving play:', error)
+      const pgErr = error as { message?: string; code?: string; details?: string; hint?: string }
+      console.error('Error saving play:', pgErr.message, '| code:', pgErr.code, '| details:', pgErr.details, '| hint:', pgErr.hint)
     } finally {
       setLoading(false)
     }
