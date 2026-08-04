@@ -20,10 +20,12 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'recharts': ['recharts'],
-          'xml-parser': ['fast-xml-parser'],
-          'supabase': ['@supabase/supabase-js'],
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('recharts')) return 'recharts'
+            if (id.includes('fast-xml-parser')) return 'xml-parser'
+            if (id.includes('@supabase/supabase-js')) return 'supabase'
+          }
         }
       }
     }

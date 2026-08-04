@@ -12,13 +12,13 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
     "dotenv": "^17.3.1",
-    "fast-xml-parser": "^5.4.2",
+    "fast-xml-parser": "^5.10.1",
     "lucide-react": "^0.576.0",
     "react": "^19.2.0",
     "react-activity-calendar": "^3.1.1",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
-    "react-router-dom": "^7.13.1",
+    "react-router-dom": "^7.18.2",
     "recharts": "^3.7.0"
   },
   "devDependencies": {
@@ -28,15 +28,18 @@
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
-    "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react": "^6.0.5",
     "autoprefixer": "^10.4.27",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.25",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
