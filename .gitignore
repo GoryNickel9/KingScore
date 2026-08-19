@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Bundle temporaneo del golden test ELO (npm run compare:elo)
+scripts/.compare-elo.mjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

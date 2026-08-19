@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Trophy, Award, Gamepad2, Star, RefreshCw } from 'lucide-react'
-import { getAllGeneralELO, recalculateAllELOForGame, recalculateAllGeneralELO } from '../utils/eloCalculator'
+import { getAllGeneralELO, recalculateAllELO } from '../utils/eloCalculator'
 import toast from 'react-hot-toast'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
@@ -173,20 +173,10 @@ const ELO = () => {
     try {
       setRecalculatingAll(true)
 
-      // Ricalcola tutti gli ELO per tutti i giochi
-      const { data: gamesData } = await supabase
-        .from('plays')
-        .select('game_id')
-        .not('game_id', 'is', null)
-
-      const uniqueGameIds = [...new Set((gamesData as { game_id: string }[])?.map(g => g.game_id) || [])]
-
-      for (const gameId of uniqueGameIds) {
-        await recalculateAllELOForGame(supabase, gameId, userId)
-      }
-
-      // Ricalcola tutti gli ELO Generali
-      await recalculateAllGeneralELO(supabase, userId)
+      // Ricalcolo completo con pipeline bulk: unica lettura → simulazione in
+      // memoria → scritture massive (~6-10 richieste totali)
+      const summary = await recalculateAllELO(supabase, userId)
+      console.log('[ELO] Ricalcolo completato:', summary)
 
       // Ricarica i dati
       await fetchGeneralRatings()
