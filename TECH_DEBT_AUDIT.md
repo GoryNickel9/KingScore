@@ -52,6 +52,7 @@ Non tutto è debito. Il progetto ha scelte architetturali corrette che vanno dif
 | TD-012 | Contratti di ritorno mentitori: `getGeneralELO/updateGeneralELO` dichiarano camelCase ma restituiscono righe snake_case | Type safety | Bassa (6) | `src/utils/eloCalculator.ts:290,312,331` | S | Basso |
 | TD-013 | Gestione errori eterogenea: `(error as Error).message` ripetuto 20+ volte senza helper | Manutenibilità | Bassa (5) | `AuthContext.tsx:59-89`, `Import.tsx:447-448,578-589` | S | Basso |
 | TD-007 | `psw.txt` nella root del progetto (non tracciato da git) | Sicurezza | Nota (2) | `psw.txt` (30 byte) | S | Basso |
+| TD-026 | **Nuovo (emerso nella Fase 2):** 5 pagine (AddPlay, Games, EditPlay, GameDetail, Images) elencano i giochi di TUTTI gli utenti (select senza filtro `user_id` su tabella a lettura pubblica). Stessa famiglia di TD-003/TD-006: da decidere insieme alla politica di visibilità | Sicurezza / Prodotto | Da valutare (dipende da TD-006) | `AddPlay.tsx:95`, `Games.tsx:67`, `EditPlay.tsx:113`, `GameDetail.tsx:45`, `Images.tsx:28` | S | Basso |
 
 ---
 
@@ -334,6 +335,16 @@ exhaustive-deps, no-explicit-any, react-refresh), `npm run typecheck` pulito,
 (progetto ScoreKing `rixivmeipbizoxyvrvaf`), `migration repair` di tutte le
 18 versioni, deploy dell'Edge Function. Rimanuto opzionale: `supabase db
 pull` per catturare drift schema vs migrazioni (richiede Docker attivo).
+
+### Fase 2 — Medio termine — 🔄 in corso
+
+| Item | Stato | Note |
+|------|-------|------|
+| TD-010/011/012 tipi generati e unificati | ✅ (2026-08-23) | `src/types/db.ts` generato dal DB reale (`supabase gen types --linked`); client tipizzato `createClient<Database>`; `src/types/rows.ts` modulo unico dei tipi Row/join; 28 interfacce `Db*` locali rimosse (restano solo 2 view model: `DbGameWithStats`, `DbEloGame`); asserzioni `as` da ~40 a 8 (tutte legittime); `types/index.ts` ripulito dei tipi dominio divergenti (restano solo Auth/Nav/Upload). Contratti `getGeneralELO`/`getAllGeneralELO` raddrizzati sui tipi reali (TD-012). Bonus emersi dal tipo stretto: nullabilità reale gestita (`winner`, `game_id`, `player_id`, `rating.losses` nullable nel DB), guard `played_at` mancante nell'import, fix aggregazione Dashboard con `game_id` nullo. |
+| TD-006 decisione RLS | ⏳ | Richiede decisione di prodotto (vedi anche TD-026). |
+| TD-018 import bulk | ⏳ | Prossimo. |
+| TD-022 estrazione assignPositions | ⏳ | Prossimo. |
+| TD-004/TD-002 finale RPC transazionali | ⏳ | |
 
 ---
 
