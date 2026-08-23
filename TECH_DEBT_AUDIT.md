@@ -300,11 +300,17 @@ I lookup di `plays` (riga 498) e `players` (riga 530) filtrano correttamente per
 
 ## Stato implementazione
 
-### Fase 0 — Quick win
+### Fase 0 — Quick win — ✅ completata il 2026-08-23
 
-**Non ancora eseguita** (vedi roadmap sopra). Nota: la Fase 1 è stata eseguita
-prima della Fase 0 su richiesta esplicita; l'item 2 della Fase 1 (retry batch)
-ne beneficia comunque a prescindere.
+| Item | Stato | Note |
+|------|-------|------|
+| TD-001 ELO a caldo da rating 1000 | ✅ | AddPlay e Import usano ora `performFullRecalc` (rating correnti, cache elo_history rigenerata). Import: un solo ricalcolo a fine import invece che per partita. Rimosso `updateELOAfterGame` (e con esso `updateGeneralELO`, `calculateGeneralELO`, `getELOForGame`, `getELOForPlayer`, tutti orfani). Validare in UI: rating in /elo corretti subito dopo l'aggiunta. |
+| TD-003 lookup giochi senza user_id | ✅ | `.eq('user_id', user.id)` sulla select games in Import.tsx. |
+| TD-017 limite query mensile Dashboard | ✅ | `.limit(10000)` con commento. |
+| TD-005 cache ELO non invalidata | ✅ | Superato strutturalmente: import e delete passano da `performFullRecalc`, che rigenera elo_history (l'invalidazione puntuale non serve più). |
+| TD-023 dead code | ✅ | Eliminati `diagnosePlays.ts`, parametri morti `_gameId`/`_playerId`, export inutilizzati `deleteGameImage`/`getGameImageUrl` e le 5 funzioni orfane di eloCalculator. |
+| TD-024 env non validate | ✅ | `lib/supabase.ts`: throw esplicito con messaggio actionable se le env mancano. |
+| TD-020 utenti distinti nel job notturno | ✅ | Migrazione `20260823184217_create_play_user_ids_rpc.sql`: RPC `get_play_user_ids()` (SECURITY DEFINER, REVOKE a anon/authenticated, GRANT a service_role — verificato: anon riceve 42501), applicata via `db push`. Edge Function aggiornata e ridistribuita. |
 
 ### Fase 1 — Fondamenta — ✅ completata il 2026-08-23
 
