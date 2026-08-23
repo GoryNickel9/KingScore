@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { performFullRecalc } from '../utils/elo/recalc'
+import { assignPositions } from '../utils/elo/positions'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
 import type { DbGame, DbPlayer } from '../types/rows'
@@ -410,44 +411,13 @@ const AddPlay = () => {
         }
       })
 
-      // Calcola le posizioni
-      // Se cooperativo: position = 1 se vinto, 2 se perso
-      // Se competitivo: i vincitori hanno posizione 1, gli altri ordinati per punteggio
-      let playersWithPositions
-      if (formData.isCooperative && formData.teamWon !== null) {
-        playersWithPositions = playersWithScores.map(player => ({
-          ...player,
-          position: formData.teamWon ? 1 : 2
-        }))
-      } else {
-        const winners = playersWithScores.filter(p => p.winner)
-        const nonWinners = playersWithScores.filter(p => !p.winner)
-
-        // Ordina i non vincitori per punteggio decrescente (se disponibile)
-        nonWinners.sort((a, b) => {
-          if (a.score !== null && b.score !== null) {
-            return b.score - a.score
-          }
-          if (a.score !== null) return -1
-          if (b.score !== null) return 1
-          return 0
-        })
-
-        // Assegna le posizioni
-        let currentPosition = 1
-        playersWithPositions = [...winners, ...nonWinners].map((player, index) => {
-          // Se è il primo non vincitore, inizia dalla posizione 2 (o più se ci sono più vincitori)
-          if (!player.winner && index === winners.length) {
-            currentPosition = winners.length + 1
-          } else if (!player.winner && index > winners.length) {
-            currentPosition++
-          }
-          return {
-            ...player,
-            position: player.winner ? 1 : currentPosition
-          }
-        })
-      }
+      // Calcola le posizioni con la fonte unica di verità (la stessa del
+      // ricalcolo ELO): cooperativo → 1/2 per tutti, altrimenti vincitori a 1
+      // e non vincitori ordinati per punteggio decrescente
+      const playersWithPositions = assignPositions(playersWithScores, {
+        cooperative: formData.isCooperative,
+        teamWon: formData.isCooperative ? formData.teamWon : null
+      })
 
       const playScoresData = playersWithPositions.map(player => ({
         play_id: play.id,

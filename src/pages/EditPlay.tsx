@@ -7,6 +7,7 @@ import { Save, ArrowLeft, Gamepad2, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '../components/Spinner'
 import type { DbGame, DbPlayer } from '../types/rows'
+import { assignPositions } from '../utils/elo/positions'
 
 interface EditPlayerRow {
   id: string | null
@@ -14,7 +15,6 @@ interface EditPlayerRow {
   playerName: string
   score: string | number
   winner: boolean
-  position: number | null
 }
 
 interface EditFormData {
@@ -93,8 +93,7 @@ const EditPlay = () => {
             playerId: score.player_id ?? '',
             playerName: score.players?.alias || score.players?.name || '',
             score: score.score ?? '',
-            winner: score.winner || false,
-            position: score.position || null
+            winner: score.winner || false
           })) || []
         })
       }
@@ -150,8 +149,7 @@ const EditPlay = () => {
           playerId: '',
           playerName: '',
           score: '',
-          winner: false,
-          position: null
+          winner: false
         }
       ]
     }))
@@ -225,33 +223,34 @@ const EditPlay = () => {
       }
 
       // Valida gli score prima di modificare il DB per evitare data loss
-      const scoresToInsert = formData.players.map((player, index) => {
+      const validatedScores = formData.players.map(player => {
         const scoreValue = player.score === '' ? null : Number.parseInt(String(player.score), 10)
         if (scoreValue === null || Number.isNaN(scoreValue)) {
           throw new Error(`Il punteggio per "${player.playerName}" non è valido`)
         }
-        
+
         // Se cooperativo e teamWon è definito, sovrascrive il winner individuale
         const winner = formData.isCooperative && formData.teamWon !== null
           ? formData.teamWon
           : player.winner
-        
-        // Calcola position in base alla modalità
-        let position
-        if (formData.isCooperative && formData.teamWon !== null) {
-          position = formData.teamWon ? 1 : 2
-        } else {
-          position = player.position || index + 1
-        }
-        
-        return {
-          play_id: id,
-          player_id: player.playerId,
-          score: scoreValue,
-          winner,
-          position
-        }
+
+        return { playerId: player.playerId, score: scoreValue, winner }
       })
+
+      // Posizioni ricalcolate con la fonte unica di verità condivisa col
+      // ricalcolo ELO (prima si riusavano quelle stale caricate dal form)
+      const positionedScores = assignPositions(validatedScores, {
+        cooperative: formData.isCooperative,
+        teamWon: formData.isCooperative ? formData.teamWon : null
+      })
+
+      const scoresToInsert = positionedScores.map(player => ({
+        play_id: id,
+        player_id: player.playerId,
+        score: player.score,
+        winner: player.winner,
+        position: player.position
+      }))
 
       // Prima elimina tutti i punteggi esistenti
       const { error: deleteError } = await supabase

@@ -1,5 +1,6 @@
 /**
- * Core puro di simulazione ELO — nessuna dipendenza (né Supabase né DOM).
+ * Core puro di simulazione ELO — nessuna dipendenza esterna (né Supabase né
+ * DOM; l'unico import è il modulo altrettanto puro positions.ts).
  *
  * Fonte unica di verità dell'algoritmo ELO, riusata da:
  *  - frontend: src/utils/eloCalculator.ts (cache elo_history + percorsi di persistenza)
@@ -7,12 +8,14 @@
  *
  * Non modificare la semantica di calcolo (formule, K-factor, assegnazione
  * posizioni, ordinamenti): la parità con i rating prodotti dal codice
- * precedente è verificata da scripts/compare-elo.ts.
+ * precedente è verificata da scripts/compare-elo.ts e dai test di
+ * caratterizzazione in simulation.test.ts.
  *
  * Contratto: `simulateAllPlays` riceve le partite già ordinate
  * cronologicamente per `played_at` crescente (lo garantiscono le query
  * dei chiamanti) e non esegue alcuna operazione di I/O.
  */
+import { assignPositions } from './positions.ts'
 
 // ─── Formule ELO (spostate da eloCalculator.ts, invariate) ───────────────────
 
@@ -231,38 +234,6 @@ export interface SimulationResult {
 }
 
 /**
- * Assegna le posizioni quando non definite, replicando esattamente
- * l'ordinamento storico dell'app: vincitori prima, poi punteggio decrescente.
- * MUTA gli oggetti ricevuti (come il codice originale).
- */
-function withAssignedPositions(players: (PlayerInput & { playerName: string })[]): (PlayerInput & { playerName: string })[] {
-  const sortedPlayers = [...players].sort((a, b) => {
-    if (a.winner && !b.winner) return -1
-    if (!a.winner && b.winner) return 1
-    if (a.score !== null && b.score !== null) {
-      return (b.score ?? 0) - (a.score ?? 0)
-    }
-    return 0
-  })
-
-  let currentPosition = 1
-  const winnersCount = sortedPlayers.filter(p => p.winner).length
-  sortedPlayers.forEach((player, index) => {
-    if (player.winner) {
-      player.position = 1
-    } else if (index === winnersCount) {
-      currentPosition = winnersCount + 1
-      player.position = currentPosition
-    } else if (!player.winner) {
-      currentPosition++
-      player.position = currentPosition
-    }
-  })
-
-  return sortedPlayers
-}
-
-/**
  * Simula l'intero storico partite in un unico passaggio in memoria.
  *
  * Produce in un colpo solo tutto ciò che serve a frontend e job notturno:
@@ -329,9 +300,9 @@ export function simulateAllPlays(plays: SimulationPlay[]): SimulationResult {
       }
     })
 
-    withAssignedPositions(playersData)
+    const positionedPlayers = assignPositions(playersData)
 
-    const eloResults = calculateELOForGame(playersData)
+    const eloResults = calculateELOForGame(positionedPlayers)
     const resultByPlayer = new Map(eloResults.map(result => [result.playerId, result]))
 
     // ── Aggiornamento rating per gioco + storico di gioco (ordine eloResults) ──

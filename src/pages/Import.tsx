@@ -4,9 +4,9 @@ import { supabase } from '../lib/supabase'
 import { Download, AlertCircle, CheckCircle, Loader2, Info, Users, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getErrorMessage } from '../utils/errors'
-import { withRetry } from '../utils/retry'
 import { performFullRecalc } from '../utils/elo/recalc'
-import { XMLParser } from 'fast-xml-parser'
+import { runBgaImport } from '../services/bgaImport'
+import type { BgaImportResult } from '../services/bgaImport'
 
 interface LogEntry {
   timestamp: string
@@ -48,42 +48,7 @@ const similarity = (a: string, b: string): number => {
   return 1 - dist / Math.max(a.length, b.length)
 }
 
-// ─── BoardGameGeek (BGG) Image Fetcher ───────────────────────────────────────
-const parser = new XMLParser()
-
-const fetchGameImageFromBGG = async (gameName: string): Promise<string | null> => {
-  try {
-    // Search for the game on BGG (retry: BGG throttla e risponde spesso 502/202)
-    const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(gameName)}&type=boardgame`
-    const searchResponse = await withRetry(() => fetch(searchUrl))
-    const searchXml = await searchResponse.text()
-    const searchResult = parser.parse(searchXml)
-
-    // Check if we found any games
-    const items = searchResult?.items?.item
-    if (!items) return null
-
-    // Get the first game ID (most relevant result)
-    const gameId = Array.isArray(items) ? items[0].id : items.id
-    if (!gameId) return null
-
-    // Fetch game details including image
-    const detailsUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${gameId}&stats=1`
-    const detailsResponse = await withRetry(() => fetch(detailsUrl))
-    const detailsXml = await detailsResponse.text()
-    const detailsResult = parser.parse(detailsXml)
-
-    // Extract image URL
-    const items2 = detailsResult?.items?.item
-    if (!items2) return null
-
-    const game = Array.isArray(items2) ? items2[0] : items2
-    return (game?.image as string) || null
-  } catch (error) {
-    console.error('Error fetching game image from BGG:', error)
-    return null
-  }
-}
+// ─── BoardGameGeek (BGG): la fetch delle immagini vive in services/bgaImport.ts ─
 
 interface ResolveResult {
   name: string
@@ -383,20 +348,13 @@ const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
 // ─── Main Component ───────────────────────────────────────────────────────────
 type ImportStep = 'input' | 'disambiguate' | 'importing'
 
-interface ImportResult {
-  imported: number
-  skipped: number
-  errors: number
-  total: number
-}
-
 const Import = () => {
   const { user } = useAuth()
   const [txtContent, setTxtContent] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
   const [logs, setLogs] = useState<LogEntry[]>([])
-  const [result, setResult] = useState<ImportResult | null>(null)
+  const [result, setResult] = useState<BgaImportResult | null>(null)
   const [step, setStep] = useState<ImportStep>('input')
   const [pendingPlays, setPendingPlays] = useState<ResolvedPlay[]>([])
 
@@ -475,93 +433,19 @@ const Import = () => {
   }
 
   // ── Core import ───────────────────────────────────────────────────────────
+  // La persistenza (con pre-caricamento anti-N+1) vive in services/bgaImport.ts
   const runImport = async (plays: ResolvedPlay[], confirmedItems: (ConfirmedEntry & { raw: string })[]): Promise<void> => {
-    setProgress(0)
-    let imported = 0, skipped = 0, errors = 0
-
     try {
-      // Persist newly confirmed player names
-      for (const item of confirmedItems) {
-        if (!item.name) continue
-        const { data: existing } = await supabase.from('players').select('id')
-          .eq('user_id', user!.id).eq('name', item.name).maybeSingle()
-        if (!existing) {
-          await supabase.from('players').insert({ user_id: user!.id, name: item.name, is_me: false })
-          addLog(`Giocatore memorizzato: ${item.name}`, 'info')
-        }
-      }
-
-      for (let i = 0; i < plays.length; i++) {
-        const play = plays[i]
-        setProgress(Math.round((i / plays.length) * 95))
-
-        try {
-          const { data: existing } = await supabase.from('plays').select('id')
-            .eq('user_id', user!.id).eq('bga_table_id', play.bga_table_id).maybeSingle()
-          if (existing) { skipped++; continue }
-
-          // Fix TD-003: filtra per utente, altrimenti con la lettura pubblica
-          // si riusa un gioco omonimo di un altro utente (link cross-tenant)
-          const { data: existingGame } = await supabase.from('games').select('id')
-            .eq('user_id', user!.id).eq('name', play.game_name).maybeSingle()
-
-          let gameId: string | undefined = existingGame?.id
-          if (!gameId) {
-            // Try to fetch game image from BGG
-            const imageUrl = await fetchGameImageFromBGG(play.game_name)
-            if (imageUrl) {
-              addLog(`Immagine trovata per: ${play.game_name}`, 'info')
-            } else {
-              addLog(`Nessuna immagine trovata per: ${play.game_name}`, 'warning')
-            }
-
-            const { data: newGame } = await supabase.from('games')
-              .insert({ name: play.game_name, bga_id: null, image_url: imageUrl }).select().single()
-            if (newGame) { gameId = newGame.id; addLog(`Nuovo gioco: ${play.game_name}`, 'info') }
-          }
-
-          if (!gameId) { errors++; addLog(`Impossibile creare gioco per ${play.bga_table_id}`, 'error'); continue }
-          if (!play.played_at) { errors++; addLog(`Data mancante per ${play.bga_table_id}`, 'error'); continue }
-
-          const { data: newPlay, error: playError } = await supabase.from('plays')
-            .insert({ user_id: user!.id, game_id: gameId, played_at: play.played_at, location: play.location, duration_minutes: play.duration_minutes, source: 'offline', bga_table_id: play.bga_table_id })
-            .select().single()
-
-          if (playError) throw playError
-
-          for (const p of play.players) {
-            if (!p.name) continue
-            const { data: existingPlayer } = await supabase.from('players').select('id')
-              .eq('user_id', user!.id).eq('name', p.name).maybeSingle()
-            let pid: string | undefined = existingPlayer?.id
-            if (!pid) {
-              const { data: newPlayer } = await supabase.from('players')
-                .insert({ user_id: user!.id, name: p.name, is_me: false }).select().single()
-              pid = newPlayer?.id
-            }
-            if (pid) {
-              await supabase.from('play_scores').insert({
-                play_id: newPlay.id,
-                player_id: pid,
-                score: p.score ?? null,
-                winner: p.winner || false,
-                position: p.position ? parseInt(p.position) : null
-              })
-            }
-          }
-
-          imported++
-        } catch (err) {
-          errors++
-          addLog(`Errore partita ${play.bga_table_id}: ${getErrorMessage(err)}`, 'error')
-        }
-      }
+      const result = await runBgaImport(supabase, user!.id, plays, confirmedItems, {
+        onLog: addLog,
+        onProgress: setProgress
+      })
 
       // Un solo ricalcolo ELO completo a fine import, con i rating correnti.
       // Fix TD-001: prima ogni partita aggiornava l'ELO "a caldo" partendo da
       // rating 1000. Fix TD-005: la cache elo_history non veniva mai
       // rigenerata dopo l'import; performFullRecalc la ricostruisce.
-      if (imported > 0) {
+      if (result.imported > 0) {
         try {
           await performFullRecalc(supabase, user!.id)
         } catch (eloError) {
@@ -569,10 +453,9 @@ const Import = () => {
         }
       }
 
-      setProgress(100)
       addLog('Importazione completata!', 'success')
-      setResult({ imported, skipped, errors, total: plays.length })
-      toast.success(`Importazione completata! ${imported} partite importate`)
+      setResult(result)
+      toast.success(`Importazione completata! ${result.imported} partite importate`)
       setStep('input')
     } catch (error) {
       addLog(`Errore: ${getErrorMessage(error)}`, 'error')
