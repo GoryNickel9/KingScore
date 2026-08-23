@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { Download, AlertCircle, CheckCircle, Loader2, Info, Users, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { updateELOAfterGame } from '../utils/eloCalculator'
+import { getErrorMessage } from '../utils/errors'
+import { withRetry } from '../utils/retry'
 import { XMLParser } from 'fast-xml-parser'
 
 interface LogEntry {
@@ -51,9 +53,9 @@ const parser = new XMLParser()
 
 const fetchGameImageFromBGG = async (gameName: string): Promise<string | null> => {
   try {
-    // Search for the game on BGG
+    // Search for the game on BGG (retry: BGG throttla e risponde spesso 502/202)
     const searchUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(gameName)}&type=boardgame`
-    const searchResponse = await fetch(searchUrl)
+    const searchResponse = await withRetry(() => fetch(searchUrl))
     const searchXml = await searchResponse.text()
     const searchResult = parser.parse(searchXml)
 
@@ -67,7 +69,7 @@ const fetchGameImageFromBGG = async (gameName: string): Promise<string | null> =
 
     // Fetch game details including image
     const detailsUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${gameId}&stats=1`
-    const detailsResponse = await fetch(detailsUrl)
+    const detailsResponse = await withRetry(() => fetch(detailsUrl))
     const detailsXml = await detailsResponse.text()
     const detailsResult = parser.parse(detailsXml)
 
@@ -444,8 +446,8 @@ const Import = () => {
         await runImport(resolvedPlays, [])
       }
     } catch (error) {
-      addLog(`Errore: ${(error as Error).message}`, 'error')
-      toast.error((error as Error).message)
+      addLog(`Errore: ${getErrorMessage(error)}`, 'error')
+      toast.error(getErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -575,7 +577,7 @@ const Import = () => {
           imported++
         } catch (err) {
           errors++
-          addLog(`Errore partita ${play.bga_table_id}: ${(err as Error).message}`, 'error')
+          addLog(`Errore partita ${play.bga_table_id}: ${getErrorMessage(err)}`, 'error')
         }
       }
 
@@ -585,8 +587,8 @@ const Import = () => {
       toast.success(`Importazione completata! ${imported} partite importate`)
       setStep('input')
     } catch (error) {
-      addLog(`Errore: ${(error as Error).message}`, 'error')
-      toast.error((error as Error).message)
+      addLog(`Errore: ${getErrorMessage(error)}`, 'error')
+      toast.error(getErrorMessage(error))
     } finally {
       setLoading(false)
     }

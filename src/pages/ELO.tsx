@@ -64,14 +64,14 @@ const ELO = () => {
   const [recalculatingAll, setRecalculatingAll] = useState<boolean>(false)
 
   useEffect(() => {
-    fetchGames()
-    fetchMyPlayer()
-    fetchGeneralRatings()
+    void fetchGames()
+    void fetchMyPlayer()
+    void fetchGeneralRatings()
   }, [])
 
   useEffect(() => {
     if (selectedGame) {
-      fetchRatings(selectedGame.id)
+      void fetchRatings(selectedGame.id)
     }
   }, [selectedGame])
 

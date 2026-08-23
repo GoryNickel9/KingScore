@@ -64,9 +64,9 @@ const EditPlay = () => {
   const [saving, setSaving] = useState<boolean>(false)
 
   useEffect(() => {
-    fetchPlay()
-    fetchGames()
-    fetchPlayers()
+    void fetchPlay()
+    void fetchGames()
+    void fetchPlayers()
   }, [id])
 
   const fetchPlay = async (): Promise<void> => {
@@ -111,7 +111,7 @@ const EditPlay = () => {
     } catch (error) {
       console.error('Error fetching play:', error)
       toast.error('Errore durante il caricamento della partita')
-      navigate('/plays')
+      void navigate('/plays')
     } finally {
       setLoading(false)
     }
@@ -293,7 +293,7 @@ const EditPlay = () => {
       try { await invalidateELOHistory(supabase, id!) } catch { /* non bloccare il flusso */ }
 
       toast.success('Partita aggiornata con successo!')
-      navigate(`/plays/${id}`)
+      void navigate(`/plays/${id}`)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Errore sconosciuto durante l'aggiornamento della partita"
       toast.error(errorMessage)

@@ -65,7 +65,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    fetchDashboardData()
+    void fetchDashboardData()
   }, [])
 
   const fetchDashboardData = async (): Promise<void> => {

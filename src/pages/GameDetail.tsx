@@ -64,7 +64,7 @@ const GameDetail = () => {
   const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    fetchGameData()
+    void fetchGameData()
   }, [id])
 
   const fetchGameData = async (): Promise<void> => {

@@ -132,8 +132,8 @@ const Stats = () => {
   const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    fetchStats()
-    fetchGeneralEloHistory()
+    void fetchStats()
+    void fetchGeneralEloHistory()
   }, [])
 
   const toggleGameExpansion = async (gameId: string): Promise<void> => {

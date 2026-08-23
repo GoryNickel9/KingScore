@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
+import { getErrorMessage } from '../utils/errors'
 import type { AuthContextType, AuthResult } from '../types'
 import type { User } from '@supabase/supabase-js'
 
@@ -29,7 +30,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     }
 
-    checkSession()
+    void checkSession()
 
     // Ascolta i cambiamenti di autenticazione
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -56,7 +57,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       toast.success('Registrazione completata! Controlla la tua email.')
       return { data, error: null }
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error(getErrorMessage(error))
       return { data: null, error: error as Error }
     }
   }
@@ -73,7 +74,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       toast.success('Login effettuato con successo!')
       return { data, error: null }
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error(getErrorMessage(error))
       return { data: null, error: error as Error }
     }
   }
@@ -86,7 +87,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       toast.success('Logout effettuato con successo!')
       setUser(null)
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error(getErrorMessage(error))
     }
   }
 

@@ -113,7 +113,7 @@ const Navbar = () => {
                     <div className="border-t border-slate-600 mt-1 pt-1">
                       <button
                         onClick={() => {
-                          signOut()
+                          void signOut()
                           setIsDropdownOpen(false)
                         }}
                         className="flex items-center space-x-3 w-full px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 hover:text-white transition"

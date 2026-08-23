@@ -67,7 +67,7 @@ const Plays = () => {
   const PLAYS_PER_PAGE = 20
 
   useEffect(() => {
-    fetchPlays()
+    void fetchPlays()
   }, [user])
 
   useEffect(() => {

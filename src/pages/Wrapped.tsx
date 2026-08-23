@@ -103,12 +103,12 @@ const Wrapped = () => {
   const [eloPlayerNames, setEloPlayerNames] = useState<string[]>([])
 
   useEffect(() => {
-    loadInitialData()
+    void loadInitialData()
   }, [])
 
   useEffect(() => {
     if (availableYears.length > 0) {
-      loadStats()
+      void loadStats()
     }
   }, [selectedYear, selectedPlayerId, availableYears])
 

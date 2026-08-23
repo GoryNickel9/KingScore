@@ -30,7 +30,7 @@ const Register = () => {
     const { error } = await signUp(email, password, name)
     
     if (!error) {
-      navigate('/login')
+      void navigate('/login')
     }
     
     setLoading(false)

@@ -79,7 +79,7 @@ const PlayerDetail = () => {
   const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    fetchPlayerData()
+    void fetchPlayerData()
   }, [id])
 
   const fetchPlayerData = async (): Promise<void> => {

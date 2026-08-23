@@ -70,7 +70,7 @@ const PlayDetail = () => {
   const [generalELOHistory, setGeneralELOHistory] = useState<EloHistoryEntry[]>([])
 
   useEffect(() => {
-    fetchPlay()
+    void fetchPlay()
   }, [id])
 
   const fetchPlay = async (): Promise<void> => {
@@ -135,7 +135,7 @@ const PlayDetail = () => {
         }
       } else {
         toast.error('Partita non trovata')
-        navigate('/plays')
+        void navigate('/plays')
       }
     } catch (error) {
       console.error('Error fetching play:', error)
@@ -155,7 +155,7 @@ const PlayDetail = () => {
       if (error) throw error
 
       toast.success('Partita eliminata con successo!')
-      navigate('/plays')
+      void navigate('/plays')
     } catch (error) {
       console.error('Error deleting play:', error)
       toast.error("Errore durante l'eliminazione della partita")

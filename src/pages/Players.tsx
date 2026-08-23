@@ -45,7 +45,7 @@ const Players = () => {
   const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false)
 
   useEffect(() => {
-    fetchPlayers()
+    void fetchPlayers()
   }, [])
 
   const fetchPlayers = async (): Promise<void> => {
@@ -134,7 +134,7 @@ const Players = () => {
       setFormData({ name: '', alias: '', avatar_url: '', color: '' })
       setAvatarFile(null)
       setAvatarPreview(null)
-      fetchPlayers()
+      void fetchPlayers()
     } catch (error) {
       toast.error("Errore durante l'aggiunta del giocatore")
       console.error('Error adding player:', error)
@@ -186,7 +186,7 @@ const Players = () => {
       setFormData({ name: '', alias: '', avatar_url: '', color: '' })
       setAvatarFile(null)
       setAvatarPreview(null)
-      fetchPlayers()
+      void fetchPlayers()
     } catch (error) {
       toast.error("Errore durante l'aggiornamento del giocatore")
       console.error('Error updating player:', error)
@@ -205,7 +205,7 @@ const Players = () => {
       toast.success('Giocatore eliminato con successo!')
       setShowDeleteModal(false)
       setSelectedPlayer(null)
-      fetchPlayers()
+      void fetchPlayers()
     } catch (error) {
       toast.error("Errore durante l'eliminazione del giocatore")
       console.error('Error deleting player:', error)

@@ -416,4 +416,7 @@ async function main(): Promise<void> {
   console.log('✅ PARITÀ VERIFICATA: storici per gioco, storico generale e rating finali identici al vecchio algoritmo')
 }
 
-main()
+main().catch((error) => {
+  console.error('Errore imprevisto:', error)
+  process.exit(2)
+})

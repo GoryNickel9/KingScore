@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { getErrorMessage } from '../utils/errors'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 
@@ -46,7 +47,7 @@ const Games = () => {
   const GAMES_PER_PAGE = 24
 
   useEffect(() => {
-    fetchGames()
+    void fetchGames()
   }, [])
 
   useEffect(() => {
@@ -261,7 +262,7 @@ const Games = () => {
       await fetchGames()
     } catch (error) {
       console.error('Error deleting game:', error)
-      toast.error(`Errore durante l'eliminazione del gioco: ${(error as Error).message}`)
+      toast.error(`Errore durante l'eliminazione del gioco: ${getErrorMessage(error)}`)
     }
   }
 
@@ -353,7 +354,7 @@ const Games = () => {
                 <button
                   onClick={(e: React.MouseEvent) => {
                     e.stopPropagation()
-                    handleDeleteGame(game.id, game.name)
+                    void handleDeleteGame(game.id, game.name)
                   }}
                   className="absolute top-2 right-2 z-10 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition opacity-0 group-hover:opacity-100 shadow-lg"
                   title="Elimina gioco"

@@ -21,7 +21,7 @@ const Images = () => {
 
   useEffect(() => {
     if (!authLoading && user) {
-      fetchGamesWithoutImages()
+      void fetchGamesWithoutImages()
     } else if (!authLoading && !user) {
       setLoading(false)
     }
@@ -167,7 +167,7 @@ const Images = () => {
                         placeholder="https://cf.geekdo-images.com/..."
                         value={url}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUrlInputs(prev => ({ ...prev, [game.id]: e.target.value }))}
-                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSave(game) }}
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') void handleSave(game) }}
                         disabled={isSaving || isSaved}
                         className="flex-1 px-3 py-2 bg-slate-700 text-white text-sm rounded-lg border border-slate-600 focus:border-emerald-500 focus:outline-none placeholder-slate-500 disabled:opacity-50"
                       />

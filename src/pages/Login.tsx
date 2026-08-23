@@ -17,7 +17,7 @@ const Login = () => {
     const { error } = await signIn(email, password)
     
     if (!error) {
-      navigate('/')
+      void navigate('/')
     }
     
     setLoading(false)
