@@ -115,6 +115,7 @@ const Dashboard = () => {
           .select('played_at')
           .gte('played_at', twelveMonthsAgo.toISOString())
           .order('played_at', { ascending: true })
+          .limit(10000) // oltre il cap predefinito di 1000 il risultato verrebbe troncato in silenzio
 
         const playsByMonth: MonthData[] = []
         if (monthlyPlays) {

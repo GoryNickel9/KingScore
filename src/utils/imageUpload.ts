@@ -97,28 +97,14 @@ const getImageUrl = (filePath: string, bucket: string): string | null => {
 /**
  * Upload un'immagine del gioco su Supabase Storage
  */
-export const uploadGameImage = async (file: File, userId: string, _gameId: string | null = null): Promise<UploadResult> => {
+export const uploadGameImage = async (file: File, userId: string): Promise<UploadResult> => {
   return uploadImage(file, userId, 'game-images', 5)
-}
-
-/**
- * Elimina un'immagine del gioco da Supabase Storage
- */
-export const deleteGameImage = async (filePath: string): Promise<void> => {
-  return deleteImage(filePath, 'game-images')
-}
-
-/**
- * Ottiene l'URL pubblico di un'immagine dal path
- */
-export const getGameImageUrl = (filePath: string): string | null => {
-  return getImageUrl(filePath, 'game-images')
 }
 
 /**
  * Upload un'immagine del profilo del giocatore su Supabase Storage
  */
-export const uploadPlayerImage = async (file: File, userId: string, _playerId: string | null = null): Promise<UploadResult> => {
+export const uploadPlayerImage = async (file: File, userId: string): Promise<UploadResult> => {
   return uploadImage(file, userId, 'player-images', 2, 'avatars')
 }
 
