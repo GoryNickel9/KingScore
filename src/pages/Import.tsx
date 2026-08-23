@@ -3,9 +3,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Download, AlertCircle, CheckCircle, Loader2, Info, Users, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { updateELOAfterGame } from '../utils/eloCalculator'
 import { getErrorMessage } from '../utils/errors'
 import { withRetry } from '../utils/retry'
+import { performFullRecalc } from '../utils/elo/recalc'
 import { XMLParser } from 'fast-xml-parser'
 
 interface LogEntry {
@@ -500,8 +500,10 @@ const Import = () => {
             .eq('user_id', user!.id).eq('bga_table_id', play.bga_table_id).maybeSingle()
           if (existing) { skipped++; continue }
 
+          // Fix TD-003: filtra per utente, altrimenti con la lettura pubblica
+          // si riusa un gioco omonimo di un altro utente (link cross-tenant)
           const { data: existingGame } = await supabase.from('games').select('id')
-            .eq('name', play.game_name).maybeSingle()
+            .eq('user_id', user!.id).eq('name', play.game_name).maybeSingle()
 
           let gameId: string | undefined = existingGame?.id
           if (!gameId) {
@@ -547,37 +549,22 @@ const Import = () => {
             }
           }
 
-          // Aggiorna l'ELO per questa partita
-          try {
-            const { data: playScores } = await supabase
-              .from('play_scores')
-              .select('*, players(*)')
-              .eq('play_id', newPlay.id)
-
-            if (playScores && playScores.length >= 2) {
-              // Prepara i dati dei giocatori per il calcolo ELO
-              const playersData = playScores.map((score: { player_id: string; winner: boolean; position?: number | null }) => {
-                return {
-                  playerId: score.player_id,
-                  currentRating: 1000, // Verrà aggiornato da updateELOAfterGame
-                  gamesPlayed: 0, // Verrà aggiornato da updateELOAfterGame
-                  winner: score.winner || false,
-                  position: score.position || undefined
-                }
-              })
-
-              // Aggiorna gli ELO (incluso l'ELO Generale)
-              await updateELOAfterGame(supabase, gameId, playersData, user!.id)
-            }
-          } catch (eloError) {
-            // Non bloccare l'importazione se l'aggiornamento ELO fallisce
-            console.error('Errore nell\'aggiornamento ELO:', eloError)
-          }
-
           imported++
         } catch (err) {
           errors++
           addLog(`Errore partita ${play.bga_table_id}: ${getErrorMessage(err)}`, 'error')
+        }
+      }
+
+      // Un solo ricalcolo ELO completo a fine import, con i rating correnti.
+      // Fix TD-001: prima ogni partita aggiornava l'ELO "a caldo" partendo da
+      // rating 1000. Fix TD-005: la cache elo_history non veniva mai
+      // rigenerata dopo l'import; performFullRecalc la ricostruisce.
+      if (imported > 0) {
+        try {
+          await performFullRecalc(supabase, user!.id)
+        } catch (eloError) {
+          addLog(`ELO non ricalcolato: ${getErrorMessage(eloError)} (verrà corretto dal ricalcolo notturno)`, 'warning')
         }
       }
 

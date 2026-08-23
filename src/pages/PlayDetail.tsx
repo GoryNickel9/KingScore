@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
+import { performFullRecalc } from '../utils/elo/recalc'
 import { Spinner } from '../components/Spinner'
 
 interface DbPlayer {
@@ -153,6 +154,17 @@ const PlayDetail = () => {
         .eq('id', id)
 
       if (error) throw error
+
+      // Fix TD-005: le righe elo_history scendono a cascata via FK, ma i
+      // rating per gioco resterebbero sovrastimati fino al job notturno
+      if (user) {
+        try {
+          await performFullRecalc(supabase, user.id)
+        } catch (eloError) {
+          console.error('Errore nel ricalcolo ELO post-delete:', eloError)
+          toast('ELO non aggiornato: verrà corretto dal ricalcolo notturno')
+        }
+      }
 
       toast.success('Partita eliminata con successo!')
       void navigate('/plays')

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { updateELOAfterGame, invalidateELOHistory } from '../utils/eloCalculator'
+import { performFullRecalc } from '../utils/elo/recalc'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
 
@@ -475,28 +475,18 @@ const AddPlay = () => {
 
       if (scoresError) throw scoresError
 
-      // Aggiorna l'ELO per questa partita
+      // Ricalcola da zero tutti gli ELO con i rating correnti.
+      // Fix TD-001: il vecchio aggiornamento "a caldo" parteva da rating
+      // hardcoded 1000/K=48 e sovrascriveva i rating reali fino al job
+      // notturno. performFullRecalc rigenera anche la cache elo_history,
+      // quindi non serve invalidarla.
       try {
         if (mappedPlayers.length >= 2) {
-          // Prepara i dati dei giocatori per il calcolo ELO
-          const playersData = playersWithPositions.map(player => {
-            return {
-              playerId: player.playerId,
-              currentRating: 1000, // Verrà aggiornato da updateELOAfterGame
-              gamesPlayed: 0, // Verrà aggiornato da updateELOAfterGame
-              winner: player.winner,
-              position: player.position
-            }
-          })
-
-          // Aggiorna gli ELO (incluso l'ELO Generale)
-          await updateELOAfterGame(supabase, play.game_id, playersData, user!.id)
-          // Invalida la cache ELO: la nuova partita rende obsoleto lo storico
-          try { await invalidateELOHistory(supabase, play.id) } catch { /* non bloccare il flusso */ }
+          await performFullRecalc(supabase, user!.id)
         }
       } catch (eloError) {
-        // Non bloccare il salvataggio se l'aggiornamento ELO fallisce
-        console.error('Errore nell\'aggiornamento ELO:', eloError)
+        console.error('Errore nel ricalcolo ELO:', eloError)
+        toast.error('ELO non aggiornato: verrà corretto dal ricalcolo notturno')
       }
 
       toast.success('Partita aggiunta con successo!')
