@@ -630,7 +630,7 @@ const Stats = () => {
               <div className="flex items-center space-x-3 mb-3">
                 {player.playerAvatarUrl ? (
                   <img
-                    src={getPlayerImageUrl(player.playerAvatarUrl!) ?? undefined}
+                    src={getPlayerImageUrl(supabase, player.playerAvatarUrl!) ?? undefined}
                     alt={player.playerName}
                     className="w-12 h-12 rounded-full object-cover"
                   />
@@ -769,7 +769,7 @@ const Stats = () => {
                               <div className="flex items-center space-x-3">
                                 {player.playerAvatarUrl ? (
                                   <img
-                                    src={getPlayerImageUrl(player.playerAvatarUrl!) ?? undefined}
+                                    src={getPlayerImageUrl(supabase, player.playerAvatarUrl!) ?? undefined}
                                     alt={player.playerName}
                                     className="w-10 h-10 rounded-full object-cover"
                                   />

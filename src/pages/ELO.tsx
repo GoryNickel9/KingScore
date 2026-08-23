@@ -254,7 +254,7 @@ const ELO = () => {
 
                     {rating.players?.avatar_url ? (
                       <img
-                        src={getPlayerImageUrl(rating.players?.avatar_url) ?? undefined}
+                        src={getPlayerImageUrl(supabase, rating.players?.avatar_url) ?? undefined}
                         alt={rating.players?.alias || rating.players?.name || 'Unknown'}
                         className="w-12 h-12 rounded-full object-cover"
                       />
@@ -412,7 +412,7 @@ const ELO = () => {
 
                       {rating.players?.avatar_url ? (
                         <img
-                          src={getPlayerImageUrl(rating.players?.avatar_url) ?? undefined}
+                          src={getPlayerImageUrl(supabase, rating.players?.avatar_url) ?? undefined}
                           alt={rating.players?.alias || rating.players?.name || 'Unknown'}
                           className="w-12 h-12 rounded-full object-cover"
                         />

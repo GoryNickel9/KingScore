@@ -96,7 +96,7 @@ const Players = () => {
       if (avatarFile) {
         setUploadingAvatar(true)
         try {
-          const { path } = await uploadPlayerImage(avatarFile, user!.id)
+          const { path } = await uploadPlayerImage(supabase, avatarFile, user!.id)
           avatarUrl = path
         } catch (error) {
           toast.error("Errore durante il caricamento dell'immagine")
@@ -145,10 +145,10 @@ const Players = () => {
         try {
           // Elimina l'immagine precedente se esiste
           if (selectedPlayer!.avatar_url) {
-            await deletePlayerImage(selectedPlayer!.avatar_url)
+            await deletePlayerImage(supabase, selectedPlayer!.avatar_url)
           }
 
-          const { path } = await uploadPlayerImage(avatarFile, user!.id)
+          const { path } = await uploadPlayerImage(supabase, avatarFile, user!.id)
           avatarUrl = path
         } catch (error) {
           toast.error("Errore durante il caricamento dell'immagine")
@@ -305,7 +305,7 @@ const Players = () => {
                   {/* Avatar */}
                   {player.avatar_url ? (
                     <img
-                      src={getPlayerImageUrl(player.avatar_url!) ?? undefined}
+                      src={getPlayerImageUrl(supabase, player.avatar_url!) ?? undefined}
                       alt={player.name}
                       className="w-16 h-16 rounded-full object-cover flex-shrink-0"
                     />
@@ -339,7 +339,7 @@ const Players = () => {
                         onClick={() => {
                           setSelectedPlayer(player)
                           setFormData({ name: player.name, alias: player.alias || '', avatar_url: player.avatar_url || '', color: player.color || '' })
-                          setAvatarPreview(player.avatar_url ? getPlayerImageUrl(player.avatar_url) : null)
+                          setAvatarPreview(player.avatar_url ? getPlayerImageUrl(supabase, player.avatar_url) : null)
                           setShowEditModal(true)
                         }}
                         className="p-2 hover:bg-slate-700 rounded-lg transition"

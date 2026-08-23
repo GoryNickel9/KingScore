@@ -8,6 +8,8 @@ import toast from 'react-hot-toast'
 import { Spinner } from '../components/Spinner'
 import type { DbGame, DbPlayer } from '../types/rows'
 import { assignPositions } from '../utils/elo/positions'
+import { listUserGames } from '../services/games'
+import { listUserPlayers } from '../services/players'
 
 interface EditPlayerRow {
   id: string | null
@@ -108,12 +110,7 @@ const EditPlay = () => {
 
   const fetchGames = async (): Promise<void> => {
     try {
-      const { data } = await supabase
-        .from('games')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('name')
-      setGames(data ?? [])
+      setGames(await listUserGames(supabase, user!.id))
     } catch (error) {
       console.error('Error fetching games:', error)
     }
@@ -121,12 +118,7 @@ const EditPlay = () => {
 
   const fetchPlayers = async (): Promise<void> => {
     try {
-      const { data } = await supabase
-        .from('players')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('name')
-      setPlayers(data ?? [])
+      setPlayers(await listUserPlayers(supabase, user!.id))
     } catch (error) {
       console.error('Error fetching players:', error)
     }

@@ -1,10 +1,17 @@
-import { supabase } from '../lib/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '../types/db'
 import type { UploadResult } from '../types'
+
+type DbClient = SupabaseClient<Database>
+
+// Pattern servizi: il client è iniettato dal chiamante, nessun import del
+// singleton — i moduli restano testabili in isolamento.
 
 /**
  * Helper privato per l'upload di un'immagine su Supabase Storage
  */
 const uploadImage = async (
+  supabase: DbClient,
   file: File,
   userId: string,
   bucket: string,
@@ -65,7 +72,7 @@ const uploadImage = async (
 /**
  * Helper privato per eliminare un'immagine da Supabase Storage
  */
-const deleteImage = async (filePath: string, bucket: string): Promise<void> => {
+const deleteImage = async (supabase: DbClient, filePath: string, bucket: string): Promise<void> => {
   try {
     const { error } = await supabase.storage
       .from(bucket)
@@ -84,42 +91,42 @@ const deleteImage = async (filePath: string, bucket: string): Promise<void> => {
 /**
  * Helper privato per ottenere l'URL pubblico di un'immagine
  */
-const getImageUrl = (filePath: string, bucket: string): string | null => {
+const getImageUrl = (supabase: DbClient, filePath: string, bucket: string): string | null => {
   if (!filePath) return null
-  
+
   const { data: { publicUrl } } = supabase.storage
     .from(bucket)
     .getPublicUrl(filePath)
-  
+
   return publicUrl
 }
 
 /**
  * Upload un'immagine del gioco su Supabase Storage
  */
-export const uploadGameImage = async (file: File, userId: string): Promise<UploadResult> => {
-  return uploadImage(file, userId, 'game-images', 5)
+export const uploadGameImage = async (supabase: DbClient, file: File, userId: string): Promise<UploadResult> => {
+  return uploadImage(supabase, file, userId, 'game-images', 5)
 }
 
 /**
  * Upload un'immagine del profilo del giocatore su Supabase Storage
  */
-export const uploadPlayerImage = async (file: File, userId: string): Promise<UploadResult> => {
-  return uploadImage(file, userId, 'player-images', 2, 'avatars')
+export const uploadPlayerImage = async (supabase: DbClient, file: File, userId: string): Promise<UploadResult> => {
+  return uploadImage(supabase, file, userId, 'player-images', 2, 'avatars')
 }
 
 /**
  * Elimina un'immagine del profilo del giocatore da Supabase Storage
  */
-export const deletePlayerImage = async (filePath: string): Promise<void> => {
-  return deleteImage(filePath, 'player-images')
+export const deletePlayerImage = async (supabase: DbClient, filePath: string): Promise<void> => {
+  return deleteImage(supabase, filePath, 'player-images')
 }
 
 /**
  * Ottiene l'URL pubblico di un'immagine del profilo dal path
  */
-export const getPlayerImageUrl = (filePath: string): string | null => {
-  return getImageUrl(filePath, 'player-images')
+export const getPlayerImageUrl = (supabase: DbClient, filePath: string): string | null => {
+  return getImageUrl(supabase, filePath, 'player-images')
 }
 
 /**

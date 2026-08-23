@@ -5,6 +5,7 @@ import { Image as ImageIcon, Save, CheckCircle, ExternalLink } from 'lucide-reac
 import toast from 'react-hot-toast'
 import Spinner from '../components/Spinner'
 import type { DbGame } from '../types/rows'
+import { listGamesWithoutImages } from '../services/games'
 
 const Images = () => {
   const { user, loading: authLoading } = useAuth()
@@ -26,18 +27,9 @@ const Images = () => {
     try {
       // Solo i giochi dell'utente loggato: le azioni di gestione (upload)
       // su giochi altrui fallirebbero per RLS (fix TD-026)
-      const { data, error } = await supabase
-        .from('games')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('name', { ascending: true })
+      const data = await listGamesWithoutImages(supabase, user!.id)
 
-      if (error) {
-        toast.error('Errore durante il caricamento dei giochi')
-        return
-      }
-
-      const gamesWithoutImages = (data ?? []).filter(g => !g.image_url || g.image_url === '')
+      const gamesWithoutImages = data.filter(g => !g.image_url || g.image_url === '')
       setGames(gamesWithoutImages)
 
       const inputs: Record<string, string> = {}

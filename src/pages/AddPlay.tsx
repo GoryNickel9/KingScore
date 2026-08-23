@@ -6,6 +6,8 @@ import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { performFullRecalc } from '../utils/elo/recalc'
 import { assignPositions } from '../utils/elo/positions'
+import { listUserGames, createGame } from '../services/games'
+import { listUserPlayers, createPlayer } from '../services/players'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
 import type { DbGame, DbPlayer } from '../types/rows'
@@ -92,12 +94,7 @@ const AddPlay = () => {
 
   const fetchGames = async (): Promise<void> => {
     try {
-      const { data } = await supabase
-        .from('games')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('name')
-      setGames(data ?? [])
+      setGames(await listUserGames(supabase, user!.id))
     } catch (error) {
       console.error('Error fetching games:', error)
     }
@@ -106,12 +103,7 @@ const AddPlay = () => {
   const fetchPlayers = async (): Promise<void> => {
     if (!user) return
     try {
-      const { data } = await supabase
-        .from('players')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name')
-      setPlayers(data ?? [])
+      setPlayers(await listUserPlayers(supabase, user.id))
     } catch (error) {
       console.error('Error fetching players:', error)
     }
@@ -249,7 +241,7 @@ const AddPlay = () => {
           const compressedImage = await compressImage(imageFile, 800, 0.8)
 
           // Carica l'immagine
-          const { publicUrl } = await uploadGameImage(compressedImage as unknown as File, user!.id)
+          const { publicUrl } = await uploadGameImage(supabase, compressedImage as unknown as File, user!.id)
           imageUrl = publicUrl
           toast.success('Immagine caricata con successo!')
         } catch (uploadError) {
@@ -258,19 +250,13 @@ const AddPlay = () => {
         }
       }
 
-      const { data, error } = await supabase
-        .from('games')
-        .insert({
-          user_id: user!.id,
-          name: newGame.name,
-          min_players: newGame.minPlayers ? parseInt(newGame.minPlayers) : null,
-          max_players: newGame.maxPlayers ? parseInt(newGame.maxPlayers) : null,
-          image_url: imageUrl
-        })
-        .select()
-        .single()
-
-      if (error) throw error
+      const data = await createGame(supabase, {
+        user_id: user!.id,
+        name: newGame.name,
+        min_players: newGame.minPlayers ? parseInt(newGame.minPlayers) : null,
+        max_players: newGame.maxPlayers ? parseInt(newGame.maxPlayers) : null,
+        image_url: imageUrl
+      })
 
       setFormData(prev => ({
         ...prev,
@@ -355,18 +341,8 @@ const AddPlay = () => {
       for (const tempId of newPlayers) {
         const player = players.find(p => p.id === tempId) as TempPlayer | undefined
         if (player) {
-          const { data, error } = await supabase
-            .from('players')
-            .insert({
-              user_id: user!.id,
-              name: player.name,
-              is_me: false
-            })
-            .select()
-            .single()
-
-          if (error) throw error
-          createdPlayers.push({ tempId, newId: data.id })
+          const created = await createPlayer(supabase, { user_id: user!.id, name: player.name })
+          createdPlayers.push({ tempId, newId: created.id })
         }
       }
 

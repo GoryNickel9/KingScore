@@ -301,6 +301,19 @@ I lookup di `plays` (riga 498) e `players` (riga 530) filtrano correttamente per
 
 ## Stato implementazione
 
+> **Nota (2026-08-23)**: Fasi 0, 1 e 2 completate. La Fase 3 è stata avviata
+> nella sua forma a valore reale (3.1) e chiusa: le voci 3.2/3.3 restano
+> differite con i trigger di crescita documentati nella sezione "Debito
+> accettato". Vedi dettaglio qui sotto.
+
+### Fase 3 — Lungo termine
+
+| Item | Stato | Note |
+|------|-------|------|
+| 3.1 Layer dati `src/services/*` | ✅ (2026-08-23, forma pragmatica) | Nuovi servizi con client iniettato: `games.ts` (listUserGames, listGamesWithoutImages, createGame), `players.ts` (listUserPlayers, createPlayer), `bgaImport.ts` (Fase 2); `imageUpload.ts` convertito a client iniettato (ultimo modulo non-service). Le query duplicate tra pagine sono centralizzate; le query analitiche pagina-specifiche restano inline **per scelta**: spostarle ora, senza test di componente a cui dare servizio, sarebbe puro rimescolamento ad alto rischio di regressione silenziosa. Da riprendere solo insieme all'introduzione dei test di componente. |
+| 3.2 Paginazione/streaming Stats/Wrapped | ⏳ differito | Trigger: oltre ~5.000 partite o lentezza percepita (debito accettato). |
+| 3.3 ELO lato database | ⏳ differito | Trigger: crescita della base utenti (debito accettato). |
+
 ### Fase 0 — Quick win — ✅ completata il 2026-08-23
 
 | Item | Stato | Note |

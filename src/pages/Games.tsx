@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getErrorMessage } from '../utils/errors'
+import { listUserGames } from '../services/games'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 import type { DbGame } from '../types/rows'
@@ -62,11 +63,9 @@ const Games = () => {
         return
       }
 
-      // Giochi: i propri quando loggati (modifica/eliminazione funzionano solo
-      // sui propri per RLS — fix TD-026), tutti per la navigazione anonima
-      let gamesQuery = supabase.from('games').select('*')
-      if (user) gamesQuery = gamesQuery.eq('user_id', user.id)
-      const { data: gamesData } = await gamesQuery
+      // Giochi: solo i propri — modifica/eliminazione funzionano soltanto sui
+      // propri per RLS (fix TD-026); la guardia qui sopra esclude gli anonimi
+      const gamesData = await listUserGames(supabase, user.id)
 
       if (!gamesData) {
         setGames([])
