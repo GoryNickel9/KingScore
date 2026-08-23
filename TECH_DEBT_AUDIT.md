@@ -342,8 +342,8 @@ pull` per catturare drift schema vs migrazioni (richiede Docker attivo).
 |------|-------|------|
 | TD-010/011/012 tipi generati e unificati | ✅ (2026-08-23) | `src/types/db.ts` generato dal DB reale (`supabase gen types --linked`); client tipizzato `createClient<Database>`; `src/types/rows.ts` modulo unico dei tipi Row/join; 28 interfacce `Db*` locali rimosse (restano solo 2 view model: `DbGameWithStats`, `DbEloGame`); asserzioni `as` da ~40 a 8 (tutte legittime); `types/index.ts` ripulito dei tipi dominio divergenti (restano solo Auth/Nav/Upload). Contratti `getGeneralELO`/`getAllGeneralELO` raddrizzati sui tipi reali (TD-012). Bonus emersi dal tipo stretto: nullabilità reale gestita (`winner`, `game_id`, `player_id`, `rating.losses` nullable nel DB), guard `played_at` mancante nell'import, fix aggregazione Dashboard con `game_id` nullo. |
 | TD-006 decisione RLS | ⏳ | Richiede decisione di prodotto (vedi anche TD-026). |
-| TD-018 import bulk | ⏳ | Prossimo. |
-| TD-022 estrazione assignPositions | ⏳ | Prossimo. |
+| TD-018 import bulk | ✅ (2026-08-23) | `src/services/bgaImport.ts`: pre-caricamento di partite/giochi/giocatori con 3 query parallele + lookup in memoria. Da ~2000 richieste (100 partite × 4 giocatori) a ~2 per partita + 3. `play_scores` resta per-partita (non bulk finale) per mantenere l'isolamento degli errori: una partita o è completa o è errore. Import.tsx: 695 → 568 righe (solo parsing/UI). |
+| TD-022 estrazione assignPositions | ✅ (2026-08-23) | `src/utils/elo/positions.ts`: fonte unica di verità (algoritmo identico al core ELO + caso cooperativo), usata da simulation.ts, AddPlay ed EditPlay. Le 3 varianti divergenti sono eliminate. EditPlay ora ricalcola le posizioni da winner/score (prima riusava posizioni stale del form, il campo è stato rimosso). 7 unit test dedicati + parità verificata dai 36 test di caratterizzazione. |
 | TD-004/TD-002 finale RPC transazionali | ⏳ | |
 
 ---
