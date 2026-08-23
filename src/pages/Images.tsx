@@ -24,9 +24,12 @@ const Images = () => {
 
   const fetchGamesWithoutImages = async (): Promise<void> => {
     try {
+      // Solo i giochi dell'utente loggato: le azioni di gestione (upload)
+      // su giochi altrui fallirebbero per RLS (fix TD-026)
       const { data, error } = await supabase
         .from('games')
         .select('*')
+        .eq('user_id', user!.id)
         .order('name', { ascending: true })
 
       if (error) {

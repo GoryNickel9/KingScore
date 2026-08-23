@@ -18,9 +18,15 @@ In Fase 1 del piano di remediazione del debito tecnico
 - riportate sotto controllo di versione insieme a `supabase/config.toml`.
 
 **Nota**: le migrazioni 11–15 (policy RLS) si sovrascrivono a vicenda e
-raccontano un decisione invertita più volte. Lo stato finale di un replay
+raccontano una decisione invertita più volte. Lo stato finale di un replay
 completo è: lettura pubblica (`USING (true)`) su plays e elo_history.
-Vedi TD-006 nell'audit per la decisione ancora da formalizzare.
+
+**Decisione formalizzata (2026-08-23, TD-006 opzione 3)**: la lettura pubblica
+di tutte le tabelle dati è una scelta di prodotto intenzionale — statistiche
+condivise del gruppo — non un disallineamento. Le scritture restano
+private per utente. Se in futuro si vorrà una modalità privata, aggiungere
+una colonna di visibilità (es. `is_public`) e policy dedicate, senza toccare
+questo storico.
 
 ## Allineamento con il database remoto (da fare una volta)
 

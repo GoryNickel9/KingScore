@@ -95,6 +95,7 @@ const AddPlay = () => {
       const { data } = await supabase
         .from('games')
         .select('*')
+        .eq('user_id', user!.id)
         .order('name')
       setGames(data ?? [])
     } catch (error) {

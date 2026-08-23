@@ -62,10 +62,11 @@ const Games = () => {
         return
       }
 
-      // Fetch all games
-      const { data: gamesData } = await supabase
-        .from('games')
-        .select('*')
+      // Giochi: i propri quando loggati (modifica/eliminazione funzionano solo
+      // sui propri per RLS — fix TD-026), tutti per la navigazione anonima
+      let gamesQuery = supabase.from('games').select('*')
+      if (user) gamesQuery = gamesQuery.eq('user_id', user.id)
+      const { data: gamesData } = await gamesQuery
 
       if (!gamesData) {
         setGames([])
