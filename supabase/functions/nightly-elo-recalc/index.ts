@@ -20,7 +20,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { performFullRecalc } from '../../../src/utils/elo/recalc.ts'
 
 const STALE_RUN_MINUTES = 10
-const MAX_PLAYS = 10000
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -81,15 +80,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Tutti gli utenti con almeno una partita
+    // Tutti gli utenti con almeno una partita (RPC dedicata: DISTINCT nel DB
+    // invece di scaricare fino a 10.000 righe da plays — TD-020)
     const { data: playUsers, error: usersError } = await supabase
-      .from('plays')
-      .select('user_id')
-      .not('user_id', 'is', null)
-      .limit(MAX_PLAYS)
+      .rpc('get_play_user_ids')
     if (usersError) throw new Error(usersError.message)
 
-    const userIds = [...new Set((playUsers ?? []).map((row: { user_id: string }) => row.user_id))]
+    const userIds = (playUsers ?? []).map((row: { user_id: string }) => row.user_id)
 
     const results: Array<Record<string, unknown>> = []
     const failures: Array<{ userId: string; error: string }> = []
