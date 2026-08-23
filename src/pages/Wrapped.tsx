@@ -3,35 +3,7 @@ import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 import { Trophy, Calendar, TrendingUp, Award, Clock, Sparkles } from 'lucide-react'
 import { BarChart, Bar, LineChart, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-}
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  players?: DbPlayer
-}
-
-interface DbPlay {
-  id: string
-  game_id: string
-  played_at: string
-  duration_minutes?: number | null
-  games?: DbGame
-  play_scores?: DbPlayScore[]
-}
+import type { DbGame, DbPlayer, DbPlayWithScores } from '../types/rows'
 
 interface EloEntry {
   player_id: string
@@ -81,7 +53,7 @@ interface WrappedStats {
   wins?: number
   winRate?: number
   bestGame?: { game: DbGame; wins: number } | null
-  longestGame?: { play: DbPlay; duration: number } | null
+  longestGame?: { play: DbPlayWithScores; duration: number } | null
   busiestDay?: { date: string; count: number } | null
 }
 
@@ -129,7 +101,7 @@ const Wrapped = () => {
     // Carica giocatori
     const { data: playersData } = await supabase
       .from('players')
-      .select('id, name, alias')
+      .select('*')
       .order('name', { ascending: true })
     
     if (playersData) {
@@ -161,10 +133,10 @@ const Wrapped = () => {
     }
 
     // Filtra partite per giocatore se selezionato
-    let filteredPlays = plays as DbPlay[]
+    let filteredPlays: DbPlayWithScores[] = plays
     if (selectedPlayerId) {
       filteredPlays = plays.filter(play =>
-        play.play_scores?.some((score: DbPlayScore) => score.player_id === selectedPlayerId)
+        play.play_scores?.some((score) => score.player_id === selectedPlayerId)
       )
     }
 
@@ -261,7 +233,7 @@ const Wrapped = () => {
     }
   }
 
-  const calculateStats = (plays: DbPlay[], playerId?: string): WrappedStats => {
+  const calculateStats = (plays: DbPlayWithScores[], playerId?: string): WrappedStats => {
     const totalPlays = plays.length
     const totalHours = plays.reduce((sum, play) => sum + (play.duration_minutes || 0), 0) / 60
     
@@ -272,7 +244,7 @@ const Wrapped = () => {
     const gameCounts = new Map<string, { game: DbGame; count: number; wins: number }>()
     plays.forEach(play => {
       if (!play.games) return
-      const current = gameCounts.get(play.game_id) || { game: play.games, count: 0, wins: 0 }
+      const current = gameCounts.get(play.game_id ?? "") || { game: play.games, count: 0, wins: 0 }
       current.count++
       
       if (playerId) {
@@ -282,7 +254,7 @@ const Wrapped = () => {
         }
       }
       
-      gameCounts.set(play.game_id, current)
+      gameCounts.set(play.game_id ?? "", current)
     })
 
     let topGame: { game: DbGame; count: number; winRate?: number } | null = null
@@ -342,7 +314,7 @@ const Wrapped = () => {
     }
 
     // Partita più lunga
-    let longestGame: { play: DbPlay; duration: number } | null = null
+    let longestGame: { play: DbPlayWithScores; duration: number } | null = null
     const playsWithDuration = plays.filter(p => p.duration_minutes && p.duration_minutes > 0)
     if (playsWithDuration.length > 0) {
       const longest = playsWithDuration.reduce((max, play) =>

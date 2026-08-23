@@ -5,40 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy, Users } from 'lucide-react'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  players?: DbPlayer
-}
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-}
-
-interface DbPlay {
-  id: string
-  game_id: string
-  played_at: string
-  location?: string | null
-  duration_minutes?: number | null
-  source?: string
-  notes?: string | null
-  is_cooperative?: boolean
-  team_won?: boolean | null
-  games?: DbGame
-  play_scores?: DbPlayScore[]
-}
+import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface Filters {
   search: string
@@ -51,8 +18,8 @@ interface Filters {
 
 const Plays = () => {
   const { user } = useAuth()
-  const [plays, setPlays] = useState<DbPlay[]>([])
-  const [filteredPlays, setFilteredPlays] = useState<DbPlay[]>([])
+  const [plays, setPlays] = useState<DbPlayWithScores[]>([])
+  const [filteredPlays, setFilteredPlays] = useState<DbPlayWithScores[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [filters, setFilters] = useState<Filters>({
@@ -93,7 +60,7 @@ const Plays = () => {
         `)
         .order('played_at', { ascending: false })
 
-      setPlays((data ?? []) as DbPlay[])
+      setPlays(data ?? [])
     } catch (error) {
       console.error('Error fetching plays:', error)
     } finally {
@@ -139,7 +106,7 @@ const Plays = () => {
 
   const getUniqueGames = (): DbGame[] => {
     const games = [...new Set(plays.map(p => p.game_id))]
-    return games.map(id => plays.find(p => p.game_id === id)?.games).filter(Boolean) as DbGame[]
+    return games.map(id => plays.find(p => p.game_id === id)?.games).filter((g): g is DbGame => Boolean(g))
   }
 
   const getUniqueYears = (): number[] => {
@@ -147,7 +114,7 @@ const Plays = () => {
     return years.sort((a, b) => b - a)
   }
 
-  const getWinners = (play: DbPlay): string => {
+  const getWinners = (play: DbPlayWithScores): string => {
     const winners = play.play_scores?.filter(s => s.winner) || []
     if (winners.length === 0) return '—'
     const names = winners.map(s => s.players?.alias || s.players?.name || 'Unknown')

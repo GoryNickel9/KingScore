@@ -6,44 +6,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
 } from 'recharts'
+import type { DbGame } from '../types/rows'
 import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculator'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-  avatar_url?: string | null
-  color?: string | null
-}
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-  min_players?: number | null
-  max_players?: number | null
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  position?: number | null
-  players?: DbPlayer
-}
-
-interface DbPlay {
-  id: string
-  game_id: string
-  played_at: string
-  duration_minutes?: number | null
-  games?: DbGame
-  play_scores?: DbPlayScore[]
-  user_id?: string
-}
 
 interface WinRateEntry {
   gameId: string
@@ -195,7 +161,7 @@ const Stats = () => {
         return
       }
 
-      const plays = playsData as DbPlay[]
+      const plays = playsData ?? []
 
       // Calculate Win Rate by Game (Top 10) - only for logged in users
       const gameWinRates: Record<string, { total: number; wins: number }> = {}
@@ -203,7 +169,7 @@ const Stats = () => {
 
       if (myPlayer) {
         plays.forEach(play => {
-          const gameId = play.game_id
+          const gameId = play.game_id ?? ""
           const myScore = play.play_scores?.find(s => s.player_id === myPlayer?.id)
 
           if (!gameWinRates[gameId]) {
@@ -234,7 +200,7 @@ const Stats = () => {
       const playerCounts: Record<string, number> = {}
       plays.forEach(play => {
         play.play_scores?.forEach(score => {
-          const playerId = score.player_id
+          const playerId = score.player_id ?? ""
           playerCounts[playerId] = (playerCounts[playerId] || 0) + 1
         })
       })
@@ -269,7 +235,7 @@ const Stats = () => {
 
       const gameCountsThisMonth: Record<string, number> = {}
       monthPlays.forEach(play => {
-        const gameId = play.game_id
+        const gameId = play.game_id ?? ""
         gameCountsThisMonth[gameId] = (gameCountsThisMonth[gameId] || 0) + 1
       })
 
@@ -291,7 +257,7 @@ const Stats = () => {
 
       const gameCountsPreviousMonth: Record<string, number> = {}
       previousMonthPlays.forEach(play => {
-        const gameId = play.game_id
+        const gameId = play.game_id ?? ""
         gameCountsPreviousMonth[gameId] = (gameCountsPreviousMonth[gameId] || 0) + 1
       })
 
@@ -311,7 +277,7 @@ const Stats = () => {
       // Calculate stats for all games (NEW: per game statistics)
       const allGamesStats: Record<string, GameStats> = {}
       plays.forEach(play => {
-        const gameId = play.game_id
+        const gameId = play.game_id ?? ""
         const game = play.games
 
         if (!allGamesStats[gameId]) {
@@ -330,7 +296,7 @@ const Stats = () => {
 
         // Calculate average score per player
         play.play_scores?.forEach(score => {
-          const playerId = score.player_id
+          const playerId = score.player_id ?? ""
           const player = score.players
 
           if (!allGamesStats[gameId].players[playerId]) {

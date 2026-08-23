@@ -7,16 +7,7 @@ import toast from 'react-hot-toast'
 import { uploadPlayerImage, deletePlayerImage, getPlayerImageUrl } from '../utils/imageUpload'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import Spinner from '../components/Spinner'
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-  avatar_url?: string | null
-  color?: string | null
-  is_me?: boolean
-  user_id?: string
-}
+import type { DbPlayer } from '../types/rows'
 
 interface PlayerStats {
   totalPlays: number
@@ -62,10 +53,10 @@ const Players = () => {
         .order('name')
 
       if (data) {
-        setPlayers(data as DbPlayer[])
+        setPlayers(data)
 
         // Fetch stats for all players in a single batch query
-        const playerIds = (data as DbPlayer[]).map(p => p.id)
+        const playerIds = data.map(p => p.id)
         const stats: Record<string, PlayerStats> = {}
 
         if (playerIds.length > 0) {
@@ -74,10 +65,10 @@ const Players = () => {
             .select('player_id, winner')
             .in('player_id', playerIds)
 
-          for (const player of data as DbPlayer[]) {
-            const playerPlays = (allPlaysData || []).filter((s: { player_id: string; winner: boolean }) => s.player_id === player.id)
+          for (const player of data) {
+            const playerPlays = (allPlaysData || []).filter((s) => s.player_id === player.id)
             const totalPlays = playerPlays.length
-            const wins = playerPlays.filter((s: { player_id: string; winner: boolean }) => s.winner).length
+            const wins = playerPlays.filter((s) => s.winner).length
             stats[player.id] = {
               totalPlays,
               winRate: totalPlays > 0 ? Math.round((wins / totalPlays) * 100) : 0

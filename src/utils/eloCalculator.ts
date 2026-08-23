@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '../types/db'
 import { simulateAllPlays } from './elo/simulation'
 import type { SimulationPlay } from './elo/simulation'
 import { performFullRecalc } from './elo/recalc'
 import type { RecalcSummary } from './elo/recalc'
+import type { DbGeneralRatingWithPlayer, DbPlayerGeneralRating } from '../types/rows'
 
 // Le formule ELO pure vivono nel core condiviso con l'Edge Function notturna
 // (src/utils/elo/simulation.ts); riesportate per retrocompatibilità.
@@ -35,15 +37,6 @@ export type { PlayerInput, EloResult } from './elo/simulation'
  */
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
-
-interface GeneralELOResult {
-  playerId: string
-  rating: number
-  gamesPlayed: number
-  wins: number
-  losses: number
-  draws: number
-}
 
 interface ELOHistoryEntry {
   date: string
@@ -81,7 +74,7 @@ interface ELOHistoryDBEntry {
 /**
  * Ottieni l'ELO Generale per un giocatore
  */
-export async function getGeneralELO(supabase: SupabaseClient, playerId: string): Promise<GeneralELOResult | null> {
+export async function getGeneralELO(supabase: SupabaseClient<Database>, playerId: string): Promise<DbPlayerGeneralRating | null> {
   try {
     const { data, error } = await supabase
       .from('player_general_ratings')
@@ -100,7 +93,7 @@ export async function getGeneralELO(supabase: SupabaseClient, playerId: string):
 /**
  * Ottieni tutti gli ELO Generali per un utente
  */
-export async function getAllGeneralELO(supabase: SupabaseClient, userId: string | null): Promise<GeneralELOResult[]> {
+export async function getAllGeneralELO(supabase: SupabaseClient<Database>, userId: string | null): Promise<DbGeneralRatingWithPlayer[]> {
   try {
     let query = supabase
       .from('player_general_ratings')
@@ -130,7 +123,7 @@ export async function getAllGeneralELO(supabase: SupabaseClient, userId: string 
  * Function notturna: unica lettura → simulazione in memoria → scritture
  * massive (~6-10 richieste totali).
  */
-export async function recalculateAllELO(supabase: SupabaseClient, userId: string): Promise<RecalcSummary> {
+export async function recalculateAllELO(supabase: SupabaseClient<Database>, userId: string): Promise<RecalcSummary> {
   return performFullRecalc(supabase, userId)
 }
 
@@ -139,7 +132,7 @@ export async function recalculateAllELO(supabase: SupabaseClient, userId: string
  * Viene chiamata da getELOHistoryForGame e getGeneralELOHistory in caso di cache miss.
  * Gli errori di chiave duplicata (es. chiamate concorrenti) vengono ignorati silenziosamente.
  */
-export async function saveELOHistoryEntries(supabase: SupabaseClient, entries: ELOHistoryDBEntry[]): Promise<void> {
+export async function saveELOHistoryEntries(supabase: SupabaseClient<Database>, entries: ELOHistoryDBEntry[]): Promise<void> {
   if (entries.length === 0) return
   const BATCH_SIZE = 500
   for (let i = 0; i < entries.length; i += BATCH_SIZE) {
@@ -159,7 +152,7 @@ export async function saveELOHistoryEntries(supabase: SupabaseClient, entries: E
  * Calcola lo storico degli ELO per un gioco specifico
  * Questa funzione simula il calcolo degli ELO nel tempo senza salvare nel database
  */
-export async function getELOHistoryForGame(supabase: SupabaseClient, gameId: string, userId: string | null = null): Promise<ELOHistoryEntry[]> {
+export async function getELOHistoryForGame(supabase: SupabaseClient<Database>, gameId: string, userId: string | null = null): Promise<ELOHistoryEntry[]> {
   try {
     // ── Controllo cache ───────────────────────────────────────────────────────
     const { data: cached, error: cacheError } = await supabase
@@ -250,7 +243,7 @@ export async function getELOHistoryForGame(supabase: SupabaseClient, gameId: str
  * Calcola lo storico degli ELO Generali
  * Questa funzione simula il calcolo degli ELO Generali nel tempo senza salvare nel database
  */
-export async function getGeneralELOHistory(supabase: SupabaseClient, userId: string | null = null): Promise<GeneralELOHistoryEntry[]> {
+export async function getGeneralELOHistory(supabase: SupabaseClient<Database>, userId: string | null = null): Promise<GeneralELOHistoryEntry[]> {
   try {
     // ── Controllo cache (solo per utenti autenticati) ─────────────────────────
     if (userId) {
@@ -352,7 +345,7 @@ export async function getGeneralELOHistory(supabase: SupabaseClient, userId: str
  * di tutte le partite N+1, N+2, … per lo stesso gioco.
  * Il ricalcolo completo avverrà alla prossima apertura di Stats.
  */
-export async function invalidateELOHistory(supabase: SupabaseClient, playId: string): Promise<void> {
+export async function invalidateELOHistory(supabase: SupabaseClient<Database>, playId: string): Promise<void> {
   try {
     // Recupera il game_id della partita modificata
     const { data: play, error: playError } = await supabase
@@ -369,7 +362,7 @@ export async function invalidateELOHistory(supabase: SupabaseClient, playId: str
     const { error: gameDeleteError } = await supabase
       .from('elo_history')
       .delete()
-      .eq('game_id', play.game_id)
+      .eq('game_id', play.game_id ?? '')
       .eq('is_general', false)
 
     if (gameDeleteError) throw gameDeleteError

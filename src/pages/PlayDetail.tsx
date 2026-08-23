@@ -7,43 +7,7 @@ import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 import { performFullRecalc } from '../utils/elo/recalc'
 import { Spinner } from '../components/Spinner'
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-  is_me?: boolean
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  position?: number | null
-  players?: DbPlayer
-}
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-}
-
-interface DbPlay {
-  id: string
-  game_id: string
-  played_at: string
-  location?: string | null
-  duration_minutes?: number | null
-  source?: string
-  notes?: string | null
-  user_id?: string
-  is_cooperative?: boolean
-  team_won?: boolean | null
-  games?: DbGame
-  play_scores?: DbPlayScore[]
-}
+import type { DbPlayWithScores } from '../types/rows'
 
 interface EloHistoryEntry {
   playId: string
@@ -62,7 +26,7 @@ const PlayDetail = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [play, setPlay] = useState<DbPlay | null>(null)
+  const [play, setPlay] = useState<DbPlayWithScores | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
@@ -86,11 +50,11 @@ const PlayDetail = () => {
             players(*)
           )
         `)
-        .eq('id', id)
+        .eq('id', id!)
         .single()
 
       if (data) {
-        setPlay(data as DbPlay)
+        setPlay(data)
 
         // Recupera lo storico ELO per questo gioco usando l'user_id del proprietario della partita
         if (data.game_id && data.user_id) {
@@ -107,13 +71,13 @@ const PlayDetail = () => {
 
         // Recupera gli ELO Generali per ogni giocatore
         if (data.play_scores && data.play_scores.length > 0) {
-          const eloPromises = (data.play_scores as DbPlayScore[]).map(async (score) => {
+          const eloPromises = (data.play_scores ?? []).map(async (score) => {
             try {
-              const generalELO = await getGeneralELO(supabase, score.player_id)
-              return { playerId: score.player_id, generalELO }
+              const generalELO = await getGeneralELO(supabase, score.player_id ?? "")
+              return { playerId: score.player_id ?? "", generalELO }
             } catch (error) {
-              console.error(`Error fetching general ELO for player ${score.player_id}:`, error)
-              return { playerId: score.player_id, generalELO: null }
+              console.error(`Error fetching general ELO for player ${score.player_id ?? ""}:`, error)
+              return { playerId: score.player_id ?? "", generalELO: null }
             }
           })
 
@@ -151,7 +115,7 @@ const PlayDetail = () => {
       const { error } = await supabase
         .from('plays')
         .delete()
-        .eq('id', id)
+        .eq('id', id!)
 
       if (error) throw error
 
@@ -425,7 +389,7 @@ const PlayDetail = () => {
                         {loadingElo ? (
                           <span className="text-slate-400">Caricamento...</span>
                         ) : (() => {
-                          const playerELO = getPlayerELO(score.player_id)
+                          const playerELO = getPlayerELO(score.player_id ?? "")
                           if (!playerELO) return <span className="text-slate-400">-</span>
 
                           const { currentRating, ratingChange } = playerELO
@@ -452,7 +416,7 @@ const PlayDetail = () => {
                       </td>
                       <td className="py-3 px-4">
                         {(() => {
-                          const playerGeneralELO = getPlayerGeneralELO(score.player_id)
+                          const playerGeneralELO = getPlayerGeneralELO(score.player_id ?? "")
                           if (!playerGeneralELO) return <span className="text-slate-400">-</span>
 
                           const { currentRating, ratingChange } = playerGeneralELO

@@ -7,19 +7,7 @@ import toast from 'react-hot-toast'
 import { performFullRecalc } from '../utils/elo/recalc'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-}
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-  is_me?: boolean
-}
+import type { DbGame, DbPlayer } from '../types/rows'
 
 interface TempPlayer {
   id: string
@@ -107,7 +95,7 @@ const AddPlay = () => {
         .from('games')
         .select('*')
         .order('name')
-      setGames((data || []) as DbGame[])
+      setGames(data ?? [])
     } catch (error) {
       console.error('Error fetching games:', error)
     }
@@ -121,7 +109,7 @@ const AddPlay = () => {
         .select('*')
         .eq('user_id', user.id)
         .order('name')
-      setPlayers((data || []) as DbPlayer[])
+      setPlayers(data ?? [])
     } catch (error) {
       console.error('Error fetching players:', error)
     }
@@ -288,7 +276,7 @@ const AddPlay = () => {
         gameName: data.name
       }))
 
-      setGames([...games, data as DbGame])
+      setGames([...games, data])
       setNewGame({ name: '', minPlayers: '', maxPlayers: '', imageUrl: '' })
       setImageFile(null)
       setImagePreview(null)

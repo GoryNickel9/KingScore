@@ -5,36 +5,7 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Users, TrendingUp, Calendar, Gamepad2, Trophy } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Spinner } from '../components/Spinner'
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  players?: DbPlayer
-}
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-  min_players?: number | null
-  max_players?: number | null
-}
-
-interface DbPlay {
-  id: string
-  game_id: string
-  played_at: string
-  location?: string | null
-  play_scores?: DbPlayScore[]
-}
+import type { DbGame, DbPlayWithScoresOnly } from '../types/rows'
 
 interface ScoreHistoryPoint {
   play: number
@@ -54,7 +25,7 @@ const GameDetail = () => {
   const { user } = useAuth()
 
   const [game, setGame] = useState<DbGame | null>(null)
-  const [plays, setPlays] = useState<DbPlay[]>([])
+  const [plays, setPlays] = useState<DbPlayWithScoresOnly[]>([])
   const [stats, setStats] = useState<GameStats>({
     totalPlays: 0,
     winRate: 0,
@@ -73,11 +44,11 @@ const GameDetail = () => {
       const { data: gameData } = await supabase
         .from('games')
         .select('*')
-        .eq('id', id)
+        .eq('id', id!)
         .single()
 
       if (gameData) {
-        setGame(gameData as DbGame)
+        setGame(gameData)
       }
 
       // Fetch plays for this game
@@ -91,11 +62,11 @@ const GameDetail = () => {
           )
         `)
         .eq('user_id', user!.id)
-        .eq('game_id', id)
+        .eq('game_id', id!)
         .order('played_at', { ascending: true })
 
       if (playsData) {
-        setPlays(playsData as DbPlay[])
+        setPlays(playsData)
 
         // Calculate stats
         const { data: myPlayer } = await supabase
@@ -111,7 +82,7 @@ const GameDetail = () => {
         let scoreCount = 0
         const scoreHistory: ScoreHistoryPoint[] = []
 
-        ;(playsData as DbPlay[]).forEach((play, index) => {
+        ;(playsData ?? []).forEach((play, index) => {
           // Check if I won
           if (myPlayer) {
             const myScore = play.play_scores?.find(s => s.player_id === myPlayer.id)

@@ -7,14 +7,7 @@ import toast from 'react-hot-toast'
 import { getErrorMessage } from '../utils/errors'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-  min_players?: number | null
-  max_players?: number | null
-}
+import type { DbGame } from '../types/rows'
 
 interface DbGameWithStats extends DbGame {
   playCount: number
@@ -103,7 +96,7 @@ const Games = () => {
         })
       }
 
-      const gamesWithStats: DbGameWithStats[] = (gamesData as DbGame[]).map(game => ({
+      const gamesWithStats: DbGameWithStats[] = gamesData.map(game => ({
         ...game,
         playCount: gameStats[game.id]?.count || 0,
         lastPlayed: gameStats[game.id]?.lastPlayed || null

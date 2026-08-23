@@ -6,43 +6,10 @@ import { ArrowLeft, Trophy, TrendingUp, Users, Calendar, Gamepad2 } from 'lucide
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import Spinner from '../components/Spinner'
+import type { DbGame, DbPlayer, DbPlay, DbPlayScore } from '../types/rows'
 
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-}
-
-interface DbPlayScoreNested {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-}
-
-interface DbPlayNested {
-  id: string
-  played_at: string
-  games?: DbGame
-  play_scores?: DbPlayScoreNested[]
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  plays?: DbPlayNested
-}
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-  avatar_url?: string | null
-  color?: string | null
-  is_me?: boolean
-}
+type DbPlayScoreNested = DbPlayScore & { plays: DbPlayNested | null }
+type DbPlayNested = DbPlay & { games: DbGame | null; play_scores: DbPlayScore[] | null }
 
 interface WinHistoryPoint {
   play: number
@@ -59,7 +26,7 @@ interface PlayerStats {
   winRate: number
   winRateVsMe: number
   mostPlayedGames: MostPlayedGame[]
-  recentPlays: DbPlayScore[]
+  recentPlays: DbPlayScoreNested[]
   winHistory: WinHistoryPoint[]
 }
 
@@ -88,11 +55,11 @@ const PlayerDetail = () => {
       const { data: playerData } = await supabase
         .from('players')
         .select('*')
-        .eq('id', id)
+        .eq('id', id!)
         .single()
 
       if (playerData) {
-        setPlayer(playerData as DbPlayer)
+        setPlayer(playerData)
       }
 
       // Fetch my player ID
@@ -114,10 +81,10 @@ const PlayerDetail = () => {
             play_scores(*)
           )
         `)
-        .eq('player_id', id)
+        .eq('player_id', id!)
 
       if (playScores) {
-        const scores = playScores as DbPlayScore[]
+        const scores = playScores ?? []
         const totalPlays = scores.length
         const wins = scores.filter(s => s.winner).length
 

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { Database } from '../types/db'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -12,4 +13,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Client tipizzato sullo schema reale: i risultati delle query (inclusi i
+// join annidati) sono tipizzati; le asserzioni `as` sulle select non servono più.
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)

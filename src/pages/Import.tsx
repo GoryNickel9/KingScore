@@ -521,6 +521,7 @@ const Import = () => {
           }
 
           if (!gameId) { errors++; addLog(`Impossibile creare gioco per ${play.bga_table_id}`, 'error'); continue }
+          if (!play.played_at) { errors++; addLog(`Data mancante per ${play.bga_table_id}`, 'error'); continue }
 
           const { data: newPlay, error: playError } = await supabase.from('plays')
             .insert({ user_id: user!.id, game_id: gameId, played_at: play.played_at, location: play.location, duration_minutes: play.duration_minutes, source: 'offline', bga_table_id: play.bga_table_id })

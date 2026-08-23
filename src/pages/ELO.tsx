@@ -6,42 +6,14 @@ import { getAllGeneralELO, recalculateAllELO } from '../utils/eloCalculator'
 import toast from 'react-hot-toast'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
+import type { DbGeneralRatingWithPlayer, DbPlayerRatingWithPlayer } from '../types/rows'
 
+/** View model: gioco con conteggio partite, costruito aggregando plays. */
 interface DbEloGame {
   id: string
   name: string
   image_url: string | null
   playCount: number
-}
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-  avatar_url?: string | null
-}
-
-interface DbPlayerRating {
-  id: string
-  player_id: string
-  game_id: string
-  rating: number
-  games_played: number
-  wins: number
-  losses: number
-  draws: number
-  players?: DbPlayer
-}
-
-interface DbGeneralRating {
-  id: string
-  player_id: string
-  rating: number
-  games_played: number
-  wins: number
-  losses: number
-  draws: number
-  players?: DbPlayer
 }
 
 interface MyPlayer {
@@ -53,12 +25,12 @@ const ELO = () => {
 
   const [games, setGames] = useState<DbEloGame[]>([])
   const [selectedGame, setSelectedGame] = useState<DbEloGame | null>(null)
-  const [ratings, setRatings] = useState<DbPlayerRating[]>([])
+  const [ratings, setRatings] = useState<DbPlayerRatingWithPlayer[]>([])
   const [myPlayer, setMyPlayer] = useState<MyPlayer | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
 
   // ELO Generale
-  const [generalRatings, setGeneralRatings] = useState<DbGeneralRating[]>([])
+  const [generalRatings, setGeneralRatings] = useState<DbGeneralRatingWithPlayer[]>([])
 
   // Pulsante temporaneo per calcolare ELO esistenti
   const [recalculatingAll, setRecalculatingAll] = useState<boolean>(false)
@@ -87,8 +59,8 @@ const ELO = () => {
 
       // Raggruppa i giochi e conta le partite
       const gameCounts: Record<string, DbEloGame> = {}
-      ;(data as unknown as { game_id: string; games: { name: string; image_url: string | null } | null }[])?.forEach(play => {
-        if (play.games) {
+      ;(data ?? []).forEach(play => {
+        if (play.games && play.game_id) {
           if (!gameCounts[play.game_id]) {
             gameCounts[play.game_id] = {
               id: play.game_id,
@@ -150,7 +122,7 @@ const ELO = () => {
         .order('rating', { ascending: false })
 
       if (error) throw error
-      setRatings((data ?? []) as DbPlayerRating[])
+      setRatings(data ?? [])
     } catch (error) {
       console.error('Errore nel recupero dei rating ELO:', error)
     } finally {
@@ -161,7 +133,7 @@ const ELO = () => {
   const fetchGeneralRatings = async (): Promise<void> => {
     try {
       const data = await getAllGeneralELO(supabase, user?.id ?? null)
-      setGeneralRatings(data as unknown as DbGeneralRating[])
+      setGeneralRatings(data)
     } catch (error) {
       console.error('Errore nel recupero degli ELO Generali:', error)
     }
@@ -261,8 +233,8 @@ const ELO = () => {
           <div className="space-y-3">
             {generalRatings.map((rating, index) => {
               const isMyPlayer = rating.player_id === myPlayer?.id
-              const badge = getRatingBadge(rating.rating)
-              const winRate = getWinRate(rating.wins, rating.losses, rating.draws)
+              const badge = getRatingBadge(rating.rating ?? 0)
+              const winRate = getWinRate(rating.wins ?? 0, rating.losses ?? 0, rating.draws ?? 0)
 
               return (
                 <div
@@ -282,7 +254,7 @@ const ELO = () => {
 
                     {rating.players?.avatar_url ? (
                       <img
-                        src={getPlayerImageUrl(rating.players.avatar_url!) ?? undefined}
+                        src={getPlayerImageUrl(rating.players?.avatar_url) ?? undefined}
                         alt={rating.players?.alias || rating.players?.name || 'Unknown'}
                         className="w-12 h-12 rounded-full object-cover"
                       />
@@ -318,7 +290,7 @@ const ELO = () => {
 
                   <div className="flex items-center space-x-6">
                     <div className="text-right">
-                      <p className={`text-3xl font-bold ${getRatingColor(rating.rating)}`}>
+                      <p className={`text-3xl font-bold ${getRatingColor(rating.rating ?? 0)}`}>
                         {rating.rating}
                       </p>
                       <p className="text-xs text-slate-400">ELO Generale</p>
@@ -419,8 +391,8 @@ const ELO = () => {
             <div className="space-y-3">
               {ratings.map((rating, index) => {
                 const isMyPlayer = rating.player_id === myPlayer?.id
-                const badge = getRatingBadge(rating.rating)
-                const winRate = getWinRate(rating.wins, rating.losses, rating.draws)
+                const badge = getRatingBadge(rating.rating ?? 0)
+                const winRate = getWinRate(rating.wins ?? 0, rating.losses ?? 0, rating.draws ?? 0)
 
                 return (
                   <div
@@ -440,7 +412,7 @@ const ELO = () => {
 
                       {rating.players?.avatar_url ? (
                         <img
-                          src={getPlayerImageUrl(rating.players.avatar_url!) ?? undefined}
+                          src={getPlayerImageUrl(rating.players?.avatar_url) ?? undefined}
                           alt={rating.players?.alias || rating.players?.name || 'Unknown'}
                           className="w-12 h-12 rounded-full object-cover"
                         />
@@ -476,7 +448,7 @@ const ELO = () => {
 
                     <div className="flex items-center space-x-6">
                       <div className="text-right">
-                        <p className={`text-3xl font-bold ${getRatingColor(rating.rating)}`}>
+                        <p className={`text-3xl font-bold ${getRatingColor(rating.rating ?? 0)}`}>
                           {rating.rating}
                         </p>
                         <p className="text-xs text-slate-400">ELO</p>

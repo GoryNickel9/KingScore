@@ -5,37 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Trophy, Gamepad2 } from 'lucide-react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Spinner } from '../components/Spinner'
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-  min_players?: number | null
-  max_players?: number | null
-}
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-}
-
-interface DbPlayScore {
-  id: string
-  player_id: string
-  score?: number | null
-  winner: boolean
-  players?: DbPlayer
-}
-
-interface DbPlay {
-  id: string
-  game_id: string
-  played_at: string
-  location?: string | null
-  games?: DbGame
-  play_scores?: DbPlayScore[]
-}
+import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface TopGame extends DbGame {
   playCount: number
@@ -49,7 +19,7 @@ interface MonthData {
 interface DashboardStats {
   totalPlays: number
   topPlayedGames: TopGame[]
-  recentPlays: DbPlay[]
+  recentPlays: DbPlayWithScores[]
   playsByMonth: MonthData[]
 }
 
@@ -81,16 +51,19 @@ const Dashboard = () => {
         .select('game_id, games(*)')
 
       if (playsData) {
-        const gameCounts = (playsData as unknown as DbPlay[]).reduce((acc: Record<string, number>, play) => {
+        const gameCounts = playsData.reduce<Record<string, number>>((acc, play) => {
+          if (!play.game_id) return acc
           acc[play.game_id] = (acc[play.game_id] || 0) + 1
           return acc
         }, {})
 
         const topPlayedIds = Object.entries(gameCounts).sort((a, b) => b[1] - a[1]).slice(0, 3)
-        const topPlayedGames: TopGame[] = topPlayedIds.map(([gameId, count]) => ({
-          ...((playsData as unknown as DbPlay[]).find(p => p.game_id === gameId)?.games as DbGame),
-          playCount: count
-        }))
+        const topPlayedGames: TopGame[] = topPlayedIds
+          .map(([gameId, count]) => {
+            const game = playsData.find(p => p.game_id === gameId)?.games
+            return game ? { ...game, playCount: count } : null
+          })
+          .filter((game): game is TopGame => game !== null)
 
         // Fetch recent plays with game info (public data)
         const { data: recentPlays } = await supabase
@@ -125,7 +98,7 @@ const Dashboard = () => {
             const date = new Date()
             date.setMonth(date.getMonth() - i)
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-            const count = (monthlyPlays as { played_at: string }[]).filter(p => p.played_at.startsWith(monthKey)).length
+            const count = monthlyPlays.filter(p => p.played_at.startsWith(monthKey)).length
 
             playsByMonth.push({
               month: monthNames[date.getMonth()],
@@ -137,7 +110,7 @@ const Dashboard = () => {
         setStats({
           totalPlays: totalPlays || 0,
           topPlayedGames,
-          recentPlays: (recentPlays ?? []) as DbPlay[],
+          recentPlays: recentPlays ?? [],
           playsByMonth
         })
       }

@@ -6,17 +6,7 @@ import { invalidateELOHistory } from '../utils/eloCalculator'
 import { Save, ArrowLeft, Gamepad2, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '../components/Spinner'
-
-interface DbGame {
-  id: string
-  name: string
-}
-
-interface DbPlayer {
-  id: string
-  name: string
-  alias?: string | null
-}
+import type { DbGame, DbPlayer } from '../types/rows'
 
 interface EditPlayerRow {
   id: string | null
@@ -81,7 +71,7 @@ const EditPlay = () => {
             players(*)
           )
         `)
-        .eq('id', id)
+        .eq('id', id!)
         .eq('user_id', user!.id)
         .single()
 
@@ -98,9 +88,9 @@ const EditPlay = () => {
           notes: data.notes || '',
           isCooperative: data.is_cooperative || false,
           teamWon: data.team_won ?? null,
-          players: data.play_scores?.map((score: { id: string; player_id: string; players?: DbPlayer; score: number | null; winner: boolean; position: number | null }) => ({
+          players: data.play_scores?.map(score => ({
             id: score.id,
-            playerId: score.player_id,
+            playerId: score.player_id ?? '',
             playerName: score.players?.alias || score.players?.name || '',
             score: score.score ?? '',
             winner: score.winner || false,
@@ -123,7 +113,7 @@ const EditPlay = () => {
         .from('games')
         .select('*')
         .order('name')
-      setGames((data ?? []) as DbGame[])
+      setGames(data ?? [])
     } catch (error) {
       console.error('Error fetching games:', error)
     }
@@ -136,7 +126,7 @@ const EditPlay = () => {
         .select('*')
         .eq('user_id', user!.id)
         .order('name')
-      setPlayers((data ?? []) as DbPlayer[])
+      setPlayers(data ?? [])
     } catch (error) {
       console.error('Error fetching players:', error)
     }
@@ -221,7 +211,7 @@ const EditPlay = () => {
           is_cooperative: formData.isCooperative,
           team_won: formData.isCooperative ? formData.teamWon : null
         })
-        .eq('id', id)
+        .eq('id', id!)
         .eq('user_id', user!.id)
         .select()
 
@@ -267,7 +257,7 @@ const EditPlay = () => {
       const { error: deleteError } = await supabase
         .from('play_scores')
         .delete()
-        .eq('play_id', id)
+        .eq('play_id', id!)
 
       if (deleteError) {
         throw new Error(`Errore eliminazione punteggi: ${deleteError.message}`)

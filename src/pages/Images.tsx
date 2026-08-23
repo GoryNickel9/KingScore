@@ -4,12 +4,7 @@ import { supabase } from '../lib/supabase'
 import { Image as ImageIcon, Save, CheckCircle, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Spinner from '../components/Spinner'
-
-interface DbGame {
-  id: string
-  name: string
-  image_url?: string | null
-}
+import type { DbGame } from '../types/rows'
 
 const Images = () => {
   const { user, loading: authLoading } = useAuth()
@@ -39,7 +34,7 @@ const Images = () => {
         return
       }
 
-      const gamesWithoutImages = ((data ?? []) as DbGame[]).filter(g => !g.image_url || g.image_url === '')
+      const gamesWithoutImages = (data ?? []).filter(g => !g.image_url || g.image_url === '')
       setGames(gamesWithoutImages)
 
       const inputs: Record<string, string> = {}
