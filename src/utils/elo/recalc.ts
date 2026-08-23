@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // Vite/tsc grazie ad allowImportingTsExtensions
 import { simulateAllPlays } from './simulation.ts'
 import type { SimulationPlay } from './simulation.ts'
+import { withRetry } from '../retry.ts'
 
 /**
  * Pipeline di ricalcolo completo ELO condivisa dal frontend (pulsante
@@ -77,10 +78,18 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks
 }
 
+// Le scritture batch vanno in retry con backoff sui fallimenti transitori
+// (5xx, timeout). Il rischio di righe duplicate in caso di timeout ambiguo è
+// accettato: l'intera pipeline è idempotente e ogni esecuzione riparte da
+// una delete, quindi l'esecuzione successiva ripulisce eventuali duplicati.
+const WRITE_RETRIES = 2
+
 async function insertInBatches(supabase: SupabaseClient, table: string, rows: Record<string, unknown>[]): Promise<void> {
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase.from(table).insert(batch)
-    if (error) throw new Error(`[performFullRecalc] Insert su ${table} fallito: ${error.message}`)
+    await withRetry(async () => {
+      const { error } = await supabase.from(table).insert(batch)
+      if (error) throw new Error(`[performFullRecalc] Insert su ${table} fallito: ${error.message}`)
+    }, { retries: WRITE_RETRIES })
   }
 }
 
@@ -91,8 +100,10 @@ async function upsertInBatches(
   onConflict: string
 ): Promise<void> {
   for (const batch of chunk(rows, BATCH_SIZE)) {
-    const { error } = await supabase.from(table).upsert(batch, { onConflict })
-    if (error) throw new Error(`[performFullRecalc] Upsert su ${table} fallito: ${error.message}`)
+    await withRetry(async () => {
+      const { error } = await supabase.from(table).upsert(batch, { onConflict })
+      if (error) throw new Error(`[performFullRecalc] Upsert su ${table} fallito: ${error.message}`)
+    }, { retries: WRITE_RETRIES })
   }
 }
 
@@ -125,11 +136,13 @@ export async function performFullRecalc(supabase: SupabaseClient, userId: string
   // La delete preventiva (come il vecchio ricalcolo per gioco) ripulisce anche
   // le righe residue di giocatori rimossi dalle partite di un gioco.
   for (const idChunk of chunk(gameIds, DELETE_ID_CHUNK)) {
-    const { error: deleteError } = await supabase
-      .from('player_ratings')
-      .delete()
-      .in('game_id', idChunk)
-    if (deleteError) throw new Error(`[performFullRecalc] Delete player_ratings fallita: ${deleteError.message}`)
+    await withRetry(async () => {
+      const { error: deleteError } = await supabase
+        .from('player_ratings')
+        .delete()
+        .in('game_id', idChunk)
+      if (deleteError) throw new Error(`[performFullRecalc] Delete player_ratings fallita: ${deleteError.message}`)
+    }, { retries: WRITE_RETRIES })
   }
 
   const ratingRows: PlayerRatingRow[] = []
@@ -169,13 +182,15 @@ export async function performFullRecalc(supabase: SupabaseClient, userId: string
   )
 
   // ── 4. elo_history: rigenera l'intera cache dell'utente ────────────────────
-  const { error: historyDeleteError } = await supabase
-    .from('elo_history')
-    .delete()
-    .eq('user_id', userId)
-  if (historyDeleteError) {
-    throw new Error(`[performFullRecalc] Delete elo_history fallita: ${historyDeleteError.message}`)
-  }
+  await withRetry(async () => {
+    const { error: historyDeleteError } = await supabase
+      .from('elo_history')
+      .delete()
+      .eq('user_id', userId)
+    if (historyDeleteError) {
+      throw new Error(`[performFullRecalc] Delete elo_history fallita: ${historyDeleteError.message}`)
+    }
+  }, { retries: WRITE_RETRIES })
 
   const historyRows: EloHistoryRow[] = [
     ...sim.gameHistory

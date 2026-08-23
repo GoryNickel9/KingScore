@@ -9,6 +9,7 @@ Job notturno che ricalcola automaticamente tutti i rating ELO (per gioco, Genera
 - Usa la **service role key** (env nativa dell'Edge runtime) che bypassa RLS: filtra sempre per `user_id`.
 - Ogni esecuzione è registrata in `elo_recalc_runs` (tabella creata dalla migrazione `add_elo_recalc_runs.sql`), che fa anche da guardia anti-sovrapposizione.
 - Accetta solo JWT con `role = service_role`: le invocazioni pianificate dalla dashboard usano proprio quel token; l'anon key viene rifiutata con 403.
+- Gli errori sono isolati per utente: se il ricalcolo di un utente fallisce, il job continua con i successivi e l'esecuzione viene registrata con status `succeeded_with_errors` (lista `failures` nel summary). `failed` solo se nessun utente è stato ricalcolato.
 
 ## Prerequisiti (una volta sola)
 
@@ -43,7 +44,7 @@ curl -X POST 'https://<PROJECT_REF>.supabase.co/functions/v1/nightly-elo-recalc'
   -H 'Authorization: Bearer <SERVICE_ROLE_KEY>'
 ```
 
-Risposta attesa: `{ "ok": true, "users": N, "results": [...] }` con il riepilogo per utente (partite processate, giochi, righe di storico, durata). Una seconda chiamata immediata risponde `skipped: true` (guardia anti-sovrapposizione).
+Risposta attesa: `{ "ok": true, "users": N, "processed": M, "failures": [...], "results": [...] }` con il riepilogo per utente (partite processate, giochi, righe di storico, durata). Una seconda chiamata immediata risponde `skipped: true` (guardia anti-sovrapposizione).
 
 ## Verifiche post-esecuzione
 
