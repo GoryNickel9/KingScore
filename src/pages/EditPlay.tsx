@@ -253,28 +253,26 @@ const EditPlay = () => {
         position: player.position
       }))
 
-      // Prima elimina tutti i punteggi esistenti
-      const { error: deleteError } = await supabase
-        .from('play_scores')
-        .delete()
-        .eq('play_id', id!)
+      // Sostituzione atomica dei punteggi (fix TD-004): delete + insert in
+      // un'unica transazione lato DB. Prima erano due richieste separate e un
+      // fallimento di rete in mezzo lasciava la partita senza punteggi — dati
+      // grezzi, non ricostruibili dal ricalcolo ELO.
+      const { data: insertedScores, error: replaceError } = await supabase.rpc('replace_play_scores', {
+        p_play_id: id!,
+        p_scores: scoresToInsert.map(({ player_id, score, winner, position }) => ({
+          player_id,
+          score,
+          winner,
+          position
+        }))
+      })
 
-      if (deleteError) {
-        throw new Error(`Errore eliminazione punteggi: ${deleteError.message}`)
-      }
-
-      // Poi inserisci i nuovi punteggi
-      const { error: insertError, data: insertData } = await supabase
-        .from('play_scores')
-        .insert(scoresToInsert)
-        .select()
-
-      if (insertError) {
-        throw new Error(`Errore inserimento punteggi: ${insertError.message}`)
+      if (replaceError) {
+        throw new Error(`Errore sostituzione punteggi: ${replaceError.message}`)
       }
 
       // Verifica che i punteggi siano stati inseriti correttamente
-      if (insertData?.length !== formData.players.length) {
+      if ((insertedScores ?? []).length !== formData.players.length) {
         throw new Error('Errore: non tutti i punteggi sono stati inseriti correttamente')
       }
 

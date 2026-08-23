@@ -336,7 +336,10 @@ exhaustive-deps, no-explicit-any, react-refresh), `npm run typecheck` pulito,
 18 versioni, deploy dell'Edge Function. Rimanuto opzionale: `supabase db
 pull` per catturare drift schema vs migrazioni (richiede Docker attivo).
 
-### Fase 2 — Medio termine — 🔄 in corso
+### Fase 2 — Medio termine — ✅ completata il 2026-08-23
+
+Rimane in sospeso solo ciò che è stato esplicitamente accettato (TD-002 finale,
+vedi sezione "Debito accettato"). Prossima: Fase 3.
 
 | Item | Stato | Note |
 |------|-------|------|
@@ -344,7 +347,7 @@ pull` per catturare drift schema vs migrazioni (richiede Docker attivo).
 | TD-006 decisione RLS | ✅ (2026-08-23) | Decisione dell'utente: **opzione 3 — tutto pubblico** (statistiche condivise del gruppo). Scelta intenzionale documentata in `supabase/migrations/README.md`; nessun cambio alle policy. |
 | TD-018 import bulk | ✅ (2026-08-23) | `src/services/bgaImport.ts`: pre-caricamento di partite/giochi/giocatori con 3 query parallele + lookup in memoria. Da ~2000 richieste (100 partite × 4 giocatori) a ~2 per partita + 3. `play_scores` resta per-partita (non bulk finale) per mantenere l'isolamento degli errori: una partita o è completa o è errore. Import.tsx: 695 → 568 righe (solo parsing/UI). |
 | TD-022 estrazione assignPositions | ✅ (2026-08-23) | `src/utils/elo/positions.ts`: fonte unica di verità (algoritmo identico al core ELO + caso cooperativo), usata da simulation.ts, AddPlay ed EditPlay. Le 3 varianti divergenti sono eliminate. EditPlay ora ricalcola le posizioni da winner/score (prima riusava posizioni stale del form, il campo è stato rimosso). 7 unit test dedicati + parità verificata dai 36 test di caratterizzazione. |
-| TD-004/TD-002 finale RPC transazionali | ⏳ | |
+| TD-004/TD-002 finale RPC transazionali | ✅ (2026-08-23) | **TD-004**: migrazione `20260823230432_replace_play_scores_rpc.sql` con `replace_play_scores(p_play_id, p_scores)` — delete+insert atomici in un'unica transazione, SECURITY DEFINER con verifica esplicita di ownership (`plays.user_id = auth.uid()`), invocabile solo da authenticated (anon verificato respinto con 42501). EditPlay usa la RPC e i tipi sono rigenerati. **TD-002 finale**: accettato con mitigazioni (vedi debitore accettato) — l'atomicità completa del ricalcolo richiederebbe di duplicare il core ELO TypeScript in PL/pgSQL, violando la fonte unica di verità; il rischio residuo riguarda solo cache derivate, auto-riparate dal job notturno idempotente. |
 
 ---
 
@@ -354,6 +357,7 @@ pull` per catturare drift schema vs migrazioni (richiede Docker attivo).
 |------|--------------------|------------------------------|
 | Dashboard pubblica con dati di tutti gli utenti (TD-006, lato query) | **Decisione presa (2026-08-23, opzione 3)**: scelta di prodotto intenzionale — statistiche condivise del gruppo — formalizzata in `supabase/migrations/README.md` | Prima richiesta di privacy da un utente / aggiunta di dati sensibili nelle note |
 | Caricamento full-table in Stats/Wrapped | Dimensione dataset personale piccola; funziona | Oltre ~5.000 partite o lentezza percepita |
+| Ricalcolo ELO bulk non atomico (TD-002 finale) | Riguarda SOLO cache derivate (player_ratings, elo_history): mai i dati grezzi. Mitigato da retry con backoff, isolamento per utente nel job notturno e idempotenza + self-heal notturno. L'atomicità completa richiederebbe di riscrivere il core ELO in PL/pgSQL, duplicando la fonte unica di verità | Se il dato parziale tra le scritture diventasse visibile/fastidioso in UI: approccio "shadow write" (nuove righe poi switch) senza toccare l'algoritmo |
 | `compare-elo.ts` come test manuale su DB reale | Serve proprio a verificare parità su dati reali | Sostituirlo solo quando la suite unitaria copre la semantica completa |
 | Migrazione a Next.js/SSR | Non è debito: è un'architettura SPA coerente con gli obiettivi | Requisiti SEO/rendering server reali |
 

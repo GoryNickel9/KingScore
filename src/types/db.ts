@@ -415,6 +415,25 @@ export type Database = {
           user_id: string
         }[]
       }
+      replace_play_scores: {
+        Args: { p_play_id: string; p_scores: Json }
+        Returns: {
+          color: string | null
+          id: string
+          play_id: string | null
+          player_id: string | null
+          position: number | null
+          role: string | null
+          score: number | null
+          winner: boolean | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "play_scores"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
     }
     Enums: {
       [_ in never]: never
