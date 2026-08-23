@@ -2,9 +2,10 @@
 -- (supabase/functions/nightly-elo-recalc).
 --
 -- Ogni esecuzione registra una riga: status "running" all'avvio, poi
--- "succeeded" o "failed". La funzione usa questa tabella anche come guardia
--- anti-sovrapposizione (un "running" più recente di 10 minuti blocca
--- rilanci concorrenti).
+-- "succeeded", "succeeded_with_errors" (alcuni utenti falliti) o "failed"
+-- (nessun utente ricalcolato). La funzione usa questa tabella anche come
+-- guardia anti-sovrapposizione (un "running" più recente di 10 minuti
+-- blocca rilanci concorrenti).
 
 CREATE TABLE IF NOT EXISTS elo_recalc_runs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

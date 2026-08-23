@@ -1,0 +1,13 @@
+# Configurazione Supabase CLI (vedi README in supabase/migrations per la
+# procedura di allineamento dello storico migrazioni).
+project_id = "rixivmeipbizoxyvrvaf"
+
+[functions.nightly-elo-recalc]
+# L'Edge Function accetta solo JWT service_role: la verifica firma della
+# piattaforma è obbligatoria perché il check interno decodifica il payload
+# senza validarne la firma.
+verify_jwt = true
+# Lo schedule NON è definito qui: resta configurato nella dashboard
+# (Edge Functions → Schedules) con timezone esplicita Europe/Rome, che
+# gestisce correttamente l'ora legale — un cron UTC in config.toml
+# scivolerebbe di un'ora per metà anno.

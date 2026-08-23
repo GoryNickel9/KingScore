@@ -63,8 +63,5 @@ id_ed25519.pub
 # Supabase sensitive files
 supabase/.env.local
 
-# Supabase migrations
-supabase/migrations/
-
-# Documentation
-docs/
+# Stato locale della Supabase CLI
+supabase/.temp/
