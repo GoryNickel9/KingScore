@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getErrorMessage } from '../utils/errors'
-import { listUserGames } from '../services/games'
+import { listGames } from '../services/games'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 import type { DbGame } from '../types/rows'
@@ -63,9 +63,9 @@ const Games = () => {
         return
       }
 
-      // Giochi: solo i propri — modifica/eliminazione funzionano soltanto sui
-      // propri per RLS (fix TD-026); la guardia qui sopra esclude gli anonimi
-      const gamesData = await listUserGames(supabase, user.id)
+      // La libreria giochi è condivisa (decisione TD-006): la tabella non ha
+      // user_id e la lettura è aperta a tutti gli autenticati per RLS
+      const gamesData = await listGames(supabase)
 
       if (!gamesData) {
         setGames([])

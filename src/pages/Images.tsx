@@ -25,9 +25,7 @@ const Images = () => {
 
   const fetchGamesWithoutImages = async (): Promise<void> => {
     try {
-      // Solo i giochi dell'utente loggato: le azioni di gestione (upload)
-      // su giochi altrui fallirebbero per RLS (fix TD-026)
-      const data = await listGamesWithoutImages(supabase, user!.id)
+      const data = await listGamesWithoutImages(supabase)
 
       const gamesWithoutImages = data.filter(g => !g.image_url || g.image_url === '')
       setGames(gamesWithoutImages)

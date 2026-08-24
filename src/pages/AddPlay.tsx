@@ -6,7 +6,7 @@ import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { performFullRecalc } from '../utils/elo/recalc'
 import { assignPositions } from '../utils/elo/positions'
-import { listUserGames, createGame } from '../services/games'
+import { listGames, createGame } from '../services/games'
 import { listUserPlayers, createPlayer } from '../services/players'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
@@ -94,7 +94,7 @@ const AddPlay = () => {
 
   const fetchGames = async (): Promise<void> => {
     try {
-      setGames(await listUserGames(supabase, user!.id))
+      setGames(await listGames(supabase))
     } catch (error) {
       console.error('Error fetching games:', error)
     }
