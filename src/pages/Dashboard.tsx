@@ -116,6 +116,8 @@ const Dashboard = () => {
       const { data: playsData } = await supabase
         .from('plays')
         .select('game_id, played_at, games(*)')
+        .order('played_at', { ascending: false })
+        .limit(10000) // oltre il cap predefinito di 1000 il risultato verrebbe troncato in silenzio
 
       if (playsData) {
         const topPlayedGames = computeTopGames(playsData)
@@ -132,6 +134,8 @@ const Dashboard = () => {
         const { data: scoresData } = await supabase
           .from('play_scores')
           .select('player_id, winner, players(*), plays(played_at)')
+          .order('play_id')
+          .limit(10000) // come sopra: play_scores ha più righe per partita, il cap arriva ancora prima
 
         const monthScores = (scoresData ?? []).filter(
           score => score.plays?.played_at.startsWith(monthKey)
