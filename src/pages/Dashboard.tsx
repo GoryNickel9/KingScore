@@ -7,6 +7,7 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, L
 import { Spinner } from '../components/Spinner'
 import { getWinnerNames } from '../utils/winners'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
+import { getPlayerImageUrl } from '../utils/imageUpload'
 import type { DbGame, DbPlayWithScores, DbPlayer } from '../types/rows'
 
 interface TopGame extends DbGame {
@@ -42,7 +43,7 @@ interface MonthData {
 interface TopPlayer {
   id: string
   name: string
-  avatar_url: string | null
+  avatarUrl: string | null
   playCount: number
   wins: number
   winRate: number
@@ -68,8 +69,8 @@ const computeTopPlayers = (scores: ScoreRowWithPlayer[]): TopPlayer[] => {
   return Array.from(perPlayer.entries())
     .map(([id, { player, total, wins }]) => ({
       id,
-      name: player?.name || 'Sconosciuto',
-      avatar_url: player?.avatar_url ?? null,
+      name: player?.alias || player?.name || 'Sconosciuto',
+      avatarUrl: player?.avatar_url ? getPlayerImageUrl(supabase, player.avatar_url) : null,
       playCount: total,
       wins,
       winRate: total > 0 ? Math.round((wins / total) * 100) : 0
@@ -361,9 +362,9 @@ const Dashboard = () => {
                   <div className="flex-shrink-0 w-8 h-8 bg-sky-500/20 rounded-full flex items-center justify-center">
                     <span className="text-sky-500 font-bold">{index + 1}</span>
                   </div>
-                  {player.avatar_url ? (
+                  {player.avatarUrl ? (
                     <img
-                      src={player.avatar_url}
+                      src={player.avatarUrl}
                       alt={player.name}
                       className="w-16 h-16 object-cover rounded-lg"
                     />
