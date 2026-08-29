@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Trophy, Gamepad2 } from 'lucide-react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Spinner } from '../components/Spinner'
+import { getWinnerNames } from '../utils/winners'
 import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface TopGame extends DbGame {
@@ -240,7 +241,9 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {stats.recentPlays.map((play) => (
+            {stats.recentPlays.map((play) => {
+              const winnerNames = getWinnerNames(play.play_scores)
+              return (
               <div
                 key={play.id}
                 className="flex items-center justify-between p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition cursor-pointer"
@@ -267,18 +270,15 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  {play.play_scores && play.play_scores.length > 0 && (
-                    <p className="text-sm text-slate-400">
-                      {play.play_scores.filter(s => s.winner).length > 0 && (
-                        <span className="text-emerald-500">
-                          {play.play_scores.find(s => s.winner)?.players?.alias || play.play_scores.find(s => s.winner)?.players?.name}
-                        </span>
-                      )}
+                  {winnerNames.length > 0 && (
+                    <p className="text-sm text-emerald-500">
+                      {winnerNames.join(', ')}
                     </p>
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

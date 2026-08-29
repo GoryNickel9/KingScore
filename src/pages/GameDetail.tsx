@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Users, TrendingUp, Calendar, Gamepad2, Trophy } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Spinner } from '../components/Spinner'
+import { getWinnerNames } from '../utils/winners'
 import type { DbGame, DbPlayWithScoresOnly } from '../types/rows'
 
 interface ScoreHistoryPoint {
@@ -262,7 +263,9 @@ const GameDetail = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {plays.slice().reverse().map((play) => (
+            {plays.slice().reverse().map((play) => {
+              const winnerNames = getWinnerNames(play.play_scores)
+              return (
               <Link
                 key={play.id}
                 to={`/plays/${play.id}`}
@@ -291,16 +294,17 @@ const GameDetail = () => {
                       <p className="text-sm text-slate-400">
                         {play.play_scores.length} giocatori
                       </p>
-                      {play.play_scores.find(s => s.winner) && (
+                      {winnerNames.length > 0 && (
                         <p className="text-sm text-emerald-500">
-                          {play.play_scores.find(s => s.winner)?.players?.alias || play.play_scores.find(s => s.winner)?.players?.name}
+                          {winnerNames.join(', ')}
                         </p>
                       )}
                     </div>
                   )}
                 </div>
               </Link>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
