@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Trophy, Gamepad2, CalendarDays } from 'lucide-react'
+import { Trophy, Gamepad2, CalendarDays, Medal } from 'lucide-react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Spinner } from '../components/Spinner'
 import { getWinnerNames } from '../utils/winners'
-import type { DbGame, DbPlayWithScores } from '../types/rows'
+import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
+import type { DbGame, DbPlayWithScores, DbPlayer } from '../types/rows'
 
 interface TopGame extends DbGame {
   playCount: number
@@ -16,9 +17,7 @@ interface PlayRowWithGame {
   game_id: string | null
   played_at: string
   games: DbGame | null
-}
-
-const computeTopGames = (plays: PlayRowWithGame[]): TopGame[] => {
+}const computeTopGames = (plays: PlayRowWithGame[]): TopGame[] => {
   const gameCounts = plays.reduce<Record<string, number>>((acc, play) => {
     if (!play.game_id) return acc
     acc[play.game_id] = (acc[play.game_id] || 0) + 1
@@ -40,10 +39,50 @@ interface MonthData {
   plays: number
 }
 
+interface TopPlayer {
+  id: string
+  name: string
+  avatar_url: string | null
+  playCount: number
+  wins: number
+  winRate: number
+}
+
+interface ScoreRowWithPlayer {
+  player_id: string | null
+  winner: boolean | null
+  players: DbPlayer | null
+  plays: { played_at: string } | null
+}
+
+const computeTopPlayers = (scores: ScoreRowWithPlayer[]): TopPlayer[] => {
+  const perPlayer = scores.reduce<Map<string, { player: DbPlayer | null; total: number; wins: number }>>((acc, score) => {
+    if (!score.player_id) return acc
+    const entry = acc.get(score.player_id) ?? { player: score.players, total: 0, wins: 0 }
+    entry.total++
+    if (score.winner) entry.wins++
+    acc.set(score.player_id, entry)
+    return acc
+  }, new Map())
+
+  return Array.from(perPlayer.entries())
+    .map(([id, { player, total, wins }]) => ({
+      id,
+      name: player?.name || 'Sconosciuto',
+      avatar_url: player?.avatar_url ?? null,
+      playCount: total,
+      wins,
+      winRate: total > 0 ? Math.round((wins / total) * 100) : 0
+    }))
+    .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins)
+    .slice(0, 3)
+}
+
 interface DashboardStats {
   totalPlays: number
   topPlayedGames: TopGame[]
   monthTopGames: TopGame[]
+  topPlayers: TopPlayer[]
   recentPlays: DbPlayWithScores[]
   playsByMonth: MonthData[]
 }
@@ -55,6 +94,7 @@ const Dashboard = () => {
     totalPlays: 0,
     topPlayedGames: [],
     monthTopGames: [],
+    topPlayers: [],
     recentPlays: [],
     playsByMonth: []
   })
@@ -85,6 +125,17 @@ const Dashboard = () => {
         const monthTopGames = computeTopGames(
           playsData.filter(play => play.played_at.startsWith(monthKey))
         )
+
+        // Fetch play scores with player info e data partita per la classifica
+        // win rate del mese corrente (public data)
+        const { data: scoresData } = await supabase
+          .from('play_scores')
+          .select('player_id, winner, players(*), plays(played_at)')
+
+        const monthScores = (scoresData ?? []).filter(
+          score => score.plays?.played_at.startsWith(monthKey)
+        )
+        const topPlayers = computeTopPlayers(monthScores)
 
         // Fetch recent plays with game info (public data)
         const { data: recentPlays } = await supabase
@@ -132,6 +183,7 @@ const Dashboard = () => {
           totalPlays: totalPlays || 0,
           topPlayedGames,
           monthTopGames,
+          topPlayers,
           recentPlays: recentPlays ?? [],
           playsByMonth
         })
@@ -287,6 +339,48 @@ const Dashboard = () => {
                   <div className="text-right">
                     <p className="text-2xl font-bold text-amber-500">{game.playCount}</p>
                     <p className="text-xs text-slate-400">partite</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Top Players by Win Rate - current month */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-bold text-white mb-4">Vittorie del mese</h2>
+          {stats.topPlayers.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <Medal className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nessuna partita giocata questo mese</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {stats.topPlayers.map((player, index) => (
+                <div key={player.id} className="flex items-center space-x-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-sky-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-sky-500 font-bold">{index + 1}</span>
+                  </div>
+                  {player.avatar_url ? (
+                    <img
+                      src={player.avatar_url}
+                      alt={player.name}
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className={`w-16 h-16 rounded-lg flex items-center justify-center text-white font-bold ${getAvatarColor(player.name)}`}>
+                      {getInitials(player.name)}
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">{player.name}</h3>
+                    <p className="text-slate-400 text-sm">
+                      {player.playCount} {player.playCount === 1 ? 'partita' : 'partite'} • {player.wins} {player.wins === 1 ? 'vittoria' : 'vittorie'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-sky-500">{player.winRate}%</p>
+                    <p className="text-xs text-slate-400">win rate</p>
                   </div>
                 </div>
               ))}
