@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Trophy, Gamepad2 } from 'lucide-react'
+import { Trophy, Gamepad2, CalendarDays } from 'lucide-react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Spinner } from '../components/Spinner'
 import { getWinnerNames } from '../utils/winners'
@@ -10,6 +10,29 @@ import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface TopGame extends DbGame {
   playCount: number
+}
+
+interface PlayRowWithGame {
+  game_id: string | null
+  played_at: string
+  games: DbGame | null
+}
+
+const computeTopGames = (plays: PlayRowWithGame[]): TopGame[] => {
+  const gameCounts = plays.reduce<Record<string, number>>((acc, play) => {
+    if (!play.game_id) return acc
+    acc[play.game_id] = (acc[play.game_id] || 0) + 1
+    return acc
+  }, {})
+
+  return Object.entries(gameCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([gameId, playCount]) => {
+      const game = plays.find(p => p.game_id === gameId)?.games
+      return game ? { ...game, playCount } : null
+    })
+    .filter((game): game is TopGame => game !== null)
 }
 
 interface MonthData {
@@ -20,6 +43,7 @@ interface MonthData {
 interface DashboardStats {
   totalPlays: number
   topPlayedGames: TopGame[]
+  monthTopGames: TopGame[]
   recentPlays: DbPlayWithScores[]
   playsByMonth: MonthData[]
 }
@@ -30,6 +54,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalPlays: 0,
     topPlayedGames: [],
+    monthTopGames: [],
     recentPlays: [],
     playsByMonth: []
   })
@@ -46,25 +71,20 @@ const Dashboard = () => {
         .from('plays')
         .select('*', { count: 'exact', head: true })
 
-      // Fetch most played games (top 3) (public data)
+      // Fetch plays with game info (public data)
       const { data: playsData } = await supabase
         .from('plays')
-        .select('game_id, games(*)')
+        .select('game_id, played_at, games(*)')
 
       if (playsData) {
-        const gameCounts = playsData.reduce<Record<string, number>>((acc, play) => {
-          if (!play.game_id) return acc
-          acc[play.game_id] = (acc[play.game_id] || 0) + 1
-          return acc
-        }, {})
+        const topPlayedGames = computeTopGames(playsData)
 
-        const topPlayedIds = Object.entries(gameCounts).sort((a, b) => b[1] - a[1]).slice(0, 3)
-        const topPlayedGames: TopGame[] = topPlayedIds
-          .map(([gameId, count]) => {
-            const game = playsData.find(p => p.game_id === gameId)?.games
-            return game ? { ...game, playCount: count } : null
-          })
-          .filter((game): game is TopGame => game !== null)
+        // Top 3 del mese corrente
+        const now = new Date()
+        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        const monthTopGames = computeTopGames(
+          playsData.filter(play => play.played_at.startsWith(monthKey))
+        )
 
         // Fetch recent plays with game info (public data)
         const { data: recentPlays } = await supabase
@@ -111,6 +131,7 @@ const Dashboard = () => {
         setStats({
           totalPlays: totalPlays || 0,
           topPlayedGames,
+          monthTopGames,
           recentPlays: recentPlays ?? [],
           playsByMonth
         })
@@ -228,6 +249,50 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
+        {/* Most Played Games This Month - Top 3 */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-bold text-white mb-4">Giochi del mese</h2>
+          {stats.monthTopGames.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nessuna partita giocata questo mese</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {stats.monthTopGames.map((game, index) => (
+                <div key={game.id} className="flex items-center space-x-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-amber-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-amber-500 font-bold">{index + 1}</span>
+                  </div>
+                  {game.image_url ? (
+                    <img
+                      src={game.image_url}
+                      alt={game.name}
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-slate-700 rounded-lg flex items-center justify-center">
+                      <Gamepad2 className="w-8 h-8 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">{game.name}</h3>
+                    {game.min_players && game.max_players && (
+                      <p className="text-slate-400 text-sm">
+                        {game.min_players}-{game.max_players} giocatori
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-amber-500">{game.playCount}</p>
+                    <p className="text-xs text-slate-400">partite</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Recent Plays */}
