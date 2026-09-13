@@ -56,6 +56,31 @@ interface ScoreRowWithPlayer {
   plays: { played_at: string } | null
 }
 
+// PostgREST tronca in silenzio le risposte oltre db-max-rows (1000 righe
+// su Supabase) a prescindere dal limit richiesto: un `.limit(10000)` NON
+// alza il cap. Unica difesa: richiedere il count esatto e scaricare tutte
+// le pagine finché non è coperto.
+const PAGE_SIZE = 1000
+
+type PageLoader<T> = (
+  from: number,
+  to: number
+) => PromiseLike<{ data: T[] | null; count: number | null; error: unknown }>
+
+const fetchAllPages = async <T,>(buildPage: PageLoader<T>): Promise<T[]> => {
+  const rows: T[] = []
+  let from = 0
+  for (;;) {
+    const { data, count, error } = await buildPage(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    from += data.length
+    if ((count !== null && from >= count) || data.length < PAGE_SIZE) break
+  }
+  return rows
+}
+
 const computeTopPlayers = (scores: ScoreRowWithPlayer[]): TopPlayer[] => {
   const perPlayer = scores.reduce<Map<string, { player: DbPlayer | null; total: number; wins: number }>>((acc, score) => {
     if (!score.player_id) return acc
@@ -113,86 +138,101 @@ const Dashboard = () => {
         .select('*', { count: 'exact', head: true })
 
       // Fetch plays with game info (public data)
-      const { data: playsData } = await supabase
-        .from('plays')
-        .select('game_id, played_at, games(*)')
-        .order('played_at', { ascending: false })
-        .limit(10000) // oltre il cap predefinito di 1000 il risultato verrebbe troncato in silenzio
+      const allPlays = await fetchAllPages<PlayRowWithGame>((from, to) =>
+        supabase
+          .from('plays')
+          .select('game_id, played_at, games(*)', { count: 'exact' })
+          .range(from, to)
+      )
+      const topPlayedGames = computeTopGames(allPlays)
 
-      if (playsData) {
-        const topPlayedGames = computeTopGames(playsData)
+      // Confini del mese in ora locale: confrontare il timestamp UTC col
+      // mese locale attribuirebbe al mese sbagliato le partite giocate
+      // dopo mezzanotte sul cambio mese (es. 00:30 del 1° a Roma = 22:30
+      // UTC del giorno 30 del mese precedente).
+      const now = new Date()
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
 
-        // Top 3 del mese corrente
-        const now = new Date()
-        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        const monthTopGames = computeTopGames(
-          playsData.filter(play => play.played_at.startsWith(monthKey))
-        )
+      // Top 3 giochi del mese corrente (filtro data lato server)
+      const monthPlays = await fetchAllPages<PlayRowWithGame>((from, to) =>
+        supabase
+          .from('plays')
+          .select('game_id, played_at, games(*)', { count: 'exact' })
+          .gte('played_at', monthStart)
+          .lt('played_at', monthEnd)
+          .range(from, to)
+      )
+      const monthTopGames = computeTopGames(monthPlays)
 
-        // Fetch play scores with player info e data partita per la classifica
-        // win rate del mese corrente (public data)
-        const { data: scoresData } = await supabase
+      // Classifica win rate del mese: il filtro su plays.played_at con
+      // embed !inner scarica solo i punteggi del mese, non tutto lo storico
+      const monthScores = await fetchAllPages<ScoreRowWithPlayer>((from, to) =>
+        supabase
           .from('play_scores')
-          .select('player_id, winner, players(*), plays(played_at)')
-          .order('play_id')
-          .limit(10000) // come sopra: play_scores ha più righe per partita, il cap arriva ancora prima
+          .select('player_id, winner, players(*), plays!inner(played_at)', { count: 'exact' })
+          .gte('plays.played_at', monthStart)
+          .lt('plays.played_at', monthEnd)
+          .range(from, to)
+      )
+      const topPlayers = computeTopPlayers(monthScores)
 
-        const monthScores = (scoresData ?? []).filter(
-          score => score.plays?.played_at.startsWith(monthKey)
-        )
-        const topPlayers = computeTopPlayers(monthScores)
-
-        // Fetch recent plays with game info (public data)
-        const { data: recentPlays } = await supabase
-          .from('plays')
-          .select(`
+      // Fetch recent plays with game info (public data)
+      const { data: recentPlays } = await supabase
+        .from('plays')
+        .select(`
+          *,
+          games(*),
+          play_scores(
             *,
-            games(*),
-            play_scores(
-              *,
-              players(*)
-            )
-          `)
-          .order('played_at', { ascending: false })
-          .limit(5)
+            players(*)
+          )
+        `)
+        .order('played_at', { ascending: false })
+        .limit(5)
 
-        // Fetch plays by month (last 12 months) - public data
-        const twelveMonthsAgo = new Date()
-        twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
+      // Fetch plays by month (last 12 months) - public data
+      const twelveMonthsAgo = new Date()
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
 
-        const { data: monthlyPlays } = await supabase
+      const yearlyPlays = await fetchAllPages<{ played_at: string }>((from, to) =>
+        supabase
           .from('plays')
-          .select('played_at')
+          .select('played_at', { count: 'exact' })
           .gte('played_at', twelveMonthsAgo.toISOString())
-          .order('played_at', { ascending: true })
-          .limit(10000) // oltre il cap predefinito di 1000 il risultato verrebbe troncato in silenzio
+          .range(from, to)
+      )
 
-        const playsByMonth: MonthData[] = []
-        if (monthlyPlays) {
-          const monthNames = ['Gen', 'Feb', 'Mar', 'apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
+      const playsByMonth: MonthData[] = []
+      const monthNames = ['Gen', 'Feb', 'Mar', 'apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
 
-          for (let i = 11; i >= 0; i--) {
-            const date = new Date()
-            date.setMonth(date.getMonth() - i)
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-            const count = monthlyPlays.filter(p => p.played_at.startsWith(monthKey)).length
+      // Conteggio per chiave YYYY-MM in ora locale (non startsWith sull'UTC)
+      const countsByMonth = new Map<string, number>()
+      for (const play of yearlyPlays) {
+        const date = new Date(play.played_at)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        countsByMonth.set(key, (countsByMonth.get(key) || 0) + 1)
+      }
 
-            playsByMonth.push({
-              month: monthNames[date.getMonth()],
-              plays: count
-            })
-          }
-        }
+      for (let i = 11; i >= 0; i--) {
+        // giorno 1: con setMonth su date più alte il 29-31 "sfora" nel mese dopo
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
-        setStats({
-          totalPlays: totalPlays || 0,
-          topPlayedGames,
-          monthTopGames,
-          topPlayers,
-          recentPlays: recentPlays ?? [],
-          playsByMonth
+        playsByMonth.push({
+          month: monthNames[date.getMonth()],
+          plays: countsByMonth.get(key) ?? 0
         })
       }
+
+      setStats({
+        totalPlays: totalPlays || 0,
+        topPlayedGames,
+        monthTopGames,
+        topPlayers,
+        recentPlays: recentPlays ?? [],
+        playsByMonth
+      })
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
