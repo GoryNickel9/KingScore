@@ -14,10 +14,10 @@ import {
   PLAYER_COUNT_BUCKETS,
   isPlayerCountBucket,
   matchesPlayerCount,
-  getGeneralELOHistoryByPlayerCount,
+  getGeneralELODataByPlayerCount,
   getELOHistoryForGameByPlayerCount
 } from '../utils/elo/playerCountElo'
-import type { PlayerCountBucket } from '../utils/elo/playerCountElo'
+import type { PlayerCountBucket, PlayerCountGeneralStanding } from '../utils/elo/playerCountElo'
 
 interface WinRateEntry {
   gameId: string
@@ -95,7 +95,11 @@ const StatsByPlayerCount = () => {
   const [loadingEloHistory, setLoadingEloHistory] = useState<Record<string, boolean>>({})
   const [generalEloHistory, setGeneralEloHistory] = useState<EloHistoryEntry[]>([])
   const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState<boolean>(false)
+  // Classifica visiva ELO Generale del bucket (stessi dati del grafico sopra)
+  const [generalStandings, setGeneralStandings] = useState<PlayerCountGeneralStanding[]>([])
   const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
+  const [playerAvatarMap, setPlayerAvatarMap] = useState<Record<string, string | null>>({})
+  const [myPlayerId, setMyPlayerId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!bucket) return
@@ -173,6 +177,18 @@ const StatsByPlayerCount = () => {
       // Calculate Win Rate by Game (Top 10) - only for logged in users
       const gameWinRates: Record<string, { total: number; wins: number }> = {}
       const myPlayer = user ? await getMyPlayer() : null
+      setMyPlayerId(myPlayer?.id ?? null)
+
+      // Mappa playerId → avatar per la classifica ELO del bucket
+      const avatarMap: Record<string, string | null> = {}
+      plays.forEach(play => {
+        play.play_scores?.forEach(score => {
+          if (score.player_id && !(score.player_id in avatarMap)) {
+            avatarMap[score.player_id] = score.players?.avatar_url ?? null
+          }
+        })
+      })
+      setPlayerAvatarMap(avatarMap)
 
       if (myPlayer) {
         plays.forEach(play => {
@@ -318,10 +334,11 @@ const StatsByPlayerCount = () => {
     try {
       setLoadingGeneralEloHistory(true)
 
-      // Storico ELO Generale simulato solo sulle partite del bucket
-      const history = await getGeneralELOHistoryByPlayerCount(supabase, user?.id, bucket)
+      // Storico ELO Generale e classifica simulati solo sulle partite del bucket
+      const { history, standings } = await getGeneralELODataByPlayerCount(supabase, user?.id, bucket)
 
       setGeneralEloHistory(history as EloHistoryEntry[])
+      setGeneralStandings(standings)
     } catch (error) {
       console.error('[StatsByPlayerCount] Errore nel recupero dello storico ELO Generale:', error)
     } finally {
@@ -396,6 +413,27 @@ const StatsByPlayerCount = () => {
     })
 
     return playerColors
+  }
+
+  // Helper classifica: stessi criteri visivi della pagina Rating ELO
+  const getRatingColor = (rating: number): string => {
+    if (rating >= 1500) return 'text-purple-400'
+    if (rating >= 1100) return 'text-orange-400'
+    if (rating >= 1050) return 'text-emerald-400'
+    return 'text-slate-400'
+  }
+
+  const getRatingBadge = (rating: number): { label: string; color: string } => {
+    if (rating >= 1500) return { label: 'Maestro', color: 'bg-purple-500/20 text-purple-400' }
+    if (rating >= 1100) return { label: 'Esperto', color: 'bg-orange-500/20 text-orange-400' }
+    if (rating >= 1050) return { label: 'Intermedio', color: 'bg-emerald-500/20 text-emerald-400' }
+    return { label: 'Principiante', color: 'bg-slate-500/20 text-slate-400' }
+  }
+
+  const getWinRate = (wins: number, losses: number, draws: number): number => {
+    const total = wins + losses + draws
+    if (total === 0) return 0
+    return Math.round((wins / total) * 100)
   }
 
   if (!bucket || !bucketDef) {
@@ -543,6 +581,119 @@ const StatsByPlayerCount = () => {
                 Gioca qualche partita a {bucketDef.maxPlayers === null ? '5 o più' : bucketDef.maxPlayers} giocatori per vedere l'evoluzione dell'ELO Generale
               </p>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ELO Generale - Classifica visiva (come in Rating ELO) */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+        <div className="flex items-center mb-6">
+          <Star className="w-6 h-6 mr-2 text-yellow-500" />
+          <h2 className="text-xl font-bold text-white">ELO Generale</h2>
+          <span className="ml-3 text-sm text-slate-400">
+            (Classifica aggregata · {bucketDef.description.toLowerCase()})
+          </span>
+        </div>
+
+        {generalStandings.length === 0 ? (
+          <div className="text-center py-12">
+            <Star className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+            <p className="text-slate-400">Nessun ELO Generale disponibile</p>
+            <p className="text-sm text-slate-500 mt-2">
+              Gioca qualche partita a {bucketDef.maxPlayers === null ? '5 o più' : bucketDef.maxPlayers} giocatori per vedere la classifica
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {generalStandings.map((standing, index) => {
+              const isMyPlayer = standing.playerId === myPlayerId
+              const badge = getRatingBadge(standing.rating)
+              const winRate = getWinRate(standing.wins, standing.losses, standing.draws)
+              const avatarUrl = playerAvatarMap[standing.playerId] ?? null
+
+              return (
+                <div
+                  key={standing.playerId}
+                  className={`flex items-center justify-between p-4 rounded-lg transition-all ${
+                    isMyPlayer
+                      ? 'bg-yellow-500/10 border-2 border-yellow-500/50'
+                      : 'bg-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-600">
+                      <span className="text-white font-bold">
+                        {index + 1}
+                      </span>
+                    </div>
+
+                    {avatarUrl ? (
+                      <img
+                        src={getPlayerImageUrl(supabase, avatarUrl) ?? undefined}
+                        alt={standing.playerName}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">
+                          {standing.playerName.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-white font-medium">
+                          {standing.playerName}
+                        </p>
+                        {isMyPlayer && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/20 text-yellow-400">
+                            Tu
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-3 mt-1">
+                        <span className={`text-xs px-2 py-1 rounded-full ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {standing.gamesPlayed} partite totali
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-6">
+                    <div className="text-right">
+                      <p className={`text-3xl font-bold ${getRatingColor(standing.rating)}`}>
+                        {standing.rating}
+                      </p>
+                      <p className="text-xs text-slate-400">ELO Generale</p>
+                    </div>
+
+                    <div className="text-right hidden md:block">
+                      <p className="text-white font-medium">{winRate}%</p>
+                      <p className="text-xs text-slate-400">Win Rate</p>
+                    </div>
+
+                    <div className="flex items-center space-x-4 text-sm">
+                      <div className="text-center">
+                        <p className="text-emerald-400 font-bold">{standing.wins}</p>
+                        <p className="text-xs text-slate-400">V</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-slate-400 font-bold">{standing.draws}</p>
+                        <p className="text-xs text-slate-400">P</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-red-400 font-bold">{standing.losses}</p>
+                        <p className="text-xs text-slate-400">S</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

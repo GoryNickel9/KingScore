@@ -83,6 +83,17 @@ export interface GeneralELOHistoryByCountEntry extends HistoryEntryBase {
   gamesPlayed: number
 }
 
+/** Riga della classifica ELO Generale del bucket (equivalente di player_general_ratings, non persistita). */
+export interface PlayerCountGeneralStanding {
+  playerId: string
+  playerName: string
+  rating: number
+  gamesPlayed: number
+  wins: number
+  losses: number
+  draws: number
+}
+
 // Lettura paginata di tutte le partite, stesso select/ordine richiesto dal
 // contratto di simulateAllPlays (played_at crescente).
 async function fetchAllPlaysForSimulation(
@@ -114,32 +125,63 @@ async function fetchAllPlaysForSimulation(
   }) as Promise<SimulationPlay[]>
 }
 
+export interface GeneralELODataByPlayerCount {
+  history: GeneralELOHistoryByCountEntry[]
+  standings: PlayerCountGeneralStanding[]
+}
+
 /**
- * Storico ELO Generale simulato usando solo le partite con il numero di
- * giocatori del bucket (nessuna cache: sempre ricalcolato).
+ * Storico ELO Generale e classifica finale simulati usando solo le partite con
+ * il numero di giocatori del bucket (nessuna cache: sempre ricalcolato).
+ * Unica lettura+simulazione per alimentare sia il grafico sia la classifica.
  */
-export async function getGeneralELOHistoryByPlayerCount(
+export async function getGeneralELODataByPlayerCount(
   supabase: SupabaseClient<Database>,
   userId: string | null = null,
   bucket: PlayerCountBucket
-): Promise<GeneralELOHistoryByCountEntry[]> {
+): Promise<GeneralELODataByPlayerCount> {
   const plays = await fetchAllPlaysForSimulation(supabase, userId)
   const filtered = plays.filter(play => matchesPlayerCount(play.play_scores?.length ?? 0, bucket))
-  if (filtered.length === 0) return []
+  if (filtered.length === 0) return { history: [], standings: [] }
 
   const sim = simulateAllPlays(filtered)
 
-  console.log(`[getGeneralELOHistoryByPlayerCount] Bucket ${bucket}: ${plays.length} partite totali, ${filtered.length} nel bucket, ${sim.processedPlays} processate, ${sim.skippedPlays} saltate`)
+  console.log(`[getGeneralELODataByPlayerCount] Bucket ${bucket}: ${plays.length} partite totali, ${filtered.length} nel bucket, ${sim.processedPlays} processate, ${sim.skippedPlays} saltate`)
 
-  return sim.generalHistory.map(point => ({
-    playId: point.playId,
-    playerId: point.playerId,
-    playerName: point.playerName,
-    rating: point.rating,
-    ratingChange: point.ratingChange,
-    gamesPlayed: point.gamesPlayed,
-    date: point.date
-  }))
+  // Nome di riferimento per giocatore (alias || name, come nella simulazione)
+  const nameByPlayer: Record<string, string> = {}
+  for (const players of Object.values(sim.gamePlayers)) {
+    for (const state of Object.values(players)) {
+      if (!nameByPlayer[state.playerId]) {
+        nameByPlayer[state.playerId] = state.playerName
+      }
+    }
+  }
+
+  const standings: PlayerCountGeneralStanding[] = Object.values(sim.generalPlayers)
+    .map(general => ({
+      playerId: general.playerId,
+      playerName: nameByPlayer[general.playerId] ?? 'Unknown',
+      rating: general.rating,
+      gamesPlayed: general.gamesPlayed,
+      wins: general.wins,
+      losses: general.losses,
+      draws: general.draws
+    }))
+    .sort((a, b) => b.rating - a.rating)
+
+  return {
+    history: sim.generalHistory.map(point => ({
+      playId: point.playId,
+      playerId: point.playerId,
+      playerName: point.playerName,
+      rating: point.rating,
+      ratingChange: point.ratingChange,
+      gamesPlayed: point.gamesPlayed,
+      date: point.date
+    })),
+    standings
+  }
 }
 
 /**
