@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { TrendingUp, Trophy, Users, Gamepad2, Star, ChevronDown, ChevronUp } from 'lucide-react'
+import { TrendingUp, Trophy, Gamepad2, Star, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
@@ -16,14 +16,6 @@ interface WinRateEntry {
   gameName: string
   winRate: number
   totalPlays: number
-}
-
-interface FrequentPlayer {
-  playerId: string
-  playerName: string
-  playerOriginalName: string | null
-  playerAvatarUrl: string | null
-  playCount: number
 }
 
 interface PlayerStats {
@@ -55,7 +47,6 @@ interface ComputedGameStats extends Omit<GameStats, 'players'> {
 
 interface StatsState {
   winRateByGame: WinRateEntry[]
-  mostFrequentPlayers: FrequentPlayer[]
   allGamesStats: ComputedGameStats[]
 }
 
@@ -81,7 +72,6 @@ const Stats = () => {
 
   const [stats, setStats] = useState<StatsState>({
     winRateByGame: [],
-    mostFrequentPlayers: [],
     allGamesStats: []
   })
 
@@ -147,7 +137,6 @@ const Stats = () => {
         console.warn('[Stats] No plays found in database')
         setStats({
           winRateByGame: [],
-          mostFrequentPlayers: [],
           allGamesStats: []
         })
         return
@@ -187,31 +176,6 @@ const Stats = () => {
         })
         .sort((a, b) => b.totalPlays - a.totalPlays)
         .slice(0, 10)
-
-      // Calculate Most Frequent Players
-      const playerCounts: Record<string, number> = {}
-      plays.forEach(play => {
-        play.play_scores?.forEach(score => {
-          const playerId = score.player_id ?? ""
-          playerCounts[playerId] = (playerCounts[playerId] || 0) + 1
-        })
-      })
-
-      const mostFrequentPlayers: FrequentPlayer[] = Object.entries(playerCounts)
-        .map(([playerId, count]) => {
-          const player = plays
-            .flatMap(p => p.play_scores || [])
-            .find(s => s.player_id === playerId)?.players
-          return {
-            playerId,
-            playerName: player?.alias || player?.name || 'Unknown',
-            playerOriginalName: player?.name || null,
-            playerAvatarUrl: player?.avatar_url || null,
-            playCount: count
-          }
-        })
-        .sort((a, b) => b.playCount - a.playCount)
-        .slice(0, 5)
 
       // Calculate stats for all games (NEW: per game statistics)
       const allGamesStats: Record<string, GameStats> = {}
@@ -281,7 +245,6 @@ const Stats = () => {
 
       setStats({
         winRateByGame,
-        mostFrequentPlayers,
         allGamesStats: gamesWithStats
       })
 
@@ -413,7 +376,7 @@ const Stats = () => {
   }
 
   // Mostra un messaggio se non ci sono dati
-  if (stats.allGamesStats.length === 0 && stats.mostFrequentPlayers.length === 0) {
+  if (stats.allGamesStats.length === 0) {
     return (
       <div className="space-y-6">
         <div>
@@ -429,7 +392,6 @@ const Stats = () => {
           <div className="text-sm text-slate-500 bg-slate-700 rounded-lg p-4 inline-block">
             <p className="font-semibold mb-2">Informazioni di debug:</p>
             <p>Win Rate: {stats.winRateByGame?.length || 0} giochi</p>
-            <p>Giocatori frequenti: {stats.mostFrequentPlayers?.length || 0}</p>
             <p>Statistiche giochi: {stats.allGamesStats?.length || 0}</p>
             <p>ELO Generale: {generalEloHistory?.length || 0} punti</p>
           </div>
@@ -552,48 +514,6 @@ const Stats = () => {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Most Frequent Players */}
-      <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-          <Users className="w-6 h-6 mr-2 text-emerald-500" />
-          Giocatori più Frequenti
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stats.mostFrequentPlayers.map((player) => (
-            <div key={player.playerId} className="bg-slate-700 rounded-lg p-4">
-              <div className="flex items-center space-x-3 mb-3">
-                {player.playerAvatarUrl ? (
-                  <img
-                    src={getPlayerImageUrl(supabase, player.playerAvatarUrl!) ?? undefined}
-                    alt={player.playerName}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                    <span className="text-emerald-500 font-bold text-lg">
-                      {player.playerName?.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <p className="text-white font-medium">{player.playerName}</p>
-                  {player.playerOriginalName && player.playerName !== player.playerOriginalName && (
-                    <p className="text-xs text-slate-400">{player.playerOriginalName}</p>
-                  )}
-                  <p className="text-sm text-slate-400">{player.playCount} partite</p>
-                </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-slate-600">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Partite totali</span>
-                  <span className="text-white font-medium">{player.playCount}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* All Games Statistics */}
