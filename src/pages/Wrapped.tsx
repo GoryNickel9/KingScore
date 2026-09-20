@@ -503,7 +503,7 @@ const Wrapped = () => {
                 <div className="bg-gradient-to-br from-amber-800 to-amber-700 rounded-xl p-6 shadow-lg">
                   <div className="flex items-center mb-4">
                     <Calendar className="w-8 h-8 text-amber-200 mr-3" />
-                    <h3 className="text-lg font-semibold text-white">Mese più Produttivo</h3>
+                    <h3 className="text-lg font-semibold text-white">Mese piu' giocato</h3>
                   </div>
                   <div>
                     <p className="text-4xl font-bold text-white mb-2">
