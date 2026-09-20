@@ -380,7 +380,7 @@ const Stats = () => {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">Statistiche Avanzate</h1>
+          <h1 className="text-3xl font-bold text-white">Statistiche</h1>
           <p className="mt-2 text-slate-400">Analisi dettagliata delle partite</p>
         </div>
         <div className="bg-slate-800 rounded-xl p-8 shadow-md text-center">
@@ -403,7 +403,7 @@ const Stats = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Statistiche Avanzate</h1>
+        <h1 className="text-3xl font-bold text-white">Statistiche</h1>
         <p className="mt-2 text-slate-400">Analisi dettagliata delle partite</p>
       </div>
 
@@ -441,7 +441,7 @@ const Stats = () => {
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center">
           <Star className="w-6 h-6 mr-2 text-yellow-500" />
-          ELO Generale - Evoluzione nel Tempo
+          ELO Generale
         </h2>
         {loadingGeneralEloHistory ? (
           <div className="flex items-center justify-center h-64 bg-slate-700 rounded-lg">

@@ -23,6 +23,7 @@ interface PlayerCountBucketDef {
   label: string
   description: string
   shortLabel: string
+  eloLabel: string
   minPlayers: number
   maxPlayers: number | null  // null = nessun limite superiore
 }
@@ -32,6 +33,7 @@ export const PLAYER_COUNT_BUCKETS: Record<PlayerCountBucket, PlayerCountBucketDe
     label: 'Statistiche HU',
     description: 'Solo partite a 2 giocatori (heads-up)',
     shortLabel: 'Statistiche HU',
+    eloLabel: 'ELO HU',
     minPlayers: 2,
     maxPlayers: 2
   },
@@ -39,6 +41,7 @@ export const PLAYER_COUNT_BUCKETS: Record<PlayerCountBucket, PlayerCountBucketDe
     label: 'Statistiche 3 Player',
     description: 'Solo partite a 3 giocatori',
     shortLabel: 'Statistiche 3P',
+    eloLabel: 'ELO 3 Player',
     minPlayers: 3,
     maxPlayers: 3
   },
@@ -46,6 +49,7 @@ export const PLAYER_COUNT_BUCKETS: Record<PlayerCountBucket, PlayerCountBucketDe
     label: 'Statistiche 4 Player',
     description: 'Solo partite a 4 giocatori',
     shortLabel: 'Statistiche 4P',
+    eloLabel: 'ELO 4 Player',
     minPlayers: 4,
     maxPlayers: 4
   },
@@ -53,6 +57,7 @@ export const PLAYER_COUNT_BUCKETS: Record<PlayerCountBucket, PlayerCountBucketDe
     label: 'Statistiche 5+ Player',
     description: 'Solo partite con 5 o più giocatori',
     shortLabel: 'Statistiche 5+',
+    eloLabel: 'ELO 5+ Player',
     minPlayers: 5,
     maxPlayers: null
   }

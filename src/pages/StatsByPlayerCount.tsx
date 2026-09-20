@@ -510,7 +510,7 @@ const StatsByPlayerCount = () => {
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center">
           <Star className="w-6 h-6 mr-2 text-yellow-500" />
-          ELO Generale - Evoluzione nel Tempo
+          {bucketDef.eloLabel}
         </h2>
         {loadingGeneralEloHistory ? (
           <div className="flex items-center justify-center h-64 bg-slate-700 rounded-lg">
@@ -589,7 +589,7 @@ const StatsByPlayerCount = () => {
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
         <div className="flex items-center mb-6">
           <Star className="w-6 h-6 mr-2 text-yellow-500" />
-          <h2 className="text-xl font-bold text-white">ELO Generale</h2>
+          <h2 className="text-xl font-bold text-white">{bucketDef.eloLabel}</h2>
           <span className="ml-3 text-sm text-slate-400">
             (Classifica aggregata · {bucketDef.description.toLowerCase()})
           </span>
