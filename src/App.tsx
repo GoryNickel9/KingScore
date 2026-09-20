@@ -20,6 +20,7 @@ const Players = lazy(() => import('./pages/Players'))
 const PlayerDetail = lazy(() => import('./pages/PlayerDetail'))
 const Import = lazy(() => import('./pages/Import'))
 const Stats = lazy(() => import('./pages/Stats'))
+const StatsByPlayerCount = lazy(() => import('./pages/StatsByPlayerCount'))
 const ELO = lazy(() => import('./pages/ELO'))
 const Images = lazy(() => import('./pages/Images'))
 const Register = lazy(() => import('./pages/Register'))
@@ -83,6 +84,14 @@ function App() {
             element={
               <Layout>
                 <Stats />
+              </Layout>
+            }
+          />
+          <Route
+            path="/stats/:bucket"
+            element={
+              <Layout>
+                <StatsByPlayerCount />
               </Layout>
             }
           />
