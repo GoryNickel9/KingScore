@@ -6,7 +6,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
 } from 'recharts'
-import type { DbGame } from '../types/rows'
 import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculator'
 import { fetchAllPages } from '../utils/pagination'
 import { getPlayerImageUrl } from '../utils/imageUpload'
@@ -57,8 +56,6 @@ interface ComputedGameStats extends Omit<GameStats, 'players'> {
 interface StatsState {
   winRateByGame: WinRateEntry[]
   mostFrequentPlayers: FrequentPlayer[]
-  gameOfTheMonth: DbGame | null
-  gameOfTheMonthTrend: number
   allGamesStats: ComputedGameStats[]
 }
 
@@ -85,8 +82,6 @@ const Stats = () => {
   const [stats, setStats] = useState<StatsState>({
     winRateByGame: [],
     mostFrequentPlayers: [],
-    gameOfTheMonth: null,
-    gameOfTheMonthTrend: 0,
     allGamesStats: []
   })
 
@@ -153,8 +148,6 @@ const Stats = () => {
         setStats({
           winRateByGame: [],
           mostFrequentPlayers: [],
-          gameOfTheMonth: null,
-          gameOfTheMonthTrend: 0,
           allGamesStats: []
         })
         return
@@ -219,59 +212,6 @@ const Stats = () => {
         })
         .sort((a, b) => b.playCount - a.playCount)
         .slice(0, 5)
-
-      // Calculate Game of the Month
-      const now = new Date()
-      const currentMonth = now.getMonth()
-      const currentYear = now.getFullYear()
-      const firstDayOfMonth = new Date(currentYear, currentMonth, 1)
-      const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0)
-
-      const monthPlays = plays.filter(play => {
-        const playDate = new Date(play.played_at)
-        return playDate >= firstDayOfMonth && playDate <= lastDayOfMonth
-      })
-
-      const gameCountsThisMonth: Record<string, number> = {}
-      monthPlays.forEach(play => {
-        const gameId = play.game_id ?? ""
-        gameCountsThisMonth[gameId] = (gameCountsThisMonth[gameId] || 0) + 1
-      })
-
-      const gameOfTheMonthId = Object.entries(gameCountsThisMonth)
-        .sort((a, b) => b[1] - a[1])[0]?.[0]
-
-      const gameOfTheMonthData = gameOfTheMonthId
-        ? plays.find(p => p.game_id === gameOfTheMonthId)?.games || null
-        : null
-
-      // Calculate Game of the Month Trend
-      const previousMonth = new Date(currentYear, currentMonth - 1, 1)
-      const lastDayOfPreviousMonth = new Date(currentYear, currentMonth, 0)
-
-      const previousMonthPlays = plays.filter(play => {
-        const playDate = new Date(play.played_at)
-        return playDate >= previousMonth && playDate <= lastDayOfPreviousMonth
-      })
-
-      const gameCountsPreviousMonth: Record<string, number> = {}
-      previousMonthPlays.forEach(play => {
-        const gameId = play.game_id ?? ""
-        gameCountsPreviousMonth[gameId] = (gameCountsPreviousMonth[gameId] || 0) + 1
-      })
-
-      const gameOfPreviousMonthId = Object.entries(gameCountsPreviousMonth)
-        .sort((a, b) => b[1] - a[1])[0]?.[0]
-
-      let trend = 0
-      if (gameOfTheMonthId && gameOfPreviousMonthId) {
-        const currentCount = gameCountsThisMonth[gameOfTheMonthId] || 0
-        const previousCount = gameCountsPreviousMonth[gameOfPreviousMonthId] || 0
-
-        if (previousCount > 0) {
-          trend = Math.round(((currentCount - previousCount) / previousCount) * 100)
-        }
-      }
 
       // Calculate stats for all games (NEW: per game statistics)
       const allGamesStats: Record<string, GameStats> = {}
@@ -342,8 +282,6 @@ const Stats = () => {
       setStats({
         winRateByGame,
         mostFrequentPlayers,
-        gameOfTheMonth: gameOfTheMonthData,
-        gameOfTheMonthTrend: trend,
         allGamesStats: gamesWithStats
       })
 
@@ -492,7 +430,6 @@ const Stats = () => {
             <p className="font-semibold mb-2">Informazioni di debug:</p>
             <p>Win Rate: {stats.winRateByGame?.length || 0} giochi</p>
             <p>Giocatori frequenti: {stats.mostFrequentPlayers?.length || 0}</p>
-            <p>Gioco del mese: {stats.gameOfTheMonth?.name || 'Nessuno'}</p>
             <p>Statistiche giochi: {stats.allGamesStats?.length || 0}</p>
             <p>ELO Generale: {generalEloHistory?.length || 0} punti</p>
           </div>
@@ -658,52 +595,6 @@ const Stats = () => {
           ))}
         </div>
       </div>
-
-      {/* Game of the Month */}
-      {stats.gameOfTheMonth && (
-        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-          <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-            <Trophy className="w-6 h-6 mr-2 text-emerald-500" />
-            Gioco del Mese
-          </h2>
-          <div className="flex items-start space-x-4">
-            {stats.gameOfTheMonth.image_url ? (
-              <img
-                src={stats.gameOfTheMonth.image_url}
-                alt={stats.gameOfTheMonth.name}
-                className="w-20 h-20 object-cover rounded-lg"
-              />
-            ) : (
-              <div className="w-20 h-20 bg-slate-700 rounded-lg flex items-center justify-center">
-                <Gamepad2 className="w-10 h-10 text-slate-400" />
-              </div>
-            )}
-            <div className="flex-1">
-              <p className="text-white font-medium text-lg">{stats.gameOfTheMonth.name}</p>
-              <p className="text-sm text-slate-400 mt-1">
-                {stats.gameOfTheMonth.min_players && stats.gameOfTheMonth.max_players && (
-                  <span>{stats.gameOfTheMonth.min_players}-{stats.gameOfTheMonth.max_players} giocatori</span>
-                )}
-              </p>
-            </div>
-            <div className="text-right">
-              {stats.gameOfTheMonthTrend > 0 ? (
-                <div className="flex items-center text-emerald-500">
-                  <TrendingUp className="w-5 h-5 mr-1" />
-                  <span className="text-sm font-medium">+{stats.gameOfTheMonthTrend}%</span>
-                </div>
-              ) : stats.gameOfTheMonthTrend < 0 ? (
-                <div className="flex items-center text-red-500">
-                  <TrendingUp className="w-5 h-5 mr-1 rotate-180" />
-                  <span className="text-sm font-medium">{stats.gameOfTheMonthTrend}%</span>
-                </div>
-              ) : (
-                <span className="text-slate-400">Nessun dato</span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* All Games Statistics */}
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
