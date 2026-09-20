@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import type { DbGame } from '../types/rows'
 import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculator'
+import { fetchAllPages } from '../utils/pagination'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
 
@@ -129,27 +130,25 @@ const Stats = () => {
       setLoading(true)
 
       // Fetch all plays with games and scores (public data)
-      // NOTE: Supabase default limit is 1000 rows — override to avoid silently
-      // truncating larger collections and returning incorrect play totals per game.
-      const { data: playsData, error: playsError } = await supabase
-        .from('plays')
-        .select(`
-          *,
-          games(*),
-          play_scores(
+      // Lettura paginata: PostgREST tronca in silenzio oltre db-max-rows
+      // (1000 righe) qualunque limit richiesto.
+      const playsData = await fetchAllPages((from, to) =>
+        supabase
+          .from('plays')
+          .select(`
             *,
-            players(*)
-          )
-        `)
-        .order('played_at', { ascending: false })
-        .limit(10000)
+            games(*),
+            play_scores(
+              *,
+              players(*)
+            )
+          `, { count: 'exact' })
+          .order('played_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to)
+      )
 
-      if (playsError) {
-        console.error('[Stats] Error fetching plays:', playsError)
-        return
-      }
-
-      if (!playsData || playsData.length === 0) {
+      if (playsData.length === 0) {
         console.warn('[Stats] No plays found in database')
         setStats({
           winRateByGame: [],
@@ -161,7 +160,7 @@ const Stats = () => {
         return
       }
 
-      const plays = playsData ?? []
+      const plays = playsData
 
       // Calculate Win Rate by Game (Top 10) - only for logged in users
       const gameWinRates: Record<string, { total: number; wins: number }> = {}

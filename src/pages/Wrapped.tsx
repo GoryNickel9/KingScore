@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 import { Trophy, Calendar, TrendingUp, Award, Clock, Sparkles } from 'lucide-react'
 import { BarChart, Bar, LineChart, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { fetchAllPages } from '../utils/pagination'
 import type { DbGame, DbPlayer, DbPlayWithScores } from '../types/rows'
 
 interface EloEntry {
@@ -114,19 +115,23 @@ const Wrapped = () => {
   const loadStats = async () => {
     setLoading(true)
 
-    // Carica partite dell'anno
-    const { data: plays } = await supabase
-      .from('plays')
-      .select(`
-        *,
-        games(*),
-        play_scores(*, players(*))
-      `)
-      .gte('played_at', `${selectedYear}-01-01`)
-      .lte('played_at', `${selectedYear}-12-31`)
-      .order('played_at', { ascending: true })
+    // Carica partite dell'anno (paginata: cap PostgREST di 1000 righe)
+    const plays = await fetchAllPages<DbPlayWithScores>((from, to) =>
+      supabase
+        .from('plays')
+        .select(`
+          *,
+          games(*),
+          play_scores(*, players(*))
+        `, { count: 'exact' })
+          .gte('played_at', `${selectedYear}-01-01`)
+          .lte('played_at', `${selectedYear}-12-31`)
+          .order('played_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+    )
 
-    if (!plays || plays.length === 0) {
+    if (plays.length === 0) {
       setStats(null)
       setLoading(false)
       return
@@ -151,15 +156,28 @@ const Wrapped = () => {
   }
 
   const loadEloStats = async () => {
-    const { data: eloData } = await supabase
-      .from('elo_history')
-      .select('player_id, player_name, rating, rating_change, date')
-      .eq('is_general', true)
-      .gte('date', `${selectedYear}-01-01`)
-      .lte('date', `${selectedYear}-12-31T23:59:59`)
-      .order('date', { ascending: true })
+    // Lettura paginata: elo_history per un anno supera il cap PostgREST di
+    // 1000 righe e verrebbe troncata in silenzio (rating finali e grafico
+    // dell'anno calcolati su dati parziali).
+    let eloData: EloEntry[] = []
+    try {
+      eloData = await fetchAllPages<EloEntry>((from, to) =>
+        supabase
+          .from('elo_history')
+          .select('player_id, player_name, rating, rating_change, date', { count: 'exact' })
+          .eq('is_general', true)
+          .gte('date', `${selectedYear}-01-01`)
+          .lte('date', `${selectedYear}-12-31T23:59:59`)
+          .order('date', { ascending: true })
+          .order('play_id', { ascending: true })
+          .order('player_id', { ascending: true })
+          .range(from, to)
+      )
+    } catch (error) {
+      console.error('[Wrapped] Errore nel recupero dello storico ELO:', error)
+    }
 
-    if (!eloData || eloData.length === 0) {
+    if (eloData.length === 0) {
       setEloRanking([])
       setPlayerEloDetail(null)
       setEloChartData([])
@@ -167,7 +185,7 @@ const Wrapped = () => {
       return
     }
 
-    const entries = eloData as EloEntry[]
+    const entries = eloData
 
     // Raggruppa per player_id: primo e ultimo rating nell'anno
     const playerMap = new Map<string, { name: string; first: EloEntry; last: EloEntry }>()

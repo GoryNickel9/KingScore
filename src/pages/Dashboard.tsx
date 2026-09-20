@@ -8,6 +8,7 @@ import { Spinner } from '../components/Spinner'
 import { getWinnerNames } from '../utils/winners'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import { getPlayerImageUrl } from '../utils/imageUpload'
+import { fetchAllPages } from '../utils/pagination'
 import type { DbGame, DbPlayWithScores, DbPlayer } from '../types/rows'
 
 interface TopGame extends DbGame {
@@ -54,31 +55,6 @@ interface ScoreRowWithPlayer {
   winner: boolean | null
   players: DbPlayer | null
   plays: { played_at: string } | null
-}
-
-// PostgREST tronca in silenzio le risposte oltre db-max-rows (1000 righe
-// su Supabase) a prescindere dal limit richiesto: un `.limit(10000)` NON
-// alza il cap. Unica difesa: richiedere il count esatto e scaricare tutte
-// le pagine finché non è coperto.
-const PAGE_SIZE = 1000
-
-type PageLoader<T> = (
-  from: number,
-  to: number
-) => PromiseLike<{ data: T[] | null; count: number | null; error: unknown }>
-
-const fetchAllPages = async <T,>(buildPage: PageLoader<T>): Promise<T[]> => {
-  const rows: T[] = []
-  let from = 0
-  for (;;) {
-    const { data, count, error } = await buildPage(from, from + PAGE_SIZE - 1)
-    if (error) throw error
-    if (!data || data.length === 0) break
-    rows.push(...data)
-    from += data.length
-    if ((count !== null && from >= count) || data.length < PAGE_SIZE) break
-  }
-  return rows
 }
 
 const computeTopPlayers = (scores: ScoreRowWithPlayer[]): TopPlayer[] => {

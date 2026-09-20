@@ -4,6 +4,7 @@ import { simulateAllPlays } from './elo/simulation'
 import type { SimulationPlay } from './elo/simulation'
 import { performFullRecalc } from './elo/recalc'
 import type { RecalcSummary } from './elo/recalc'
+import { fetchAllPages } from './pagination'
 import type { DbGeneralRatingWithPlayer, DbPlayerGeneralRating } from '../types/rows'
 
 // Le formule ELO pure vivono nel core condiviso con l'Edge Function notturna
@@ -155,54 +156,68 @@ export async function saveELOHistoryEntries(supabase: SupabaseClient<Database>, 
 export async function getELOHistoryForGame(supabase: SupabaseClient<Database>, gameId: string, userId: string | null = null): Promise<ELOHistoryEntry[]> {
   try {
     // ── Controllo cache ───────────────────────────────────────────────────────
-    const { data: cached, error: cacheError } = await supabase
-      .from('elo_history')
-      .select('play_id, player_id, player_name, rating, rating_change, date')
-      .eq('game_id', gameId)
-      .eq('is_general', false)
-      .order('date', { ascending: true })
-      .limit(10000)
+    // Lettura paginata: anche per gioco le righe (partite × giocatori) possono
+    // superare il cap PostgREST di 1000 righe e venire troncate in silenzio.
+    try {
+      const cached = await fetchAllPages<{
+        play_id: string
+        player_id: string
+        player_name: string
+        rating: number
+        rating_change: number
+        date: string
+      }>((from, to) =>
+        supabase
+          .from('elo_history')
+          .select('play_id, player_id, player_name, rating, rating_change, date', { count: 'exact' })
+          .eq('game_id', gameId)
+          .eq('is_general', false)
+          .order('date', { ascending: true })
+          .order('play_id', { ascending: true })
+          .order('player_id', { ascending: true })
+          .range(from, to)
+      )
 
-    if (cacheError) {
-      console.warn('[getELOHistoryForGame] Cache read failed (RLS/policy issue?), recomputing:', cacheError.message)
-    }
-
-    if (cached && cached.length > 0) {
-      return cached.map(entry => ({
-        date: entry.date,
-        playId: entry.play_id,
-        playerId: entry.player_id,
-        playerName: entry.player_name,
-        rating: entry.rating,
-        ratingChange: entry.rating_change
-      }))
+      if (cached.length > 0) {
+        return cached.map(entry => ({
+          date: entry.date,
+          playId: entry.play_id,
+          playerId: entry.player_id,
+          playerName: entry.player_name,
+          rating: entry.rating,
+          ratingChange: entry.rating_change
+        }))
+      }
+    } catch (cacheError) {
+      console.warn('[getELOHistoryForGame] Cache read failed (RLS/policy issue?), recomputing:', (cacheError as Error).message)
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Cache miss: unica lettura del gioco + simulazione col core puro condiviso
-    let query = supabase
-      .from('plays')
-      .select(`
-        *,
-        play_scores(
+    // Cache miss: lettura del gioco (paginata, stesso cap PostgREST) +
+    // simulazione col core puro condiviso
+    const plays = await fetchAllPages((from, to) => {
+      let query = supabase
+        .from('plays')
+        .select(`
           *,
-          players(*)
-        )
-      `)
-      .eq('game_id', gameId)
-      .order('played_at', { ascending: true })
-      .limit(10000)
+          play_scores(
+            *,
+            players(*)
+          )
+        `, { count: 'exact' })
+        .eq('game_id', gameId)
+        .order('played_at', { ascending: true })
+        .order('id', { ascending: true })
 
-    // Filtra per user_id solo se fornito
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
+      // Filtra per user_id solo se fornito
+      if (userId) {
+        query = query.eq('user_id', userId)
+      }
 
-    const { data: plays, error } = await query;
+      return query.range(from, to)
+    })
 
-    if (error) throw error;
-
-    if (!plays || plays.length === 0) return [];
+    if (plays.length === 0) return [];
 
     const sim = simulateAllPlays(plays as unknown as SimulationPlay[]);
 
@@ -246,57 +261,72 @@ export async function getELOHistoryForGame(supabase: SupabaseClient<Database>, g
 export async function getGeneralELOHistory(supabase: SupabaseClient<Database>, userId: string | null = null): Promise<GeneralELOHistoryEntry[]> {
   try {
     // ── Controllo cache (solo per utenti autenticati) ─────────────────────────
+    // Lettura paginata: con ~2,8 giocatori per partita la cache supera le
+    // 1000 righe già intorno alla 350ª partita e PostgREST tronca in silenzio,
+    // congelando il grafico sull'ultimo punto consegnato dalla prima pagina.
     if (userId) {
-      const { data: cached, error: cacheError } = await supabase
-        .from('elo_history')
-        .select('play_id, player_id, player_name, rating, rating_change, date, games_played')
-        .eq('is_general', true)
-        .eq('user_id', userId)
-        .order('date', { ascending: true })
-        .limit(10000)
+      try {
+        const cached = await fetchAllPages<{
+          play_id: string
+          player_id: string
+          player_name: string
+          rating: number
+          rating_change: number
+          date: string
+          games_played: number | null
+        }>((from, to) =>
+          supabase
+            .from('elo_history')
+            .select('play_id, player_id, player_name, rating, rating_change, date, games_played', { count: 'exact' })
+            .eq('is_general', true)
+            .eq('user_id', userId)
+            .order('date', { ascending: true })
+            .order('play_id', { ascending: true })
+            .order('player_id', { ascending: true })
+            .range(from, to)
+        )
 
-      if (cacheError) {
-        console.warn('[getGeneralELOHistory] Cache read failed (RLS/policy issue?), recomputing:', cacheError.message)
-      }
-
-      if (cached && cached.length > 0) {
-        return cached.map(entry => ({
-          date: entry.date,
-          playId: entry.play_id,
-          playerId: entry.player_id,
-          playerName: entry.player_name,
-          rating: entry.rating,
-          ratingChange: entry.rating_change,
-          gamesPlayed: entry.games_played ?? 0
-        }))
+        if (cached.length > 0) {
+          return cached.map(entry => ({
+            date: entry.date,
+            playId: entry.play_id,
+            playerId: entry.player_id,
+            playerName: entry.player_name,
+            rating: entry.rating,
+            ratingChange: entry.rating_change,
+            gamesPlayed: entry.games_played ?? 0
+          }))
+        }
+      } catch (cacheError) {
+        console.warn('[getGeneralELOHistory] Cache read failed (RLS/policy issue?), recomputing:', (cacheError as Error).message)
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Cache miss: unica lettura di tutte le partite (senza join games(*), mai
-    // usato dalla simulazione) + core puro condiviso
-    let query = supabase
-      .from('plays')
-      .select(`
-        *,
-        play_scores(
+    // Cache miss: lettura di tutte le partite (paginata, stesso cap PostgREST;
+    // niente join games(*), mai usato dalla simulazione) + core puro condiviso
+    const plays = await fetchAllPages((from, to) => {
+      let query = supabase
+        .from('plays')
+        .select(`
           *,
-          players(*)
-        )
-      `)
-      .order('played_at', { ascending: true })
-      .limit(10000)
+          play_scores(
+            *,
+            players(*)
+          )
+        `, { count: 'exact' })
+        .order('played_at', { ascending: true })
+        .order('id', { ascending: true })
 
-    // Filtra per user_id solo se fornito
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
+      // Filtra per user_id solo se fornito
+      if (userId) {
+        query = query.eq('user_id', userId)
+      }
 
-    const { data: plays, error } = await query;
+      return query.range(from, to)
+    })
 
-    if (error) throw error;
-
-    if (!plays || plays.length === 0) return [];
+    if (plays.length === 0) return [];
 
     const sim = simulateAllPlays(plays as unknown as SimulationPlay[]);
 

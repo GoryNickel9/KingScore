@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { simulateAllPlays } from './simulation.ts'
 import type { SimulationPlay } from './simulation.ts'
 import { withRetry } from '../retry.ts'
+import { fetchAllPages } from '../pagination.ts'
 
 /**
  * Pipeline di ricalcolo completo ELO condivisa dal frontend (pulsante
@@ -22,7 +23,6 @@ import { withRetry } from '../retry.ts'
  */
 
 const BATCH_SIZE = 500
-const MAX_PLAYS = 10000
 const DELETE_ID_CHUNK = 50
 
 export interface RecalcSummary {
@@ -117,16 +117,21 @@ async function upsertInBatches(
 export async function performFullRecalc(supabase: SupabaseClient, userId: string): Promise<RecalcSummary> {
   const startedAt = Date.now()
 
-  // ── 1. Unica lettura bulk di tutte le partite dell'utente ──────────────────
-  const { data: plays, error } = await supabase
-    .from('plays')
-    .select('*, play_scores(*, players(*))')
-    .eq('user_id', userId)
-    .order('played_at', { ascending: true })
-    .limit(MAX_PLAYS)
-  if (error) throw error
+  // ── 1. Lettura bulk di tutte le partite dell'utente ──────────────────────
+  // Paginata: PostgREST tronca a db-max-rows (1000 righe) qualunque limit,
+  // e un ricalcolo su partite troncate produrrebbe rating silenziosamente
+  // sbagliati.
+  const plays = await fetchAllPages((from, to) =>
+    supabase
+      .from('plays')
+      .select('*, play_scores(*, players(*))', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('played_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  const sim = simulateAllPlays((plays ?? []) as unknown as SimulationPlay[])
+  const sim = simulateAllPlays(plays as unknown as SimulationPlay[])
   // Una partita senza game_id contribuisce all'ELO Generale (come nel vecchio
   // algoritmo) ma non deve generare righe per gioco: game_id non è un UUID
   const isValidGameId = (id: string): boolean => Boolean(id) && id !== 'null'
@@ -223,7 +228,7 @@ export async function performFullRecalc(supabase: SupabaseClient, userId: string
   await insertInBatches(supabase, 'elo_history', historyRows as unknown as Record<string, unknown>[])
 
   return {
-    playsTotal: plays?.length ?? 0,
+    playsTotal: plays.length,
     playsProcessed: sim.processedPlays,
     playsSkipped: sim.skippedPlays,
     games: gameIds.length,
