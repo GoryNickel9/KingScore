@@ -49,7 +49,7 @@ interface WrappedStats {
   totalHours: number
   uniqueGames: number
   topGame: { game: DbGame; count: number; winRate?: number } | null
-  topMonth: { month: number; count: number } | null
+  topMonth: { month: number; count: number; hours: number; uniqueGames: number } | null
   monthlyData: { month: string; partite: number }[]
   wins?: number
   winRate?: number
@@ -286,23 +286,28 @@ const Wrapped = () => {
       }
     }
 
-    // Mese più produttivo
-    const monthCounts = new Map<number, number>()
+    // Mese più giocato: partite, ore e giochi distinti del mese
+    const monthStats = new Map<number, { count: number; minutes: number; games: Set<string> }>()
     plays.forEach(play => {
       const month = new Date(play.played_at).getMonth()
-      monthCounts.set(month, (monthCounts.get(month) || 0) + 1)
+      const entry = monthStats.get(month) || { count: 0, minutes: 0, games: new Set<string>() }
+      entry.count++
+      entry.minutes += play.duration_minutes || 0
+      if (play.game_id) entry.games.add(play.game_id)
+      monthStats.set(month, entry)
     })
 
-    let topMonth: { month: number; count: number } | null = null
-    if (monthCounts.size > 0) {
-      const sorted = Array.from(monthCounts.entries()).sort((a, b) => b[1] - a[1])
-      topMonth = { month: sorted[0][0], count: sorted[0][1] }
+    let topMonth: { month: number; count: number; hours: number; uniqueGames: number } | null = null
+    if (monthStats.size > 0) {
+      const sorted = Array.from(monthStats.entries()).sort((a, b) => b[1].count - a[1].count)
+      const [month, data] = sorted[0]
+      topMonth = { month, count: data.count, hours: data.minutes / 60, uniqueGames: data.games.size }
     }
 
     // Dati mensili (tutti e 12 i mesi)
     const monthlyData = MONTHS.map((month, idx) => ({
       month,
-      partite: monthCounts.get(idx) || 0
+      partite: monthStats.get(idx)?.count || 0
     }))
 
     // Statistiche specifiche per giocatore
@@ -512,6 +517,16 @@ const Wrapped = () => {
                     <p className="text-amber-200">
                       <span className="text-3xl font-bold">{stats.topMonth.count}</span> partite
                     </p>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="bg-amber-900/40 rounded-lg p-3">
+                      <p className="text-2xl font-bold text-white">{stats.topMonth.hours.toFixed(1)}h</p>
+                      <p className="text-sm text-amber-200">Ore di gioco</p>
+                    </div>
+                    <div className="bg-amber-900/40 rounded-lg p-3">
+                      <p className="text-2xl font-bold text-white">{stats.topMonth.uniqueGames}</p>
+                      <p className="text-sm text-amber-200">Giochi diversi</p>
+                    </div>
                   </div>
                 </div>
               )}

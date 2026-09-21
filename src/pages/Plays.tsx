@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy, Users } from 'lucide-react'
+import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy, Users, StickyNote } from 'lucide-react'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 import type { DbGame, DbPlayWithScores } from '../types/rows'
@@ -323,6 +323,14 @@ const Plays = () => {
                           +{play.play_scores.length - 4} altri
                         </span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {play.notes && (
+                    <div className="mt-3 flex items-start text-sm text-slate-300">
+                      <StickyNote className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0 text-slate-500" />
+                      <span className="italic">{play.notes}</span>
                     </div>
                   )}
                 </div>

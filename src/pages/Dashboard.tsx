@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Trophy, Gamepad2, CalendarDays, Medal } from 'lucide-react'
+import { Trophy, Gamepad2, CalendarDays, Medal, CalendarRange, Clock } from 'lucide-react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Spinner } from '../components/Spinner'
 import { getWinnerNames } from '../utils/winners'
@@ -18,8 +18,21 @@ interface TopGame extends DbGame {
 interface PlayRowWithGame {
   game_id: string | null
   played_at: string
+  duration_minutes: number | null
   games: DbGame | null
-}const computeTopGames = (plays: PlayRowWithGame[]): TopGame[] => {
+}
+
+interface MonthHoursEntry {
+  year: number
+  month: number
+  hours: number
+}
+
+const MONTHS_FULL = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+]
+const computeTopGames = (plays: PlayRowWithGame[]): TopGame[] => {
   const gameCounts = plays.reduce<Record<string, number>>((acc, play) => {
     if (!play.game_id) return acc
     acc[play.game_id] = (acc[play.game_id] || 0) + 1
@@ -84,6 +97,8 @@ interface DashboardStats {
   totalPlays: number
   topPlayedGames: TopGame[]
   monthTopGames: TopGame[]
+  last3MonthsTopGames: TopGame[]
+  topHoursMonths: MonthHoursEntry[]
   topPlayers: TopPlayer[]
   recentPlays: DbPlayWithScores[]
   playsByMonth: MonthData[]
@@ -96,6 +111,8 @@ const Dashboard = () => {
     totalPlays: 0,
     topPlayedGames: [],
     monthTopGames: [],
+    last3MonthsTopGames: [],
+    topHoursMonths: [],
     topPlayers: [],
     recentPlays: [],
     playsByMonth: []
@@ -117,7 +134,7 @@ const Dashboard = () => {
       const allPlays = await fetchAllPages<PlayRowWithGame>((from, to) =>
         supabase
           .from('plays')
-          .select('game_id, played_at, games(*)', { count: 'exact' })
+          .select('game_id, played_at, duration_minutes, games(*)', { count: 'exact' })
           .range(from, to)
       )
       const topPlayedGames = computeTopGames(allPlays)
@@ -134,12 +151,36 @@ const Dashboard = () => {
       const monthPlays = await fetchAllPages<PlayRowWithGame>((from, to) =>
         supabase
           .from('plays')
-          .select('game_id, played_at, games(*)', { count: 'exact' })
+          .select('game_id, played_at, duration_minutes, games(*)', { count: 'exact' })
           .gte('played_at', monthStart)
           .lt('played_at', monthEnd)
           .range(from, to)
       )
       const monthTopGames = computeTopGames(monthPlays)
+
+      // Top 3 giochi degli ultimi 3 mesi: finestra volante da oggi, filtro
+      // lato client su allPlays (già scaricate) in ora locale
+      const threeMonthsAgo = new Date(now)
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+      const last3MonthsTopGames = computeTopGames(
+        allPlays.filter(play => new Date(play.played_at) >= threeMonthsAgo)
+      )
+
+      // Top 3 mesi per ore giocate (chiave YYYY-MM in ora locale, con anno)
+      const hoursByMonth = new Map<string, MonthHoursEntry & { minutes: number }>()
+      for (const play of allPlays) {
+        const minutes = play.duration_minutes || 0
+        if (minutes <= 0) continue
+        const date = new Date(play.played_at)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        const entry = hoursByMonth.get(key) || { year: date.getFullYear(), month: date.getMonth(), hours: 0, minutes: 0 }
+        entry.minutes += minutes
+        hoursByMonth.set(key, entry)
+      }
+      const topHoursMonths: MonthHoursEntry[] = Array.from(hoursByMonth.values())
+        .sort((a, b) => b.minutes - a.minutes)
+        .slice(0, 3)
+        .map(({ year, month, minutes }) => ({ year, month, hours: minutes / 60 }))
 
       // Classifica win rate del mese: il filtro su plays.played_at con
       // embed !inner scarica solo i punteggi del mese, non tutto lo storico
@@ -205,6 +246,8 @@ const Dashboard = () => {
         totalPlays: totalPlays || 0,
         topPlayedGames,
         monthTopGames,
+        last3MonthsTopGames,
+        topHoursMonths,
         topPlayers,
         recentPlays: recentPlays ?? [],
         playsByMonth
@@ -402,6 +445,80 @@ const Dashboard = () => {
                   <div className="text-right">
                     <p className="text-2xl font-bold text-sky-500">{player.winRate}%</p>
                     <p className="text-xs text-slate-400">win rate</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Favorite Games Last 3 Months - Top 3 */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-bold text-white mb-4">Giochi Preferiti Ultimi 3 Mesi (Top 3)</h2>
+          {stats.last3MonthsTopGames.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <CalendarRange className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nessuna partita giocata negli ultimi 3 mesi</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {stats.last3MonthsTopGames.map((game, index) => (
+                <div key={game.id} className="flex items-center space-x-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-violet-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-violet-500 font-bold">{index + 1}</span>
+                  </div>
+                  {game.image_url ? (
+                    <img
+                      src={game.image_url}
+                      alt={game.name}
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-slate-700 rounded-lg flex items-center justify-center">
+                      <Gamepad2 className="w-8 h-8 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">{game.name}</h3>
+                    {game.min_players && game.max_players && (
+                      <p className="text-slate-400 text-sm">
+                        {game.min_players}-{game.max_players} giocatori
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-violet-500">{game.playCount}</p>
+                    <p className="text-xs text-slate-400">partite</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Hours Played per Month - Top 3 */}
+        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+          <h2 className="text-xl font-bold text-white mb-4">Ore Giocate per Mese (Top 3)</h2>
+          {stats.topHoursMonths.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nessuna durata registrata</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {stats.topHoursMonths.map((entry, index) => (
+                <div key={`${entry.year}-${entry.month}`} className="flex items-center space-x-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-cyan-500/20 rounded-full flex items-center justify-center">
+                    <span className="text-cyan-500 font-bold">{index + 1}</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">
+                      {MONTHS_FULL[entry.month]} {entry.year}
+                    </h3>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-cyan-500">{entry.hours.toFixed(1)}h</p>
+                    <p className="text-xs text-slate-400">ore giocate</p>
                   </div>
                 </div>
               ))}
