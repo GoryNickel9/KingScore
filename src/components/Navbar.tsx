@@ -29,7 +29,15 @@ const Navbar = () => {
   const { user, signOut } = useAuth()
   const location = useLocation()
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false)
+  const [isStatsSubmenuOpen, setIsStatsSubmenuOpen] = useState<boolean>(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Chiudi il sottomenu mobile di Statistiche a ogni cambio pagina
+  const [prevPathname, setPrevPathname] = useState(location.pathname)
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname)
+    setIsStatsSubmenuOpen(false)
+  }
 
   // Chiudi il dropdown quando si clicca fuori
   useEffect(() => {
@@ -187,35 +195,47 @@ const Navbar = () => {
         {/* Mobile Navigation */}
         <div className="md:hidden pb-4">
           <div className="grid grid-cols-3 gap-2">
-            {publicNavItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
-                  isActive(location.pathname, item.path)
-                    ? 'bg-emerald-500 text-white'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                }`}
-              >
-                <item.icon className="w-5 h-5 mb-1" />
-                <span>{item.label}</span>
-              </Link>
-            ))}
-            {/* Statistiche per numero di giocatori (su mobile non c'è hover) */}
-            {PLAYER_COUNT_BUCKET_ORDER.map((bucket) => {
-              const path = `/stats/${bucket}`
+            {publicNavItems.map((item) => {
+              // Voce "Statistiche": su mobile l'hover non esiste, il tap apre
+              // un sottomenu con le statistiche per numero di giocatori
+              if (item.path === '/stats') {
+                const statsActive =
+                  location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+                return (
+                  <button
+                    key={item.path}
+                    type="button"
+                    onClick={() => setIsStatsSubmenuOpen(!isStatsSubmenuOpen)}
+                    aria-expanded={isStatsSubmenuOpen}
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
+                      statsActive
+                        ? 'bg-emerald-500 text-white'
+                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5 mb-1" />
+                    <span className="flex items-center gap-1">
+                      {item.label}
+                      <ChevronDown
+                        className={`w-3 h-3 transition-transform ${isStatsSubmenuOpen ? 'rotate-180' : ''}`}
+                      />
+                    </span>
+                  </button>
+                )
+              }
+
               return (
                 <Link
-                  key={path}
-                  to={path}
+                  key={item.path}
+                  to={item.path}
                   className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
-                    isActive(location.pathname, path)
+                    isActive(location.pathname, item.path)
                       ? 'bg-emerald-500 text-white'
                       : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                   }`}
                 >
-                  <BarChart3 className="w-5 h-5 mb-1" />
-                  <span>{PLAYER_COUNT_BUCKETS[bucket].shortLabel}</span>
+                  <item.icon className="w-5 h-5 mb-1" />
+                  <span>{item.label}</span>
                 </Link>
               )
             })}
@@ -234,6 +254,38 @@ const Navbar = () => {
               </Link>
             ))}
           </div>
+
+          {/* Sottomenu Statistiche per numero di giocatori (su mobile non c'è hover) */}
+          {isStatsSubmenuOpen && (
+            <div className="mt-2 bg-slate-700 rounded-lg shadow-lg py-1 border border-slate-600">
+              <Link
+                to="/stats"
+                className={`block px-4 py-2 text-sm font-medium transition ${
+                  isActive(location.pathname, '/stats')
+                    ? 'bg-emerald-500 text-white'
+                    : 'text-slate-300 hover:bg-slate-600 hover:text-white'
+                }`}
+              >
+                Generali
+              </Link>
+              {PLAYER_COUNT_BUCKET_ORDER.map((bucket) => {
+                const path = `/stats/${bucket}`
+                return (
+                  <Link
+                    key={bucket}
+                    to={path}
+                    className={`block px-4 py-2 text-sm font-medium transition ${
+                      isActive(location.pathname, path)
+                        ? 'bg-emerald-500 text-white'
+                        : 'text-slate-300 hover:bg-slate-600 hover:text-white'
+                    }`}
+                  >
+                    {PLAYER_COUNT_BUCKETS[bucket].label}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
           {user && (
             <div className="mt-2 flex justify-center">
               <button
