@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy, Users, StickyNote } from 'lucide-react'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
+import { PlayCommentBadge } from '../components/PlayCommentBadge'
+import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface Filters {
@@ -131,6 +133,7 @@ const Plays = () => {
   )
   const startItem = filteredPlays.length === 0 ? 0 : (currentPage - 1) * PLAYS_PER_PAGE + 1
   const endItem = Math.min(currentPage * PLAYS_PER_PAGE, filteredPlays.length)
+  const commentCounts = usePlayCommentCounts(paginatedPlays.map((play) => play.id))
 
   if (loading) {
     return <Spinner className="h-64" />
@@ -278,9 +281,12 @@ const Plays = () => {
 
                 {/* Play Info */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xl font-semibold text-white mb-2">
-                    {play.games?.name || 'Gioco sconosciuto'}
-                  </h3>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="text-xl font-semibold text-white">
+                      {play.games?.name || 'Gioco sconosciuto'}
+                    </h3>
+                    <PlayCommentBadge count={commentCounts[play.id] ?? 0} />
+                  </div>
 
                   <div className="flex flex-wrap gap-4 text-sm text-slate-400 mb-3">
                     <div className="flex items-center">

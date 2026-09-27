@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Users, TrendingUp, Calendar, Gamepad2, Trophy } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Spinner } from '../components/Spinner'
+import { PlayCommentBadge } from '../components/PlayCommentBadge'
+import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import { getWinnerNames } from '../utils/winners'
 import type { DbGame, DbPlayWithScoresOnly } from '../types/rows'
 
@@ -34,6 +36,7 @@ const GameDetail = () => {
     scoreHistory: []
   })
   const [loading, setLoading] = useState<boolean>(true)
+  const commentCounts = usePlayCommentCounts(plays.map((play) => play.id))
 
   useEffect(() => {
     void fetchGameData()
@@ -275,14 +278,17 @@ const GameDetail = () => {
                   <div className="flex items-center space-x-4">
                     <Calendar className="w-5 h-5 text-emerald-500" />
                     <div>
-                      <p className="text-white font-medium">
-                        {new Date(play.played_at).toLocaleDateString('it-IT', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-white font-medium">
+                          {new Date(play.played_at).toLocaleDateString('it-IT', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </p>
+                        <PlayCommentBadge count={commentCounts[play.id] ?? 0} />
+                      </div>
                       {play.location && (
                         <p className="text-sm text-slate-400">{play.location}</p>
                       )}

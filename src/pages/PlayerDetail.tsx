@@ -6,6 +6,8 @@ import { ArrowLeft, Trophy, TrendingUp, Users, Calendar, Gamepad2 } from 'lucide
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import Spinner from '../components/Spinner'
+import { PlayCommentBadge } from '../components/PlayCommentBadge'
+import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import type { DbGame, DbPlayer, DbPlay, DbPlayScore } from '../types/rows'
 
 type DbPlayScoreNested = DbPlayScore & { plays: DbPlayNested | null }
@@ -44,6 +46,7 @@ const PlayerDetail = () => {
     winHistory: []
   })
   const [loading, setLoading] = useState<boolean>(true)
+  const commentCounts = usePlayCommentCounts(stats.recentPlays.map((score) => score.plays?.id))
 
   useEffect(() => {
     void fetchPlayerData()
@@ -345,7 +348,10 @@ const PlayerDetail = () => {
                         </div>
                       )}
                       <div>
-                        <p className="text-white font-medium">{play.games?.name || 'Gioco sconosciuto'}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-white font-medium">{play.games?.name || 'Gioco sconosciuto'}</p>
+                          <PlayCommentBadge count={commentCounts[play.id] ?? 0} />
+                        </div>
                         <p className="text-sm text-slate-400">
                           <Calendar className="w-3 h-3 inline mr-1" />
                           {new Date(play.played_at).toLocaleDateString('it-IT')}

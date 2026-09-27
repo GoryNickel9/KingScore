@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { Trophy, Gamepad2, CalendarDays, Medal, CalendarRange, Clock } from 'lucide-react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Spinner } from '../components/Spinner'
+import { PlayCommentBadge } from '../components/PlayCommentBadge'
+import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import { getWinnerNames } from '../utils/winners'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import { getPlayerImageUrl } from '../utils/imageUpload'
@@ -118,6 +120,7 @@ const Dashboard = () => {
     playsByMonth: []
   })
   const [loading, setLoading] = useState<boolean>(true)
+  const commentCounts = usePlayCommentCounts(stats.recentPlays.map((play) => play.id))
 
   useEffect(() => {
     void fetchDashboardData()
@@ -559,7 +562,10 @@ const Dashboard = () => {
                     </div>
                   )}
                   <div>
-                    <h3 className="font-semibold text-white">{play.games?.name || 'Sconosciuto'}</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-white">{play.games?.name || 'Sconosciuto'}</h3>
+                      <PlayCommentBadge count={commentCounts[play.id] ?? 0} />
+                    </div>
                     <p className="text-sm text-slate-400">
                       {new Date(play.played_at).toLocaleDateString('it-IT')}
                       {play.location && ` • ${play.location}`}
