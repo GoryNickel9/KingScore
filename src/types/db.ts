@@ -317,6 +317,7 @@ export type Database = {
       }
       players: {
         Row: {
+          account_user_id: string | null
           alias: string | null
           avatar_url: string | null
           color: string | null
@@ -328,6 +329,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          account_user_id?: string | null
           alias?: string | null
           avatar_url?: string | null
           color?: string | null
@@ -339,6 +341,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          account_user_id?: string | null
           alias?: string | null
           avatar_url?: string | null
           color?: string | null
@@ -348,6 +351,24 @@ export type Database = {
           name?: string
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      registration_settings: {
+        Row: {
+          id: boolean
+          registrations_open: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          registrations_open?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          registrations_open?: boolean
+          updated_at?: string
         }
         Relationships: []
       }

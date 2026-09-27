@@ -146,13 +146,15 @@ const Plays = () => {
           <h1 className="text-3xl font-bold text-white">Storico Partite</h1>
           <p className="mt-2 text-slate-400">{filteredPlays.length} partite registrate</p>
         </div>
-        <Link
-          to="/plays/new"
-          className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition flex items-center"
-        >
-          <Gamepad2 className="w-5 h-5 mr-2" />
-          Aggiungi Partita
-        </Link>
+        {user?.app_metadata?.role === 'admin' && (
+          <Link
+            to="/plays/new"
+            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition flex items-center"
+          >
+            <Gamepad2 className="w-5 h-5 mr-2" />
+            Aggiungi Partita
+          </Link>
+        )}
       </div>
 
       {/* Filters */}
@@ -240,9 +242,11 @@ const Plays = () => {
           <Gamepad2 className="w-16 h-16 mx-auto mb-4 text-slate-600" />
           <h3 className="text-xl font-semibold text-white mb-2">Nessuna partita trovata</h3>
           <p className="text-slate-400 mb-6">
-            {plays.length === 0 ? 'Inizia aggiungendo la tua prima partita!' : 'Prova a cambiare i filtri'}
+            {plays.length === 0
+              ? user?.app_metadata?.role === 'admin' ? 'Inizia aggiungendo la tua prima partita!' : 'Non ci sono partite da mostrare.'
+              : 'Prova a cambiare i filtri'}
           </p>
-          {plays.length === 0 && (
+          {plays.length === 0 && user?.app_metadata?.role === 'admin' && (
             <Link
               to="/plays/new"
               className="inline-flex items-center px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"

@@ -209,7 +209,7 @@ const PlayDetail = () => {
           </div>
         </div>
 
-        {user && play.user_id === user.id && (
+        {user?.app_metadata?.role === 'admin' && (
           <div className="flex space-x-2">
             <Link
               to={`/plays/${id}/edit`}

@@ -22,6 +22,7 @@ interface MyPlayer {
 
 const ELO = () => {
   const { user } = useAuth()
+  const isAdmin = user?.app_metadata?.role === 'admin'
 
   const [games, setGames] = useState<DbEloGame[]>([])
   const [selectedGame, setSelectedGame] = useState<DbEloGame | null>(null)
@@ -200,7 +201,7 @@ const ELO = () => {
           <p className="mt-2 text-slate-400">Classifica dei giocatori per ogni gioco</p>
         </div>
         <div className="flex items-center space-x-2">
-          {user && (
+          {isAdmin && (
             <button
               onClick={handleRecalculateAll}
               disabled={recalculatingAll}

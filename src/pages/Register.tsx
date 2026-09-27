@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { UserPlus, Gamepad2 } from 'lucide-react'
+import { UserPlus, Gamepad2, LockKeyhole } from 'lucide-react'
+import { Spinner } from '../components/Spinner'
+import { supabase } from '../lib/supabase'
 
 const Register = () => {
   const [name, setName] = useState<string>('')
@@ -9,11 +11,46 @@ const Register = () => {
   const [password, setPassword] = useState<string>('')
   const [confirmPassword, setConfirmPassword] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
+  const [checkingRegistrationStatus, setCheckingRegistrationStatus] = useState(true)
+  const [registrationsOpen, setRegistrationsOpen] = useState(false)
   const { signUp } = useAuth()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    let isCurrent = true
+    void Promise.resolve(
+      supabase
+        .from('registration_settings')
+        .select('registrations_open')
+        .eq('id', true)
+        .single()
+        .then(({ data, error }) => {
+          if (!isCurrent) return
+          if (error) {
+            console.error('Error checking registration status:', error)
+            setRegistrationsOpen(false)
+          } else {
+            setRegistrationsOpen(data.registrations_open)
+          }
+        })
+    )
+      .catch((error: unknown) => {
+        if (!isCurrent) return
+        console.error('Error loading registration status:', error)
+        setRegistrationsOpen(false)
+      })
+      .finally(() => {
+        if (isCurrent) setCheckingRegistrationStatus(false)
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
+    if (!registrationsOpen) return
 
     if (password !== confirmPassword) {
       alert('Le password non coincidono')
@@ -34,6 +71,29 @@ const Register = () => {
     }
     
     setLoading(false)
+  }
+
+  if (checkingRegistrationStatus) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-900"><Spinner /></div>
+  }
+
+  if (!registrationsOpen) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
+        <div className="w-full max-w-md space-y-6 rounded-xl bg-slate-800 p-8 text-center shadow-lg">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15">
+            <LockKeyhole className="h-7 w-7 text-amber-300" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Registrazioni chiuse</h1>
+            <p className="mt-2 text-slate-400">Al momento non è possibile creare un nuovo account.</p>
+          </div>
+          <Link to="/login" className="inline-flex rounded-lg bg-emerald-500 px-5 py-3 font-medium text-white transition hover:bg-emerald-600">
+            Accedi
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

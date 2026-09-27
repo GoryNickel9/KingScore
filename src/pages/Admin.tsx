@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   CalendarDays,
   Check,
   Gamepad2,
-  MessageCircle,
   Pencil,
   RefreshCw,
   Search,
@@ -18,46 +16,39 @@ import type { LucideIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '../components/Spinner'
 import { supabase } from '../lib/supabase'
-import type { DbAdminRegistration, DbPlayComment, DbPlayer } from '../types/rows'
+import type { DbAdminRegistration, DbPlayer } from '../types/rows'
 
 interface AdminSummary {
   plays: number
   games: number
   players: number
-  comments: number
   registrations: number
 }
 
 interface AdminDashboardData {
   summary: AdminSummary
-  comments: DbPlayComment[]
   players: DbPlayer[]
   registrations: DbAdminRegistration[]
+  registrationsOpen: boolean
 }
 
-type AdminSection = 'overview' | 'players' | 'registrations' | 'comments'
+type AdminSection = 'overview' | 'players' | 'registrations'
 
 const PAGE_SIZE = 500
-const COMMENT_PAGE_SIZE = 100
 
 async function fetchAdminDashboardData(): Promise<AdminDashboardData> {
-  const [playsResult, gamesResult, playersResult, commentsResult, registrationsResult] = await Promise.all([
+  const [playsResult, gamesResult, playersResult, registrationsResult, settingsResult] = await Promise.all([
     supabase.from('plays').select('id', { count: 'exact', head: true }),
     supabase.from('games').select('id', { count: 'exact', head: true }),
     supabase.from('players').select('*', { count: 'exact' }).order('name').limit(PAGE_SIZE),
-    supabase
-      .from('play_comments')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .limit(COMMENT_PAGE_SIZE),
     supabase.rpc('admin_list_registrations'),
+    supabase.from('registration_settings').select('registrations_open').eq('id', true).single(),
   ])
 
-  const error = playsResult.error ?? gamesResult.error ?? playersResult.error ?? commentsResult.error ?? registrationsResult.error
+  const error = playsResult.error ?? gamesResult.error ?? playersResult.error ?? registrationsResult.error ?? settingsResult.error
   if (error) throw error
 
   const players = playersResult.data ?? []
-  const comments = commentsResult.data ?? []
   const registrations = registrationsResult.data ?? []
 
   return {
@@ -65,12 +56,11 @@ async function fetchAdminDashboardData(): Promise<AdminDashboardData> {
       plays: playsResult.count ?? 0,
       games: gamesResult.count ?? 0,
       players: playersResult.count ?? players.length,
-      comments: commentsResult.count ?? 0,
       registrations: registrations[0]?.total_count ?? registrations.length,
     },
-    comments,
     players,
     registrations,
+    registrationsOpen: settingsResult.data?.registrations_open ?? false,
   }
 }
 
@@ -86,12 +76,12 @@ const Admin = () => {
     plays: 0,
     games: 0,
     players: 0,
-    comments: 0,
     registrations: 0,
   })
-  const [comments, setComments] = useState<DbPlayComment[]>([])
   const [players, setPlayers] = useState<DbPlayer[]>([])
   const [registrations, setRegistrations] = useState<DbAdminRegistration[]>([])
+  const [registrationsOpen, setRegistrationsOpen] = useState(true)
+  const [savingRegistrationStatus, setSavingRegistrationStatus] = useState(false)
   const [section, setSection] = useState<AdminSection>('overview')
   const [refreshing, setRefreshing] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -99,9 +89,9 @@ const Admin = () => {
 
   const applyDashboardData = useCallback((dashboard: AdminDashboardData): void => {
     setSummary(dashboard.summary)
-    setComments(dashboard.comments)
     setPlayers(dashboard.players)
     setRegistrations(dashboard.registrations)
+    setRegistrationsOpen(dashboard.registrationsOpen)
   }, [])
 
   const loadDashboard = useCallback(async (): Promise<void> => {
@@ -140,11 +130,6 @@ const Admin = () => {
     }
   }, [applyDashboardData])
 
-  const handleCommentDeleted = (commentId: string): void => {
-    setComments((current) => current.filter((comment) => comment.id !== commentId))
-    setSummary((current) => ({ ...current, comments: Math.max(0, current.comments - 1) }))
-  }
-
   const handlePlayerUpdated = (updatedPlayer: DbPlayer): void => {
     setPlayers((current) => current.map((player) => player.id === updatedPlayer.id ? updatedPlayer : player))
   }
@@ -154,13 +139,36 @@ const Admin = () => {
     setSummary((current) => ({ ...current, players: Math.max(0, current.players - 1) }))
   }
 
+  const handleAccountLinked = (updatedPlayer: DbPlayer): void => {
+    setPlayers((current) => current.map((player) => player.id === updatedPlayer.id ? updatedPlayer : player))
+  }
+
+  const toggleRegistrations = async (): Promise<void> => {
+    setSavingRegistrationStatus(true)
+    const nextValue = !registrationsOpen
+    try {
+      const { error } = await supabase
+        .from('registration_settings')
+        .update({ registrations_open: nextValue })
+        .eq('id', true)
+
+      if (error) throw error
+      setRegistrationsOpen(nextValue)
+      toast.success(nextValue ? 'Registrazioni aperte' : 'Registrazioni chiuse')
+    } catch (error) {
+      console.error('Error updating registration status:', error)
+      toast.error('Impossibile aggiornare lo stato delle registrazioni')
+    } finally {
+      setSavingRegistrationStatus(false)
+    }
+  }
+
   if (loading) return <Spinner className="h-64" />
 
   const sections: { id: AdminSection; label: string; count?: number }[] = [
     { id: 'overview', label: 'Panoramica' },
     { id: 'players', label: 'Giocatori', count: summary.players },
     { id: 'registrations', label: 'Registrazioni', count: summary.registrations },
-    { id: 'comments', label: 'Commenti', count: summary.comments },
   ]
 
   return (
@@ -173,7 +181,7 @@ const Admin = () => {
           <div>
             <p className="text-sm font-medium uppercase tracking-wider text-emerald-400">KingScore</p>
             <h1 className="text-3xl font-bold text-white">Pannello admin</h1>
-            <p className="mt-1 text-slate-400">Gestisci player, account e commenti.</p>
+            <p className="mt-1 text-slate-400">Gestisci player, account e registrazioni.</p>
           </div>
         </div>
         <button
@@ -196,12 +204,11 @@ const Admin = () => {
         </div>
       ) : (
         <>
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Riepilogo">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Riepilogo">
             <SummaryCard icon={CalendarDays} label="Partite" value={summary.plays} />
             <SummaryCard icon={Gamepad2} label="Giochi" value={summary.games} />
             <SummaryCard icon={Users} label="Player" value={summary.players} />
             <SummaryCard icon={UserRound} label="Account" value={summary.registrations} />
-            <SummaryCard icon={MessageCircle} label="Commenti" value={summary.comments} />
           </section>
 
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-700" aria-label="Sezioni amministrative">
@@ -224,18 +231,24 @@ const Admin = () => {
           </nav>
 
           {section === 'overview' && (
-            <section className="grid gap-4 md:grid-cols-3" aria-label="Scorciatoie amministrative">
+            <section className="grid gap-4 md:grid-cols-2" aria-label="Scorciatoie amministrative">
               <AdminShortcut title="Giocatori" description="Cerca e aggiorna i profili player registrati nell’app." onClick={() => setSection('players')} />
-              <AdminShortcut title="Registrazioni" description="Consulta i nuovi account e i dati essenziali di accesso." onClick={() => setSection('registrations')} />
-              <AdminShortcut title="Commenti" description="Esamina e rimuovi i commenti pubblicati sulle partite." onClick={() => setSection('comments')} />
+              <AdminShortcut title="Registrazioni" description="Consulta gli account e scegli se accettare nuove registrazioni." onClick={() => setSection('registrations')} />
             </section>
           )}
 
           {section === 'players' && (
-            <AdminPlayers players={players} registrations={registrations} onUpdated={handlePlayerUpdated} onDeleted={handlePlayerDeleted} />
+            <AdminPlayers players={players} registrations={registrations} onUpdated={handlePlayerUpdated} onAccountLinked={handleAccountLinked} onDeleted={handlePlayerDeleted} />
           )}
-          {section === 'registrations' && <AdminRegistrations registrations={registrations} total={summary.registrations} />}
-          {section === 'comments' && <AdminComments comments={comments} total={summary.comments} onDeleted={handleCommentDeleted} />}
+          {section === 'registrations' && (
+            <AdminRegistrations
+              registrations={registrations}
+              total={summary.registrations}
+              registrationsOpen={registrationsOpen}
+              onToggleRegistrations={() => void toggleRegistrations()}
+              saving={savingRegistrationStatus}
+            />
+          )}
         </>
       )}
     </div>
@@ -281,26 +294,29 @@ interface AdminPlayersProps {
   players: DbPlayer[]
   registrations: DbAdminRegistration[]
   onUpdated: (player: DbPlayer) => void
+  onAccountLinked: (player: DbPlayer) => void
   onDeleted: (playerId: string) => void
 }
 
-function AdminPlayers({ players, registrations, onUpdated, onDeleted }: AdminPlayersProps) {
+function AdminPlayers({ players, registrations, onUpdated, onAccountLinked, onDeleted }: AdminPlayersProps) {
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<DbPlayer | null>(null)
   const [nameDraft, setNameDraft] = useState('')
   const [aliasDraft, setAliasDraft] = useState('')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [linkingPlayerId, setLinkingPlayerId] = useState<string | null>(null)
 
-  const ownerById = useMemo(() => new Map(registrations.map((registration) => [registration.user_id, registration.email])), [registrations])
+  const accountById = useMemo(() => new Map(registrations.map((registration) => [registration.user_id, registration.email])), [registrations])
+  const linkedUserIds = useMemo(() => new Set(players.map((player) => player.account_user_id).filter((id): id is string => Boolean(id))), [players])
   const filteredPlayers = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('it-IT')
     if (!query) return players
     return players.filter((player) => {
-      const owner = player.user_id ? ownerById.get(player.user_id) ?? '' : ''
-      return [player.name, player.alias ?? '', owner].some((value) => value.toLocaleLowerCase('it-IT').includes(query))
+      const account = player.account_user_id ? accountById.get(player.account_user_id) ?? '' : ''
+      return [player.name, player.alias ?? '', account].some((value) => value.toLocaleLowerCase('it-IT').includes(query))
     })
-  }, [players, ownerById, search])
+  }, [players, accountById, search])
 
   const beginEdit = (player: DbPlayer): void => {
     setEditing(player)
@@ -332,6 +348,27 @@ function AdminPlayers({ players, registrations, onUpdated, onDeleted }: AdminPla
       toast.success('Player aggiornato')
     }
     setSaving(false)
+  }
+
+  const linkAccount = async (player: DbPlayer, accountId: string): Promise<void> => {
+    setLinkingPlayerId(player.id)
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .update({ account_user_id: accountId || null })
+        .eq('id', player.id)
+        .select('*')
+        .single()
+
+      if (error) throw error
+      onAccountLinked(data)
+      toast.success(accountId ? 'Account collegato al player' : 'Collegamento rimosso')
+    } catch (error) {
+      console.error('Error linking account to player:', error)
+      toast.error('Impossibile collegare questo account al player')
+    } finally {
+      setLinkingPlayerId(null)
+    }
   }
 
   const deletePlayer = async (player: DbPlayer): Promise<void> => {
@@ -376,7 +413,10 @@ function AdminPlayers({ players, registrations, onUpdated, onDeleted }: AdminPla
       ) : (
         <ul className="divide-y divide-slate-700">
           {filteredPlayers.map((player) => {
-            const owner = player.user_id ? ownerById.get(player.user_id) : null
+            const accountEmail = player.account_user_id ? accountById.get(player.account_user_id) : null
+            const availableRegistrations = registrations.filter((registration) =>
+              !linkedUserIds.has(registration.user_id) || registration.user_id === player.account_user_id
+            )
             const isEditing = editing?.id === player.id
             const isConfirming = confirmingId === player.id
 
@@ -402,7 +442,25 @@ function AdminPlayers({ players, registrations, onUpdated, onDeleted }: AdminPla
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-white">{player.alias || player.name}</p>
                       {player.alias && player.alias !== player.name && <p className="mt-1 text-sm text-slate-400">{player.name}</p>}
-                      <p className="mt-1 truncate text-xs text-slate-500">Proprietario: {owner || 'Account non incluso tra i 500 più recenti'}</p>
+                      <label className="mt-2 block max-w-lg text-xs text-slate-400">
+                        Account collegato
+                        <select
+                          value={player.account_user_id ?? ''}
+                          onChange={(event) => void linkAccount(player, event.target.value)}
+                          disabled={linkingPlayerId === player.id}
+                          className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+                        >
+                          <option value="">Nessun account collegato</option>
+                          {player.account_user_id && !availableRegistrations.some((registration) => registration.user_id === player.account_user_id) && (
+                            <option value={player.account_user_id}>{accountEmail || 'Account collegato'}</option>
+                          )}
+                          {availableRegistrations.map((registration) => (
+                            <option key={registration.user_id} value={registration.user_id}>
+                              {registration.display_name || 'Senza nome'} · {registration.email || registration.user_id.slice(0, 8)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {isConfirming ? (
@@ -433,9 +491,12 @@ function AdminPlayers({ players, registrations, onUpdated, onDeleted }: AdminPla
 interface AdminRegistrationsProps {
   registrations: DbAdminRegistration[]
   total: number
+  registrationsOpen: boolean
+  onToggleRegistrations: () => void
+  saving: boolean
 }
 
-function AdminRegistrations({ registrations, total }: AdminRegistrationsProps) {
+function AdminRegistrations({ registrations, total, registrationsOpen, onToggleRegistrations, saving }: AdminRegistrationsProps) {
   const [search, setSearch] = useState('')
   const filteredRegistrations = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('it-IT')
@@ -453,6 +514,14 @@ function AdminRegistrations({ registrations, total }: AdminRegistrationsProps) {
         <div>
           <h2 className="text-xl font-bold text-white">Registrazioni</h2>
           <p className="mt-1 text-sm text-slate-400">Elenco in sola lettura degli account, con stato email e ultimo accesso.</p>
+        </div>
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <span className={`rounded-full px-3 py-1 text-center text-xs font-medium ${registrationsOpen ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+            Registrazioni {registrationsOpen ? 'aperte' : 'chiuse'}
+          </span>
+          <button type="button" onClick={onToggleRegistrations} disabled={saving} className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50 ${registrationsOpen ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>
+            {saving ? 'Salvataggio…' : registrationsOpen ? 'Chiudi registrazioni' : 'Apri registrazioni'}
+          </button>
         </div>
         <label className="relative block w-full sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -502,100 +571,6 @@ function AdminRegistrations({ registrations, total }: AdminRegistrationsProps) {
         </div>
       )}
       {total > registrations.length && <p className="border-t border-slate-700 px-5 py-3 text-xs text-slate-500">Mostrati {registrations.length} account su {total}.</p>}
-    </section>
-  )
-}
-
-interface AdminCommentsProps {
-  comments: DbPlayComment[]
-  total: number
-  onDeleted: (commentId: string) => void
-}
-
-function AdminComments({ comments, total, onDeleted }: AdminCommentsProps) {
-  const [search, setSearch] = useState('')
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-
-  const filteredComments = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('it-IT')
-    if (!query) return comments
-    return comments.filter((comment) =>
-      comment.author_name.toLocaleLowerCase('it-IT').includes(query) ||
-      comment.content.toLocaleLowerCase('it-IT').includes(query) ||
-      comment.play_id.toLocaleLowerCase('it-IT').includes(query)
-    )
-  }, [comments, search])
-
-  const deleteComment = async (commentId: string): Promise<void> => {
-    setDeletingId(commentId)
-    const { error } = await supabase.from('play_comments').delete().eq('id', commentId)
-
-    if (error) {
-      console.error('Error moderating play comment:', error)
-      toast.error('Impossibile eliminare il commento')
-    } else {
-      onDeleted(commentId)
-      setConfirmingId(null)
-      toast.success('Commento eliminato')
-    }
-    setDeletingId(null)
-  }
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800 shadow-md">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700 p-5 sm:p-6">
-        <div>
-          <h2 className="text-xl font-bold text-white">Moderazione commenti</h2>
-          <p className="mt-1 text-sm text-slate-400">Mostro i {Math.min(COMMENT_PAGE_SIZE, total)} commenti più recenti.</p>
-        </div>
-        <label className="relative block w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Cerca autore o testo"
-            aria-label="Cerca commenti"
-            className="w-full rounded-lg border border-slate-600 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          />
-        </label>
-      </div>
-      {filteredComments.length === 0 ? (
-        <p className="p-8 text-center text-slate-400">{comments.length ? 'Nessun commento corrisponde alla ricerca.' : 'Non ci sono commenti da moderare.'}</p>
-      ) : (
-        <ul className="divide-y divide-slate-700">
-          {filteredComments.map((comment) => (
-            <li key={comment.id} className="p-5 sm:p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold text-white">{comment.author_name}</span>
-                    <time dateTime={comment.created_at} className="text-xs text-slate-500">{formatDate(comment.created_at)}</time>
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-300">{comment.content}</p>
-                  <Link to={`/plays/${comment.play_id}`} className="mt-3 inline-flex items-center text-xs font-medium text-emerald-400 hover:text-emerald-300">
-                    Apri partita <span className="ml-1" aria-hidden="true">↗</span>
-                  </Link>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {confirmingId === comment.id ? (
-                    <>
-                      <span className="text-xs text-slate-400">Eliminare?</span>
-                      <button type="button" onClick={() => void deleteComment(comment.id)} disabled={deletingId === comment.id} className="rounded-md px-2 py-1 text-xs font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-50">Conferma</button>
-                      <button type="button" onClick={() => setConfirmingId(null)} className="rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-slate-700">Annulla</button>
-                    </>
-                  ) : (
-                    <button type="button" onClick={() => setConfirmingId(comment.id)} className="inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/10">
-                      <Trash2 className="h-4 w-4" /> Elimina
-                    </button>
-                  )}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   )
 }

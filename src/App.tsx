@@ -26,6 +26,7 @@ const Images = lazy(() => import('./pages/Images'))
 const Register = lazy(() => import('./pages/Register'))
 const Wrapped = lazy(() => import('./pages/Wrapped'))
 const Admin = lazy(() => import('./pages/Admin'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 function App() {
   return (
@@ -67,9 +68,11 @@ function App() {
           <Route
             path="/games"
             element={
-              <Layout>
-                <Games />
-              </Layout>
+              <ProtectedRoute requireAdmin>
+                <Layout>
+                  <Games />
+                </Layout>
+              </ProtectedRoute>
             }
           />
           <Route
@@ -107,9 +110,11 @@ function App() {
           <Route
             path="/images"
             element={
-              <Layout>
-                <Images />
-              </Layout>
+              <ProtectedRoute requireAdmin>
+                <Layout>
+                  <Images />
+                </Layout>
+              </ProtectedRoute>
             }
           />
           <Route
@@ -131,12 +136,22 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Settings />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
 
           {/* Protected Routes - Only for registered users */}
           <Route
             path="/plays/new"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAdmin>
                 <Layout>
                   <AddPlay />
                 </Layout>
@@ -146,7 +161,7 @@ function App() {
           <Route
             path="/plays/:id/edit"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAdmin>
                 <Layout>
                   <EditPlay />
                 </Layout>
@@ -156,7 +171,7 @@ function App() {
           <Route
             path="/players"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAdmin>
                 <Layout>
                   <Players />
                 </Layout>
@@ -176,7 +191,7 @@ function App() {
           <Route
             path="/import"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAdmin>
                 <Layout>
                   <Import />
                 </Layout>

@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown, Sparkles, ShieldCheck } from 'lucide-react'
+import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown, Sparkles, ShieldCheck, Settings } from 'lucide-react'
 import type { NavItem } from '../types'
 import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/playerCountElo'
+import { getPlayerImageUrl } from '../utils/imageUpload'
+import { supabase } from '../lib/supabase'
 
 const publicNavItems: NavItem[] = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -22,6 +24,7 @@ const profileNavItems: NavItem[] = [
 ]
 
 const adminNavItem: NavItem = { path: '/admin', icon: ShieldCheck, label: 'Admin' }
+const settingsNavItem: NavItem = { path: '/settings', icon: Settings, label: 'Impostazioni' }
 
 function isActive(pathname: string, path: string): boolean {
   return pathname === path
@@ -29,9 +32,14 @@ function isActive(pathname: string, path: string): boolean {
 
 const Navbar = () => {
   const { user, signOut } = useAuth()
-  const visibleProfileNavItems = user?.app_metadata?.role === 'admin'
-    ? [...profileNavItems, adminNavItem]
-    : profileNavItems
+  const isAdmin = user?.app_metadata?.role === 'admin'
+  const visibleProfileNavItems = isAdmin
+    ? [...profileNavItems, adminNavItem, settingsNavItem]
+    : [settingsNavItem]
+  const avatarPath = typeof user?.user_metadata?.avatar_url === 'string'
+    ? user.user_metadata.avatar_url
+    : null
+  const avatarUrl = avatarPath ? getPlayerImageUrl(supabase, avatarPath) : null
   const location = useLocation()
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false)
   const [isStatsSubmenuOpen, setIsStatsSubmenuOpen] = useState<boolean>(false)
@@ -140,8 +148,12 @@ const Navbar = () => {
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
                 >
-                  <div className="bg-slate-700 p-2 rounded-full">
-                    <User className="w-5 h-5 text-slate-300" />
+                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-slate-700">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-slate-300" />
+                    )}
                   </div>
                   <span className="hidden sm:block">
                     {user?.user_metadata?.name || user?.email}
