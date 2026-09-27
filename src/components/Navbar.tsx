@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown, Sparkles } from 'lucide-react'
+import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown, Sparkles, ShieldCheck } from 'lucide-react'
 import type { NavItem } from '../types'
 import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/playerCountElo'
 
@@ -21,12 +21,17 @@ const profileNavItems: NavItem[] = [
   { path: '/import', icon: Download, label: 'Import' },
 ]
 
+const adminNavItem: NavItem = { path: '/admin', icon: ShieldCheck, label: 'Pannello admin' }
+
 function isActive(pathname: string, path: string): boolean {
   return pathname === path
 }
 
 const Navbar = () => {
   const { user, signOut } = useAuth()
+  const visibleProfileNavItems = user?.app_metadata?.role === 'admin'
+    ? [...profileNavItems, adminNavItem]
+    : profileNavItems
   const location = useLocation()
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false)
   const [isStatsSubmenuOpen, setIsStatsSubmenuOpen] = useState<boolean>(false)
@@ -150,7 +155,7 @@ const Navbar = () => {
                     <div className="px-4 py-2 border-b border-slate-600">
                       <p className="text-xs text-slate-400 uppercase tracking-wider">Menu Profilo</p>
                     </div>
-                    {profileNavItems.map((item) => (
+                    {visibleProfileNavItems.map((item) => (
                       <Link
                         key={item.path}
                         to={item.path}
@@ -239,7 +244,7 @@ const Navbar = () => {
                 </Link>
               )
             })}
-            {user && profileNavItems.map((item) => (
+            {user && visibleProfileNavItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}

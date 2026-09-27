@@ -25,6 +25,7 @@ const ELO = lazy(() => import('./pages/ELO'))
 const Images = lazy(() => import('./pages/Images'))
 const Register = lazy(() => import('./pages/Register'))
 const Wrapped = lazy(() => import('./pages/Wrapped'))
+const Admin = lazy(() => import('./pages/Admin'))
 
 function App() {
   return (
@@ -117,6 +118,17 @@ function App() {
               <Layout>
                 <Wrapped />
               </Layout>
+            }
+          />
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requireAdmin>
+                <Layout>
+                  <Admin />
+                </Layout>
+              </ProtectedRoute>
             }
           />
 

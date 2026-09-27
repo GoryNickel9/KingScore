@@ -14,6 +14,7 @@ import type { Database } from './db'
 export type DbGame = Database['public']['Tables']['games']['Row']
 export type DbPlayer = Database['public']['Tables']['players']['Row']
 export type DbPlay = Database['public']['Tables']['plays']['Row']
+export type DbPlayComment = Database['public']['Tables']['play_comments']['Row']
 export type DbPlayScore = Database['public']['Tables']['play_scores']['Row']
 export type DbPlayerRating = Database['public']['Tables']['player_ratings']['Row']
 export type DbPlayerGeneralRating = Database['public']['Tables']['player_general_ratings']['Row']

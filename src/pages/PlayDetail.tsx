@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 import { performFullRecalc } from '../utils/elo/recalc'
 import { Spinner } from '../components/Spinner'
+import PlayComments from '../components/PlayComments'
 import type { DbPlayWithScores } from '../types/rows'
 
 interface EloHistoryEntry {
@@ -308,6 +309,8 @@ const PlayDetail = () => {
           </div>
         )}
       </div>
+
+      <PlayComments playId={play.id} />
 
       {/* Scores Table */}
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">

@@ -5,9 +5,10 @@ import { Spinner } from './Spinner'
 
 interface ProtectedRouteProps {
   children: ReactNode
+  requireAdmin?: boolean
 }
 
-const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
   const { user, loading } = useAuth()
 
   if (loading) {
@@ -16,6 +17,10 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (requireAdmin && user.app_metadata?.role !== 'admin') {
+    return <Navigate to="/" replace />
   }
 
   return <>{children}</>
