@@ -5,6 +5,7 @@ import { Trophy, Calendar, TrendingUp, Award, Clock, Sparkles } from 'lucide-rea
 import { BarChart, Bar, LineChart, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { fetchAllPages } from '../utils/pagination'
 import type { DbGame, DbPlayer, DbPlayWithScores } from '../types/rows'
+import { useAuth } from '../contexts/AuthContext'
 
 interface EloEntry {
   player_id: string
@@ -64,6 +65,9 @@ const MONTHS = [
 ]
 
 const Wrapped = () => {
+  const { user } = useAuth()
+  const currentUserId = user?.id
+  const isAdmin = user?.app_metadata?.role === 'admin'
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('')
   const [players, setPlayers] = useState<DbPlayer[]>([])
@@ -84,6 +88,12 @@ const Wrapped = () => {
       void loadStats()
     }
   }, [selectedYear, selectedPlayerId, availableYears])
+
+  useEffect(() => {
+    if (!currentUserId || isAdmin) return
+    const linkedPlayer = players.find((player) => player.account_user_id === currentUserId)
+    if (linkedPlayer) setSelectedPlayerId((current) => current || linkedPlayer.id)
+  }, [currentUserId, isAdmin, players])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -386,6 +396,7 @@ const Wrapped = () => {
   const selectedPlayerName = selectedPlayerId
     ? players.find(p => p.id === selectedPlayerId)?.name || 'Giocatore'
     : 'Tutti'
+  const linkedPlayer = user ? players.find((player) => player.account_user_id === user.id) : undefined
 
   return (
     <div className="min-h-screen bg-slate-900 py-8">
@@ -422,8 +433,11 @@ const Wrapped = () => {
               onChange={(e) => setSelectedPlayerId(e.target.value)}
               className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
+              {!isAdmin && linkedPlayer && (
+                <option value={linkedPlayer.id}>{linkedPlayer.alias || linkedPlayer.name}</option>
+              )}
               <option value="">Tutti i giocatori</option>
-              {players.map(player => (
+              {isAdmin && players.map(player => (
                 <option key={player.id} value={player.id}>
                   {player.alias || player.name}
                 </option>

@@ -6,6 +6,40 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { DbPlayComment } from '../types/rows'
 import { MAX_PLAY_COMMENT_LENGTH, normalizePlayCommentContent } from '../utils/playComments'
+import { getPlayerImageUrl } from '../utils/imageUpload'
+
+type PlayCommentWithAvatar = DbPlayComment & { author_avatar_url: string | null }
+
+async function attachAuthorAvatars(
+  comments: DbPlayComment[],
+  currentUserId: string | undefined,
+  currentUserAvatarPath: string | null
+): Promise<PlayCommentWithAvatar[]> {
+  const userIds = [...new Set(comments.map((comment) => comment.user_id))]
+  const avatarByUserId = new Map<string, string | null>()
+
+  if (userIds.length > 0) {
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select('account_user_id, avatar_url')
+        .in('account_user_id', userIds)
+
+      if (error) throw error
+      for (const player of data) {
+        if (player.account_user_id) avatarByUserId.set(player.account_user_id, player.avatar_url)
+      }
+    } catch (error) {
+      console.warn('Could not load comment author profile images:', error)
+    }
+  }
+
+  return comments.map((comment) => ({
+    ...comment,
+    author_avatar_url: avatarByUserId.get(comment.user_id) ??
+      (comment.user_id === currentUserId ? currentUserAvatarPath : null),
+  }))
+}
 
 interface PlayCommentsProps {
   playId: string
@@ -24,7 +58,10 @@ function formatCommentDate(date: string): string {
 
 const PlayComments = ({ playId }: PlayCommentsProps) => {
   const { user } = useAuth()
-  const [comments, setComments] = useState<DbPlayComment[]>([])
+  const currentUserAvatarPath = typeof user?.user_metadata?.avatar_url === 'string'
+    ? user.user_metadata.avatar_url
+    : null
+  const [comments, setComments] = useState<PlayCommentWithAvatar[]>([])
   const [draft, setDraft] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
@@ -37,21 +74,22 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
     setLoading(true)
     setLoadError(false)
 
-    const { data, error } = await supabase
-      .from('play_comments')
-      .select('*')
-      .eq('play_id', playId)
-      .order('created_at', { ascending: true })
+    try {
+      const { data, error } = await supabase
+        .from('play_comments')
+        .select('*')
+        .eq('play_id', playId)
+        .order('created_at', { ascending: true })
 
-    if (error) {
+      if (error) throw error
+      setComments(await attachAuthorAvatars(data, user?.id, currentUserAvatarPath))
+    } catch (error) {
       console.error('Error fetching play comments:', error)
       setLoadError(true)
       toast.error('Impossibile caricare i commenti')
-    } else {
-      setComments(data)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -60,29 +98,31 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
     const loadComments = async (): Promise<void> => {
       setLoading(true)
       setLoadError(false)
+      try {
+        const { data, error } = await supabase
+          .from('play_comments')
+          .select('*')
+          .eq('play_id', playId)
+          .order('created_at', { ascending: true })
 
-      const { data, error } = await supabase
-        .from('play_comments')
-        .select('*')
-        .eq('play_id', playId)
-        .order('created_at', { ascending: true })
-
-      if (!isCurrent) return
-
-      if (error) {
+        if (error) throw error
+        const enrichedComments = await attachAuthorAvatars(data, user?.id, currentUserAvatarPath)
+        if (!isCurrent) return
+        setComments(enrichedComments)
+      } catch (error) {
+        if (!isCurrent) return
         console.error('Error fetching play comments:', error)
         setLoadError(true)
-      } else {
-        setComments(data)
+      } finally {
+        if (isCurrent) setLoading(false)
       }
-      setLoading(false)
     }
 
     void loadComments()
     return () => {
       isCurrent = false
     }
-  }, [playId])
+  }, [playId, user?.id, currentUserAvatarPath])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -103,7 +143,8 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
       console.error('Error creating play comment:', error)
       toast.error("Impossibile pubblicare il commento. Riprova.")
     } else {
-      setComments((current) => [...current, data])
+      const [commentWithAvatar] = await attachAuthorAvatars([data], user?.id, currentUserAvatarPath)
+      setComments((current) => [...current, commentWithAvatar])
       setDraft('')
       toast.success('Commento pubblicato')
     }
@@ -129,7 +170,7 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
       console.error('Error updating play comment:', error)
       toast.error('Impossibile modificare il commento')
     } else {
-      setComments((current) => current.map((comment) => comment.id === commentId ? data : comment))
+      setComments((current) => current.map((comment) => comment.id === commentId ? { ...comment, ...data } : comment))
       setEditingCommentId(null)
       setEditDraft('')
       toast.success('Commento aggiornato')
@@ -190,9 +231,17 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
             return (
               <li key={comment.id} className="py-4 first:pt-0 last:pb-0">
                 <div className="flex items-start gap-3">
+                {comment.author_avatar_url ? (
+                  <img
+                    src={getPlayerImageUrl(supabase, comment.author_avatar_url) ?? undefined}
+                    alt={`${comment.author_name} · immagine profilo`}
+                    className="w-9 h-9 shrink-0 rounded-full bg-slate-700 object-cover"
+                  />
+                ) : (
                   <div className="w-9 h-9 shrink-0 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold text-emerald-300" aria-hidden="true">
                     {getAuthorInitial(comment.author_name)}
                   </div>
+                )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-medium text-white">{comment.author_name}</span>
