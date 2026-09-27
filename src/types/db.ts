@@ -453,6 +453,18 @@ export type Database = {
           user_id: string
         }[]
       }
+      admin_list_registrations: {
+        Args: never
+        Returns: {
+          confirmed_at: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          last_sign_in_at: string | null
+          total_count: number
+          user_id: string
+        }[]
+      }
       replace_play_scores: {
         Args: { p_play_id: string; p_scores: Json }
         Returns: {

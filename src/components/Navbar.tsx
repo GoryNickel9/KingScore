@@ -21,7 +21,7 @@ const profileNavItems: NavItem[] = [
   { path: '/import', icon: Download, label: 'Import' },
 ]
 
-const adminNavItem: NavItem = { path: '/admin', icon: ShieldCheck, label: 'Pannello admin' }
+const adminNavItem: NavItem = { path: '/admin', icon: ShieldCheck, label: 'Admin' }
 
 function isActive(pathname: string, path: string): boolean {
   return pathname === path
