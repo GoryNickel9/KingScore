@@ -4,7 +4,7 @@ Web app completa per tracciare le partite a giochi da tavolo, con autenticazione
 
 Il menu principale contiene «PartyScore» subito dopo «Wrapped», sia su desktop sia su mobile. Il collegamento apre [PartyScore](https://partyscore.baldeddu.cc/) nella stessa scheda; da quel sito la voce «KingScore» permette di tornare qui.
 
-Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si seleziona una pagina. Da 640 a 1023 px resta visibile la griglia; da 1024 px le voci principali sono nella testata. Il menu profilo degli amministratori contiene Giochi, Giocatori, Admin, Impostazioni e Logout; per gli altri utenti contiene Impostazioni e Logout.
+Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si seleziona una pagina. Da 640 a 1023 px resta visibile la griglia; da 1024 px le voci principali sono nella testata. La navigazione principale contiene solo Dashboard, Partite, Statistiche, Rating ELO, Wrapped e PartyScore. Giochi, Giocatori, Admin, Impostazioni e Logout sono disponibili esclusivamente nel menu profilo degli amministratori; per gli altri utenti il menu profilo contiene Impostazioni e Logout.
 
 ## 🎲 Caratteristiche
 

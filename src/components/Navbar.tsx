@@ -335,24 +335,6 @@ const Navbar = () => {
               <ArrowLeftRight className="w-5 h-5 mb-1" />
               <span>PartyScore</span>
             </a>
-            {user && visibleProfileNavItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => {
-                  setIsMobileMenuOpen(false)
-                  setIsStatsSubmenuOpen(false)
-                }}
-                className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
-                  isActive(location.pathname, item.path)
-                    ? 'bg-emerald-500 text-white'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                }`}
-              >
-                <item.icon className="w-5 h-5 mb-1" />
-                <span>{item.label}</span>
-              </Link>
-            ))}
           </div>
 
           {/* Pannello statistiche touch-friendly per mobile */}
@@ -397,17 +379,6 @@ const Navbar = () => {
                   )
                 })}
               </div>
-            </div>
-          )}
-          {user && (
-            <div className="mt-2 flex justify-center">
-              <button
-                onClick={signOut}
-                className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
             </div>
           )}
         </div>
