@@ -770,73 +770,49 @@ const AddPlay = () => {
           </div>
         </div>
 
-        {/* Game Mode */}
-        <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-          <label className="block text-sm font-medium text-slate-300 mb-4">
-            Modalità di Gioco
-          </label>
-          
-          <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
-            <div>
-              <p className="text-white font-medium">Partita Cooperativa</p>
-              <p className="text-sm text-slate-400">Tutti i giocatori vincono o perdono insieme</p>
+        {/* Cooperative result */}
+        {formData.isCooperative && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-md">
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Il team ha vinto?
+            </label>
+            <div className="flex space-x-3">
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, teamWon: true }))}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                  formData.teamWon === true
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                }`}
+              >
+                Sì
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, teamWon: false }))}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                  formData.teamWon === false
+                    ? 'bg-red-500 text-white'
+                    : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                }`}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, teamWon: null }))}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                  formData.teamWon === null
+                    ? 'bg-slate-500 text-white'
+                    : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                }`}
+              >
+                Non specificato
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, isCooperative: !prev.isCooperative, teamWon: null }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                formData.isCooperative ? 'bg-emerald-500' : 'bg-slate-600'
-              }`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                formData.isCooperative ? 'translate-x-6' : 'translate-x-1'
-              }`} />
-            </button>
           </div>
-
-          {formData.isCooperative && (
-            <div className="mt-4 p-4 bg-slate-700 rounded-lg">
-              <label className="block text-sm font-medium text-slate-300 mb-3">
-                Il team ha vinto?
-              </label>
-              <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, teamWon: true }))}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
-                    formData.teamWon === true
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                  }`}
-                >
-                  Sì
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, teamWon: false }))}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
-                    formData.teamWon === false
-                      ? 'bg-red-500 text-white'
-                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                  }`}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, teamWon: null }))}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
-                    formData.teamWon === null
-                      ? 'bg-slate-500 text-white'
-                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                  }`}
-                >
-                  Non specificato
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Players */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
