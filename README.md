@@ -2,6 +2,10 @@
 
 Web app completa per tracciare le partite a giochi da tavolo, con autenticazione multi-utente.
 
+Il menu principale contiene «PartyScore» subito dopo «Wrapped», sia su desktop sia su mobile. Il collegamento apre [PartyScore](https://partyscore.baldeddu.cc/) nella stessa scheda; da quel sito la voce «KingScore» permette di tornare qui.
+
+Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si seleziona una pagina. Da 640 a 1023 px resta visibile la griglia; da 1024 px le voci principali sono nella testata. Il menu profilo degli amministratori contiene Giochi, Giocatori, Admin, Impostazioni e Logout; per gli altri utenti contiene Impostazioni e Logout.
+
 ## 🎲 Caratteristiche
 
 - **Autenticazione multi-utente**: Ogni utente ha il proprio storico privato
@@ -76,7 +80,7 @@ supabase functions deploy bga-search
 ### Importa le partite
 
 1. Accedi all'applicazione
-2. Clicca su "Import" nella navbar
+2. Apri la pagina `/import` (richiede un account amministratore)
 3. Inserisci le tue credenziali BGA
 4. Clicca su "Avvia Import"
 

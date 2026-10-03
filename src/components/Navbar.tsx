@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Gamepad2, LayoutDashboard, Calendar, Library, Users, FileText, BarChart3, LogOut, User, Download, Trophy, LogIn, Image as ImageIcon, ChevronDown, Sparkles, ShieldCheck, Settings } from 'lucide-react'
+import { ArrowLeftRight, Gamepad2, LayoutDashboard, Calendar, Library, Users, BarChart3, LogOut, User, Trophy, LogIn, ChevronDown, Sparkles, ShieldCheck, Settings, Menu, X } from 'lucide-react'
 import type { NavItem } from '../types'
 import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/playerCountElo'
 import { getPlayerImageUrl } from '../utils/imageUpload'
@@ -17,10 +17,7 @@ const publicNavItems: NavItem[] = [
 
 const profileNavItems: NavItem[] = [
   { path: '/games', icon: Library, label: 'Giochi' },
-  { path: '/images', icon: ImageIcon, label: 'Immagini' },
-  { path: '/plays/new', icon: FileText, label: 'Aggiungi Partita' },
   { path: '/players', icon: Users, label: 'Giocatori' },
-  { path: '/import', icon: Download, label: 'Import' },
 ]
 
 const adminNavItem: NavItem = { path: '/admin', icon: ShieldCheck, label: 'Admin' }
@@ -42,6 +39,7 @@ const Navbar = () => {
   const avatarUrl = avatarPath ? getPlayerImageUrl(supabase, avatarPath) : null
   const location = useLocation()
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false)
   const [isDesktopStatsMenuOpen, setIsDesktopStatsMenuOpen] = useState<boolean>(false)
   const [isStatsSubmenuOpen, setIsStatsSubmenuOpen] = useState<boolean>(false)
   const [previousPathname, setPreviousPathname] = useState(location.pathname)
@@ -50,6 +48,8 @@ const Navbar = () => {
 
   if (previousPathname !== location.pathname) {
     setPreviousPathname(location.pathname)
+    setIsMobileMenuOpen(false)
+    setIsDropdownOpen(false)
     setIsDesktopStatsMenuOpen(false)
     setIsStatsSubmenuOpen(false)
   }
@@ -80,7 +80,14 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
+          <Link
+            to="/"
+            onClick={() => {
+              setIsMobileMenuOpen(false)
+              setIsStatsSubmenuOpen(false)
+            }}
+            className="flex items-center space-x-2"
+          >
             <div className="bg-emerald-500 p-2 rounded-lg">
               <Gamepad2 className="w-6 h-6 text-white" />
             </div>
@@ -88,7 +95,7 @@ const Navbar = () => {
           </Link>
 
           {/* Navigation Links */}
-          <div className="hidden md:flex items-center space-x-1">
+          <div className="hidden lg:flex items-center space-x-1">
             {publicNavItems.map((item) => {
               // Il menu si apre anche al tocco su tablet e dispositivi mobili.
               if (item.path === '/stats') {
@@ -168,14 +175,26 @@ const Navbar = () => {
                 </Link>
               )
             })}
+            <a
+              href="https://partyscore.baldeddu.cc/"
+              title="Vai a PartyScore"
+              className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              <span>PartyScore</span>
+            </a>
           </div>
 
           {/* User Menu */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-1 sm:gap-4">
             {user ? (
               <div className="relative" ref={dropdownRef}>
                 {/* User Profile Button */}
                 <button
+                  type="button"
+                  aria-label="Menu utente"
+                  aria-expanded={isDropdownOpen}
+                  aria-controls="user-profile-menu"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
                 >
@@ -194,7 +213,7 @@ const Navbar = () => {
 
                 {/* Dropdown Menu */}
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-slate-700 rounded-lg shadow-lg py-1 border border-slate-600">
+                  <div id="user-profile-menu" className="absolute right-0 mt-2 w-56 bg-slate-700 rounded-lg shadow-lg py-1 border border-slate-600">
                     <div className="px-4 py-2 border-b border-slate-600">
                       <p className="text-xs text-slate-400 uppercase tracking-wider">Menu Profilo</p>
                     </div>
@@ -237,11 +256,28 @@ const Navbar = () => {
                 <span className="hidden sm:inline">Login</span>
               </Link>
             )}
+            <button
+              type="button"
+              aria-label={isMobileMenuOpen ? 'Chiudi menu' : 'Apri menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
+              onClick={() => {
+                setIsMobileMenuOpen((open) => !open)
+                setIsDropdownOpen(false)
+                setIsStatsSubmenuOpen(false)
+              }}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition sm:hidden"
+            >
+              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
           </div>
         </div>
 
         {/* Mobile Navigation */}
-        <div className="md:hidden pb-4">
+        <div
+          id="mobile-navigation"
+          className={`${isMobileMenuOpen ? 'block' : 'hidden'} max-h-[calc(100dvh-4rem)] overflow-y-auto pb-4 sm:block lg:hidden`}
+        >
           <div className="grid grid-cols-3 gap-2">
             {publicNavItems.map((item) => {
               // Su mobile la voce Statistiche apre un elenco ampio e touch-friendly.
@@ -276,7 +312,10 @@ const Navbar = () => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  onClick={() => setIsStatsSubmenuOpen(false)}
+                  onClick={() => {
+                    setIsMobileMenuOpen(false)
+                    setIsStatsSubmenuOpen(false)
+                  }}
                   className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
                     isActive(location.pathname, item.path)
                       ? 'bg-emerald-500 text-white'
@@ -288,11 +327,22 @@ const Navbar = () => {
                 </Link>
               )
             })}
+            <a
+              href="https://partyscore.baldeddu.cc/"
+              title="Vai a PartyScore"
+              className="flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
+            >
+              <ArrowLeftRight className="w-5 h-5 mb-1" />
+              <span>PartyScore</span>
+            </a>
             {user && visibleProfileNavItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
-                onClick={() => setIsStatsSubmenuOpen(false)}
+                onClick={() => {
+                  setIsMobileMenuOpen(false)
+                  setIsStatsSubmenuOpen(false)
+                }}
                 className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition ${
                   isActive(location.pathname, item.path)
                     ? 'bg-emerald-500 text-white'
@@ -314,7 +364,10 @@ const Navbar = () => {
               <div className="grid grid-cols-1 gap-1">
                 <Link
                   to="/stats"
-                  onClick={() => setIsStatsSubmenuOpen(false)}
+                  onClick={() => {
+                    setIsMobileMenuOpen(false)
+                    setIsStatsSubmenuOpen(false)
+                  }}
                   className={`flex min-h-12 items-center rounded-lg px-4 py-3 text-sm font-medium transition ${
                     isActive(location.pathname, '/stats')
                       ? 'bg-emerald-500 text-white'
@@ -329,7 +382,10 @@ const Navbar = () => {
                     <Link
                       key={bucket}
                       to={path}
-                      onClick={() => setIsStatsSubmenuOpen(false)}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false)
+                        setIsStatsSubmenuOpen(false)
+                      }}
                       className={`flex min-h-12 items-center rounded-lg px-4 py-3 text-sm font-medium transition ${
                         isActive(location.pathname, path)
                           ? 'bg-emerald-500 text-white'
