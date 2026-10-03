@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, Calendar, MapPin, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown, Users } from 'lucide-react'
+import { ArrowLeft, Calendar, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 import { performFullRecalc } from '../utils/elo/recalc'
@@ -249,18 +249,11 @@ const PlayDetail = () => {
               {play.games?.name || 'Gioco sconosciuto'}
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-center text-slate-300">
                 <Calendar className="w-5 h-5 mr-2 text-emerald-500" />
                 <span>{new Date(play.played_at).toLocaleDateString('it-IT')}</span>
               </div>
-
-              {play.location && (
-                <div className="flex items-center text-slate-300">
-                  <MapPin className="w-5 h-5 mr-2 text-emerald-500" />
-                  <span>{play.location}</span>
-                </div>
-              )}
 
               {play.duration_minutes && (
                 <div className="flex items-center text-slate-300">

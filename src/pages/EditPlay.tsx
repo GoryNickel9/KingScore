@@ -23,7 +23,6 @@ interface EditFormData {
   gameId: string
   gameName: string
   playedAt: string
-  location: string
   durationMinutes: string
   source: string
   notes: string
@@ -41,7 +40,6 @@ const EditPlay = () => {
     gameId: '',
     gameName: '',
     playedAt: '',
-    location: '',
     durationMinutes: '',
     source: 'offline',
     notes: '',
@@ -84,7 +82,6 @@ const EditPlay = () => {
           gameId: data.game_id || '',
           gameName: data.games?.name || '',
           playedAt: data.played_at ? data.played_at.split('T')[0] : new Date().toISOString().split('T')[0],
-          location: data.location || '',
           durationMinutes: data.duration_minutes !== null && data.duration_minutes !== undefined ? String(data.duration_minutes) : '',
           source: data.source || 'offline',
           notes: data.notes || '',
@@ -195,7 +192,6 @@ const EditPlay = () => {
         .update({
           game_id: formData.gameId,
           played_at: formData.playedAt,
-          location: formData.location || null,
           duration_minutes: formData.durationMinutes === '' ? null : Number.parseInt(formData.durationMinutes, 10),
           source: formData.source,
           notes: formData.notes || null,
@@ -361,17 +357,7 @@ const EditPlay = () => {
         {/* Play Details */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-bold text-white mb-4">Dettagli Partita</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Luogo</label>
-              <input
-                type="text"
-                value={formData.location}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Es. Casa, Parco..."
-              />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Durata (minuti)</label>
               <input

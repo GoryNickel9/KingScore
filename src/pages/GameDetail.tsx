@@ -289,9 +289,6 @@ const GameDetail = () => {
                         </p>
                         <PlayCommentBadge count={commentCounts[play.id] ?? 0} />
                       </div>
-                      {play.location && (
-                        <p className="text-sm text-slate-400">{play.location}</p>
-                      )}
                     </div>
                   </div>
 

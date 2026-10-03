@@ -27,7 +27,6 @@ interface AddPlayFormData {
   gameId: string
   gameName: string
   playedAt: string
-  location: string
   durationMinutes: string
   source: string
   notes: string
@@ -58,7 +57,6 @@ const AddPlay = () => {
     gameId: '',
     gameName: '',
     playedAt: new Date().toISOString().split('T')[0],
-    location: '',
     durationMinutes: '',
     source: 'offline',
     notes: '',
@@ -359,7 +357,6 @@ const AddPlay = () => {
           user_id: user!.id,
           game_id: formData.gameId,
           played_at: formData.playedAt,
-          location: formData.location || null,
           duration_minutes: formData.durationMinutes ? parseInt(formData.durationMinutes) : null,
           source: formData.source,
           notes: formData.notes || null,
@@ -703,8 +700,8 @@ const AddPlay = () => {
           )}
         </div>
 
-        {/* Date, Location, Duration */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Date and Duration */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-slate-800 rounded-xl p-6 shadow-md">
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Data *
@@ -715,19 +712,6 @@ const AddPlay = () => {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, playedAt: e.target.value }))}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               required
-            />
-          </div>
-
-          <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Luogo
-            </label>
-            <input
-              type="text"
-              value={formData.location}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-              placeholder="es. Casa mia, Online"
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 

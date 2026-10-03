@@ -10,6 +10,7 @@ Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si 
 
 - **Autenticazione multi-utente**: Ogni utente ha il proprio storico privato
 - **Inserimento manuale**: Aggiungi partite manualmente
+- **Dettagli partita**: Il luogo non compare nei moduli, nello storico o nei dettagli. I valori già salvati restano nel database e vengono conservati durante la modifica di una partita.
 - **Importazione BGA**: Importa partite da Board Game Arena
 - **Ricerca giochi BGA**: Cerca giochi su Board Game Arena
 - **Statistiche avanzate**: H-Index, streak, win rate, heatmap

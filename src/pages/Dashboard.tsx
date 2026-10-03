@@ -568,7 +568,6 @@ const Dashboard = () => {
                     </div>
                     <p className="text-sm text-slate-400">
                       {new Date(play.played_at).toLocaleDateString('it-IT')}
-                      {play.location && ` • ${play.location}`}
                     </p>
                   </div>
                 </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Search, Filter, Calendar, MapPin, Clock, Gamepad2, Trophy, Users, StickyNote } from 'lucide-react'
+import { Search, Filter, Calendar, Clock, Gamepad2, Trophy, Users, StickyNote } from 'lucide-react'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 import { PlayCommentBadge } from '../components/PlayCommentBadge'
@@ -297,12 +297,6 @@ const Plays = () => {
                       <Calendar className="w-4 h-4 mr-1" />
                       {new Date(play.played_at).toLocaleDateString('it-IT')}
                     </div>
-                    {play.location && (
-                      <div className="flex items-center">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        {play.location}
-                      </div>
-                    )}
                     {play.duration_minutes && (
                       <div className="flex items-center">
                         <Clock className="w-4 h-4 mr-1" />
