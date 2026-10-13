@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -8,8 +8,7 @@ import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../ut
 import { performFullRecalc } from '../utils/elo/recalc'
 import { Spinner } from '../components/Spinner'
 import PlayComments from '../components/PlayComments'
-import type { DbPlayWithScores, DbPlayScoreWithPlayer } from '../types/rows'
-import { atomicPlayWritesEnabled, deletePlay, getPlayEditor, PlayWriteError } from '../services/playWrites'
+import type { DbPlayWithScores } from '../types/rows'
 
 interface EloHistoryEntry {
   playId: string
@@ -23,49 +22,24 @@ interface PlayerEloResult {
   ratingChange: number
 }
 
-type DisplayPlay = Omit<DbPlayWithScores, 'play_scores'> & {
-  play_scores: (Omit<DbPlayScoreWithPlayer, 'score'> & { score: number | string | null })[] | null
-}
-
 const PlayDetail = () => {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [play, setPlay] = useState<DisplayPlay | null>(null)
+  const [play, setPlay] = useState<DbPlayWithScores | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false)
   const [eloHistory, setEloHistory] = useState<EloHistoryEntry[]>([])
   const [loadingElo, setLoadingElo] = useState<boolean>(false)
   const [_generalELOs, setGeneralELOs] = useState<Record<string, unknown>>({})
   const [generalELOHistory, setGeneralELOHistory] = useState<EloHistoryEntry[]>([])
-  const deleting = useRef(false)
-  const pendingDelete = useRef<{ actorId: string; ownerId: string | null; requestId: string; playId: string; revision: string } | null>(null)
-  const [deleteBusy, setDeleteBusy] = useState(false)
-  const [deleteUncertain, setDeleteUncertain] = useState(false)
-  const [deleteConflict, setDeleteConflict] = useState(false)
-  const [deleteSummary, setDeleteSummary] = useState('')
-  const deleteDialog = useRef<HTMLDivElement>(null)
-  const deleteButton = useRef<HTMLButtonElement>(null)
-  const currentScope = useRef({ actorId: user?.id, playId: id })
-  currentScope.current = { actorId: user?.id, playId: id }
-  const readGeneration = useRef(0)
-  const mounted = useRef(true)
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-
-  useEffect(() => { if (showDeleteModal) deleteDialog.current?.focus() }, [showDeleteModal])
 
   useEffect(() => {
-    if (atomicPlayWritesEnabled && pendingDelete.current) return
     void fetchPlay()
-  }, [id, user?.id])
+  }, [id])
 
   const fetchPlay = async (): Promise<void> => {
-    const scope = { ...currentScope.current }
-    const generation = ++readGeneration.current
-    const current = (): boolean => mounted.current && generation === readGeneration.current &&
-      scope.actorId === currentScope.current.actorId && scope.playId === currentScope.current.playId
-    setLoading(true)
     try {
       const { data } = await supabase
         .from('plays')
@@ -77,10 +51,8 @@ const PlayDetail = () => {
             players(*)
           )
         `)
-        .eq('id', scope.playId!)
+        .eq('id', id!)
         .single()
-
-      if (!current()) return
 
       if (data) {
         setPlay(data)
@@ -90,11 +62,11 @@ const PlayDetail = () => {
           try {
             setLoadingElo(true)
             const history = await getELOHistoryForGame(supabase, data.game_id, data.user_id)
-            if (current()) setEloHistory(history as EloHistoryEntry[])
+            setEloHistory(history as EloHistoryEntry[])
           } catch (error) {
             console.error('Error fetching ELO history:', error)
           } finally {
-            if (current()) setLoadingElo(false)
+            setLoadingElo(false)
           }
         }
 
@@ -115,14 +87,14 @@ const PlayDetail = () => {
           eloResults.forEach(result => {
             eloMap[result.playerId] = result.generalELO
           })
-          if (current()) setGeneralELOs(eloMap)
+          setGeneralELOs(eloMap)
         }
 
         // Recupera lo storico dell'ELO Generale usando l'user_id del proprietario della partita
         if (data.user_id) {
           try {
             const history = await getGeneralELOHistory(supabase, data.user_id)
-            if (current()) setGeneralELOHistory(history as EloHistoryEntry[])
+            setGeneralELOHistory(history as EloHistoryEntry[])
           } catch (error) {
             console.error('Error fetching general ELO history:', error)
           }
@@ -132,78 +104,27 @@ const PlayDetail = () => {
         void navigate('/plays')
       }
     } catch (error) {
-      if (!current()) return
       console.error('Error fetching play:', error)
       toast.error('Errore durante il caricamento della partita')
     } finally {
-      if (current()) setLoading(false)
+      setLoading(false)
     }
-  }
-
-  const openDelete = async (): Promise<void> => {
-    if (deleting.current || deleteUncertain) return
-    if (!atomicPlayWritesEnabled) { setShowDeleteModal(true); return }
-    deleting.current = true
-    setDeleteBusy(true)
-    const scope = { ...currentScope.current }
-    const generation = ++readGeneration.current
-    try {
-      if (!scope.playId || !scope.actorId) throw new Error('Accedi per eliminare la partita')
-      const editor = await getPlayEditor(supabase, scope.playId, scope.actorId)
-      if (!mounted.current || generation !== readGeneration.current || scope.actorId !== currentScope.current.actorId || scope.playId !== currentScope.current.playId) return
-      setPlay({ ...editor.detail.play, games: editor.detail.game,
-        play_scores: editor.detail.scores.map(({ score, player }) => ({ ...score, players: player })) })
-      pendingDelete.current = { actorId: scope.actorId, ownerId: editor.detail.play.user_id,
-        requestId: crypto.randomUUID(), playId: scope.playId, revision: editor.revision }
-      setDeleteSummary(`${editor.detail.game?.name ?? 'Gioco sconosciuto'} — ${editor.detail.play.played_at} — ${editor.detail.scores.length} partecipanti`)
-      setDeleteConflict(false)
-      setShowDeleteModal(true)
-    } catch (error) {
-      if (mounted.current && generation === readGeneration.current && scope.actorId === currentScope.current.actorId && scope.playId === currentScope.current.playId) {
-        toast.error(error instanceof Error ? error.message : 'Impossibile verificare la partita')
-      }
-    }
-    finally { deleting.current = false; setDeleteBusy(false) }
-  }
-
-  const closeDelete = (): void => {
-    if (deleteBusy || deleteUncertain) return
-    pendingDelete.current = null
-    setShowDeleteModal(false)
-    deleteButton.current?.focus()
   }
 
   const handleDelete = async (): Promise<void> => {
-    if (deleting.current || deleteConflict) return
-    if (atomicPlayWritesEnabled && pendingDelete.current &&
-        (pendingDelete.current.actorId !== currentScope.current.actorId || pendingDelete.current.playId !== currentScope.current.playId)) {
-      toast.error('Torna all’account e alla partita originali per verificare l’eliminazione')
-      return
-    }
-    deleting.current = true
-    setDeleteBusy(true)
-    const command = pendingDelete.current
     try {
-      if (atomicPlayWritesEnabled) {
-        if (!pendingDelete.current) throw new Error('Riapri la conferma prima di eliminare')
-        await deletePlay(supabase, pendingDelete.current)
-      } else {
-        const { error } = await supabase
+      const { error } = await supabase
         .from('plays')
         .delete()
         .eq('id', id!)
-        if (error) throw error
-      }
-      if (!mounted.current) return
-      const ownerId = atomicPlayWritesEnabled ? pendingDelete.current?.ownerId : play?.user_id
-      pendingDelete.current = null
-      setDeleteUncertain(false)
+
+      if (error) throw error
 
       // Fix TD-005: le righe elo_history scendono a cascata via FK, ma i
       // rating per gioco resterebbero sovrastimati fino al job notturno
-      if (ownerId && (!atomicPlayWritesEnabled || currentScope.current.actorId === command?.actorId)) {
+      if (user) {
         try {
-          await performFullRecalc(supabase, ownerId)
+          await performFullRecalc(supabase, user.id)
         } catch (eloError) {
           console.error('Errore nel ricalcolo ELO post-delete:', eloError)
           toast('ELO non aggiornato: verrà corretto dal ricalcolo notturno')
@@ -211,26 +132,11 @@ const PlayDetail = () => {
       }
 
       toast.success('Partita eliminata con successo!')
-      if (!mounted.current) return
-      if (!atomicPlayWritesEnabled || (currentScope.current.actorId === command?.actorId && currentScope.current.playId === command?.playId)) {
-        void navigate('/plays')
-      } else { setShowDeleteModal(false); void fetchPlay() }
+      void navigate('/plays')
     } catch (error) {
-      if (!mounted.current) return
       console.error('Error deleting play:', error)
-      if (error instanceof PlayWriteError && (error.kind === 'unknown' ||
-          (deleteUncertain && (error.kind === 'unavailable' || error.kind === 'permission')))) setDeleteUncertain(true)
-      else {
-        pendingDelete.current = null
-        setDeleteUncertain(false)
-        if (error instanceof PlayWriteError && error.kind === 'conflict') setDeleteConflict(true)
-        else if (atomicPlayWritesEnabled) setShowDeleteModal(false)
-        if (command && (currentScope.current.actorId !== command.actorId || currentScope.current.playId !== command.playId)) {
-          setShowDeleteModal(false); void fetchPlay()
-        }
-      }
-      toast.error(error instanceof Error ? error.message : "Errore durante l'eliminazione della partita")
-    } finally { deleting.current = false; setDeleteBusy(false) }
+      toast.error("Errore durante l'eliminazione della partita")
+    }
   }
 
   // Ottieni l'ELO attuale e l'ELO guadagnato per un giocatore in questa partita
@@ -261,16 +167,7 @@ const PlayDetail = () => {
     }
   }
 
-  if (atomicPlayWritesEnabled && pendingDelete.current &&
-      (pendingDelete.current.actorId !== user?.id || pendingDelete.current.playId !== id)) {
-    return <div role="alert" className="rounded-lg bg-amber-500/20 p-4 text-amber-200">
-      <p>Una conferma o eliminazione della partita precedente è in sospeso. Torna all’account e alla partita originali prima di avviare un’altra operazione.</p>
-      {pendingDelete.current.actorId === user?.id && <Link to={`/plays/${pendingDelete.current.playId}`}
-        className="mt-3 inline-block rounded-lg bg-slate-700 px-4 py-2">Torna alla partita in sospeso</Link>}
-    </div>
-  }
-
-  if (loading || (play && play.id !== id)) {
+  if (loading) {
     return <Spinner className="h-64" />
   }
 
@@ -322,9 +219,7 @@ const PlayDetail = () => {
               Modifica
             </Link>
             <button
-              ref={deleteButton}
-              onClick={() => void openDelete()}
-              disabled={deleteBusy}
+              onClick={() => setShowDeleteModal(true)}
               className="flex items-center px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition"
             >
               <Trash2 className="w-4 h-4 mr-2" />
@@ -434,7 +329,7 @@ const PlayDetail = () => {
                     if (a.winner) return -1
                     if (b.winner) return 1
                     if (a.score !== null && a.score !== undefined && b.score !== null && b.score !== undefined) {
-                      return Number(b.score) - Number(a.score)
+                      return b.score - a.score
                     }
                     return 0
                   })
@@ -557,50 +452,30 @@ const PlayDetail = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div ref={deleteDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="delete-title"
-            onKeyDown={event => {
-              if (event.key === 'Escape') { event.preventDefault(); closeDelete() }
-              if (event.key !== 'Tab') return
-              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
-              const first = buttons[0]; const last = buttons[buttons.length - 1]
-              if (!first) { event.preventDefault(); return }
-              if (document.activeElement === event.currentTarget || (event.shiftKey && document.activeElement === first) ||
-                  (!event.shiftKey && document.activeElement === last)) {
-                event.preventDefault(); (event.shiftKey ? last : first).focus()
-              }
-            }} className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
             <div className="flex items-center mb-4">
               <div className="bg-red-500/20 p-3 rounded-full mr-4">
                 <AlertTriangle className="w-6 h-6 text-red-500" />
               </div>
-              <h3 id="delete-title" className="text-xl font-bold text-white">Conferma Eliminazione</h3>
+              <h3 className="text-xl font-bold text-white">Conferma Eliminazione</h3>
             </div>
 
             <p className="text-slate-300 mb-6">
               Sei sicuro di voler eliminare questa partita? Questa azione non può essere annullata.
             </p>
-            {atomicPlayWritesEnabled && <p className="mb-4 text-slate-300">{deleteSummary}</p>}
-            {deleteUncertain && <p role="alert" className="mb-4 text-amber-300">La risposta non è arrivata. La partita potrebbe essere già eliminata. Riprova la stessa richiesta per verificarlo.</p>}
-            {deleteConflict && <div role="alert" className="mb-4 text-amber-300">
-              <p>La partita è cambiata dopo la conferma. Verifica i dati aggiornati prima di eliminarla.</p>
-              <button type="button" onClick={() => void openDelete()} disabled={deleteBusy}
-                className="mt-3 min-h-11 rounded-lg bg-slate-700 px-4 py-2">Ricarica la conferma</button>
-            </div>}
 
             <div className="flex space-x-3">
               <button
-                onClick={closeDelete}
-                disabled={deleteBusy || deleteUncertain}
+                onClick={() => setShowDeleteModal(false)}
                 className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
               >
                 Annulla
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleteBusy || deleteConflict}
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
               >
-                {deleteBusy ? 'Verifica...' : deleteUncertain ? 'Riprova la stessa richiesta' : 'Elimina'}
+                Elimina
               </button>
             </div>
           </div>
