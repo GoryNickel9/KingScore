@@ -453,9 +453,17 @@ const Import = () => {
         }
       }
 
-      addLog('Importazione completata!', 'success')
       setResult(result)
-      toast.success(`Importazione completata! ${result.imported} partite importate`)
+      if (result.uncertain) {
+        addLog(`Import interrotto: ${result.uncertain} esito incerto, ${result.unprocessed ?? 0} partite non inviate. Verifica lo storico prima di riprovare.`, 'warning')
+        toast.error('Import interrotto: verifica la partita dall’esito incerto')
+      } else if (result.errors > 0) {
+        addLog(`Import concluso con ${result.errors} errori e ${result.imported} partite importate.`, 'warning')
+        toast.error(`Import concluso con ${result.errors} errori: controlla il riepilogo`)
+      } else {
+        addLog('Importazione completata!', 'success')
+        toast.success(`Importazione completata! ${result.imported} partite importate`)
+      }
       setStep('input')
     } catch (error) {
       addLog(`Errore: ${getErrorMessage(error)}`, 'error')
@@ -550,6 +558,10 @@ const Import = () => {
                   { value: result.imported, label: 'Importate', color: 'text-emerald-500' },
                   { value: result.skipped,  label: 'Duplicate', color: 'text-yellow-500' },
                   { value: result.errors,   label: 'Errori',    color: 'text-red-500' },
+                  ...(result.uncertain ? [
+                    { value: result.uncertain, label: 'Esito incerto', color: 'text-amber-400' },
+                    { value: result.unprocessed ?? 0, label: 'Non inviate', color: 'text-slate-400' },
+                  ] : []),
                 ].map(({ value, label, color }) => (
                   <div key={label}>
                     <div className={`text-3xl font-bold ${color}`}>{value}</div>

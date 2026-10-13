@@ -4,6 +4,8 @@ param(
     [string] $PostgresBin = 'C:\Program Files\PostgreSQL\17\bin',
     [string] $ConcurrentScript,
     [string] $NodeBin = 'node',
+    [switch] $IncludeBgaImport,
+    [switch] $IncludeWebWriters,
     [switch] $BootstrapOnly
 )
 
@@ -20,8 +22,22 @@ if (-not $cluster.StartsWith($workRoot + [IO.Path]::DirectorySeparatorChar, [Str
 $fixture = Join-Path $repo 'supabase/tests/atomic_play_fixture.sql'
 $migration = Join-Path $repo 'supabase/migrations/20261013000000_atomic_play_writes.sql'
 $tests = Join-Path $repo 'supabase/tests/atomic_play_writes.sql'
+$bgaMigration = Join-Path $repo 'supabase/migrations/20261013010000_atomic_bga_import.sql'
+$bgaTests = Join-Path $repo 'supabase/tests/atomic_bga_import.sql'
+$webMigration = Join-Path $repo 'supabase/migrations/20261013020000_web_play_score_text.sql'
+$webTests = Join-Path $repo 'supabase/tests/web_play_score_text.sql'
+$cutover = Join-Path $repo 'supabase/rollout/atomic_play_cutover.sql'
+$cutoverTests = Join-Path $repo 'supabase/tests/atomic_play_cutover.sql'
 $required = @($fixture)
 if (-not $BootstrapOnly) { $required += @($migration, $tests) }
+if ($IncludeBgaImport) {
+    if ($BootstrapOnly) { throw '-IncludeBgaImport cannot be used with -BootstrapOnly.' }
+    $required += @($bgaMigration, $bgaTests)
+}
+if ($IncludeWebWriters) {
+    if ($BootstrapOnly -or -not $IncludeBgaImport) { throw '-IncludeWebWriters requires -IncludeBgaImport and cannot be used with -BootstrapOnly.' }
+    $required += @($webMigration, $webTests, $cutover, $cutoverTests)
+}
 if ($ConcurrentScript) {
     if ($BootstrapOnly) { throw '-ConcurrentScript cannot be used with -BootstrapOnly.' }
     $ConcurrentScript = [IO.Path]::GetFullPath($ConcurrentScript)
@@ -48,6 +64,8 @@ $reportPath = Join-Path $runDirectory 'report.json'
 $report = [ordered]@{
     status = 'FAIL'
     mode = $(if ($BootstrapOnly) { 'bootstrap' } else { 'atomic-play-writes' })
+    includeBgaImport = [bool]$IncludeBgaImport
+    includeWebWriters = [bool]$IncludeWebWriters
     startedAtUtc = [DateTime]::UtcNow.ToString('o')
     finishedAtUtc = $null
     host = '127.0.0.1'
@@ -142,6 +160,16 @@ try {
     if (-not $BootstrapOnly) {
         Invoke-IsolatedProcess 'migration' $binaries.psql ($connection + @('-f', $migration))
         Invoke-IsolatedProcess 'sql-tests' $binaries.psql ($connection + @('-f', $tests))
+        if ($IncludeBgaImport) {
+            Invoke-IsolatedProcess 'bga-migration' $binaries.psql ($connection + @('-f', $bgaMigration))
+            Invoke-IsolatedProcess 'bga-sql-tests' $binaries.psql ($connection + @('-f', $bgaTests))
+        }
+        if ($IncludeWebWriters) {
+            Invoke-IsolatedProcess 'web-migration' $binaries.psql ($connection + @('-f', $webMigration))
+            Invoke-IsolatedProcess 'web-sql-tests' $binaries.psql ($connection + @('-f', $webTests))
+            Invoke-IsolatedProcess 'cutover' $binaries.psql ($connection + @('-f', $cutover))
+            Invoke-IsolatedProcess 'cutover-tests' $binaries.psql ($connection + @('-f', $cutoverTests))
+        }
         if ($ConcurrentScript) {
             Invoke-IsolatedProcess 'concurrency' $NodeBin @($ConcurrentScript, [IO.Path]::GetFullPath($PostgresBin), [string]$report.port, $runDirectory)
         }

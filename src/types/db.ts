@@ -474,6 +474,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      // Prepared migration contracts; these endpoints are not deployed remotely yet.
+      get_play_editor_v1: { Args: { p_play_id: string }; Returns: Json }
+      create_play_v1: { Args: { p_request_id: string; p_payload: Json }; Returns: Json }
+      update_play_v1: { Args: { p_request_id: string; p_play_id: string; p_expected_revision: string; p_payload: Json }; Returns: Json }
+      delete_play_v1: { Args: { p_request_id: string; p_play_id: string; p_expected_revision: string }; Returns: Json }
+      get_web_play_editor_v1: { Args: { p_play_id: string }; Returns: Json }
+      create_web_play_v1: { Args: { p_request_id: string; p_payload: Json }; Returns: Json }
+      update_web_play_v1: { Args: { p_request_id: string; p_play_id: string; p_expected_revision: string; p_payload: Json }; Returns: Json }
+      import_bga_play_v1: { Args: { p_request_id: string; p_payload: Json; p_metadata: Json; p_positions: Json }; Returns: Json }
       admin_list_registrations: {
         Args: never
         Returns: {

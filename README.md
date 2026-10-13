@@ -1,5 +1,7 @@
 # KingScore
 
+Preparazione delle scritture atomiche web e import BGA: [ATOMIC_PLAY_ROLLOUT.md](ATOMIC_PLAY_ROLLOUT.md). Il nuovo percorso resta disattivato finché il backend non è collaudato e deployato.
+
 Web app completa per tracciare le partite a giochi da tavolo, con autenticazione multi-utente.
 
 Il menu principale contiene «PartyScore» subito dopo «Wrapped», sia su desktop sia su mobile. Il collegamento apre [PartyScore](https://partyscore.baldeddu.cc/) nella stessa scheda; da quel sito la voce «KingScore» permette di tornare qui.

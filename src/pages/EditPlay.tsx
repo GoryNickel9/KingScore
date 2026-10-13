@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -10,6 +10,7 @@ import type { DbGame, DbPlayer } from '../types/rows'
 import { assignPositions } from '../utils/elo/positions'
 import { listGames } from '../services/games'
 import { listUserPlayers } from '../services/players'
+import { atomicPlayWritesEnabled, getPlayEditor, updatePlay, parseDurationInput, parseScoreInput, PlayWriteError, type PlayInput } from '../services/playWrites'
 
 interface EditPlayerRow {
   id: string | null
@@ -17,6 +18,8 @@ interface EditPlayerRow {
   playerName: string
   score: string | number
   winner: boolean
+  color: string | null
+  role: string | null
 }
 
 interface EditFormData {
@@ -52,15 +55,53 @@ const EditPlay = () => {
   const [players, setPlayers] = useState<DbPlayer[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [saving, setSaving] = useState<boolean>(false)
+  const writing = useRef(false)
+  const pending = useRef<{ actorId: string; ownerId: string | null; requestId: string; playId: string; revision: string; payload: PlayInput } | null>(null)
+  const currentScope = useRef({ actorId: user?.id, playId: id })
+  currentScope.current = { actorId: user?.id, playId: id }
+  const readGeneration = useRef(0)
+  const mounted = useRef(true)
+  const [loadedScope, setLoadedScope] = useState<{ actorId: string; ownerId: string | null; playId: string } | null>(null)
+  const [revision, setRevision] = useState<string | null>(null)
+  const [uncertain, setUncertain] = useState(false)
+  const [conflict, setConflict] = useState(false)
+  const [sourceNotice, setSourceNotice] = useState<string | null>(null)
+
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   useEffect(() => {
+    if (atomicPlayWritesEnabled && pending.current) return
     void fetchPlay()
     void fetchGames()
     void fetchPlayers()
-  }, [id])
+  }, [id, user?.id])
 
-  const fetchPlay = async (): Promise<void> => {
+  const fetchPlay = async (reload = false): Promise<void> => {
+    const scope = { ...currentScope.current }
+    const generation = ++readGeneration.current
+    const current = (): boolean => mounted.current && generation === readGeneration.current &&
+      scope.actorId === currentScope.current.actorId && scope.playId === currentScope.current.playId && !pending.current
+    setLoading(true)
     try {
+      if (atomicPlayWritesEnabled) {
+        if (!scope.playId || !scope.actorId) throw new Error('Accedi per modificare la partita')
+        const editor = await getPlayEditor(supabase, scope.playId, scope.actorId)
+        if (!current()) return
+        const data = editor.detail.play
+        setLoadedScope({ actorId: scope.actorId, playId: scope.playId, ownerId: data.user_id })
+        setSourceNotice(data.source !== 'online' && data.source !== 'offline' ? data.source ?? 'non indicata' : null)
+        setRevision(editor.revision)
+        setConflict(false)
+        setFormData({ gameId: data.game_id ?? '', gameName: editor.detail.game?.name ?? '',
+          playedAt: data.played_at, durationMinutes: data.duration_minutes == null ? '' : String(data.duration_minutes),
+          source: data.source === 'online' ? 'online' : 'offline', notes: data.notes ?? '',
+          isCooperative: data.is_cooperative ?? false, teamWon: data.team_won,
+          players: editor.detail.scores.map(({ score, player }) => ({ id: score.id, playerId: score.player_id ?? '',
+            playerName: player?.alias || player?.name || '', score: score.score ?? '', winner: score.winner ?? false,
+            color: score.color, role: score.role })),
+        })
+        return
+      }
       const { data, error } = await supabase
         .from('plays')
         .select(`
@@ -76,6 +117,7 @@ const EditPlay = () => {
         .single()
 
       if (error) throw error
+      if (!current()) return
 
       if (data) {
         setFormData({
@@ -92,30 +134,43 @@ const EditPlay = () => {
             playerId: score.player_id ?? '',
             playerName: score.players?.alias || score.players?.name || '',
             score: score.score ?? '',
-            winner: score.winner || false
+            winner: score.winner || false,
+            color: score.color,
+            role: score.role
           })) || []
         })
       }
     } catch (error) {
+      if (!current()) return
       console.error('Error fetching play:', error)
       toast.error('Errore durante il caricamento della partita')
-      void navigate('/plays')
+      if (!reload) void navigate('/plays')
     } finally {
-      setLoading(false)
+      if (current()) setLoading(false)
     }
   }
 
   const fetchGames = async (): Promise<void> => {
+    const scope = { ...currentScope.current }
     try {
-      setGames(await listGames(supabase))
+      const data = await listGames(supabase)
+      if (mounted.current && scope.actorId === currentScope.current.actorId && scope.playId === currentScope.current.playId) setGames(data)
     } catch (error) {
       console.error('Error fetching games:', error)
     }
   }
 
   const fetchPlayers = async (): Promise<void> => {
+    const scope = { ...currentScope.current }
     try {
-      setPlayers(await listUserPlayers(supabase, user!.id))
+      if (atomicPlayWritesEnabled) {
+        const { data, error } = await supabase.from('players').select('*').order('name')
+        if (error) throw error
+        if (mounted.current && scope.actorId === currentScope.current.actorId && scope.playId === currentScope.current.playId) setPlayers(data ?? [])
+      } else {
+        const data = await listUserPlayers(supabase, user!.id)
+        if (mounted.current && scope.actorId === currentScope.current.actorId && scope.playId === currentScope.current.playId) setPlayers(data)
+      }
     } catch (error) {
       console.error('Error fetching players:', error)
     }
@@ -139,7 +194,9 @@ const EditPlay = () => {
           playerId: '',
           playerName: '',
           score: '',
-          winner: false
+          winner: false,
+          color: null,
+          role: null
         }
       ]
     }))
@@ -161,8 +218,64 @@ const EditPlay = () => {
     }))
   }
 
+  const saveAtomic = async (): Promise<void> => {
+    if (writing.current || conflict) return
+    if ((pending.current && (pending.current.actorId !== currentScope.current.actorId || pending.current.playId !== currentScope.current.playId)) ||
+        !loadedScope || loadedScope.actorId !== currentScope.current.actorId || loadedScope.playId !== currentScope.current.playId) {
+      toast.error('Torna alla partita e all’account originali prima di verificare il salvataggio')
+      return
+    }
+    writing.current = true
+    setSaving(true)
+    try {
+      if (!pending.current) {
+        if (!user || !id || !revision) throw new Error('Ricarica la partita prima di salvarla')
+        if (!formData.gameId || !formData.players.length || formData.players.some(player => !player.playerId)) {
+          throw new Error('Seleziona gioco e almeno un giocatore valido')
+        }
+        pending.current = { actorId: loadedScope.actorId, ownerId: loadedScope.ownerId,
+          requestId: crypto.randomUUID(), playId: loadedScope.playId, revision, payload: {
+          game_id: formData.gameId, played_at: formData.playedAt, duration_minutes: parseDurationInput(formData.durationMinutes),
+          source: formData.source === 'online' ? 'online' : 'offline', notes: formData.notes || null,
+          is_cooperative: formData.isCooperative, team_won: formData.isCooperative ? formData.teamWon : null,
+          scores: formData.players.map(player => ({ id: player.id, player_id: player.playerId,
+            score: parseScoreInput(player.score), winner: formData.isCooperative && formData.teamWon !== null ? formData.teamWon : player.winner,
+            color: player.color, role: player.role })),
+        } }
+      }
+      const command = pending.current
+      await updatePlay(supabase, command)
+      if (!mounted.current) return
+      pending.current = null
+      setUncertain(false)
+      if (command.ownerId && currentScope.current.actorId === command.actorId) {
+        try { await invalidateELOHistory(supabase, command.playId, command.ownerId) } catch { /* Existing website behavior. */ }
+      }
+      if (!mounted.current) return
+      toast.success('Partita aggiornata con successo!')
+      if (currentScope.current.actorId === command.actorId && currentScope.current.playId === command.playId) {
+        void navigate(`/plays/${command.playId}`)
+      } else { void fetchPlay(); void fetchGames(); void fetchPlayers() }
+    } catch (error) {
+      if (!mounted.current) return
+      if (error instanceof PlayWriteError && (error.kind === 'unknown' ||
+          (uncertain && (error.kind === 'unavailable' || error.kind === 'permission')))) setUncertain(true)
+      else {
+        pending.current = null
+        setUncertain(false)
+        if (error instanceof PlayWriteError && error.kind === 'conflict') setConflict(true)
+        if (loadedScope.actorId !== currentScope.current.actorId || loadedScope.playId !== currentScope.current.playId) {
+          void fetchPlay(); void fetchGames(); void fetchPlayers()
+        }
+      }
+      toast.error(error instanceof Error ? error.message : 'Errore durante il salvataggio della partita')
+    } finally { writing.current = false; setSaving(false) }
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
+    if (atomicPlayWritesEnabled) { await saveAtomic(); return }
+    if (writing.current) return
 
     if (!formData.gameId) {
       toast.error('Seleziona un gioco')
@@ -181,6 +294,7 @@ const EditPlay = () => {
       return
     }
 
+    writing.current = true
     try {
       setSaving(true)
 
@@ -274,11 +388,21 @@ const EditPlay = () => {
       const errorMessage = error instanceof Error ? error.message : "Errore sconosciuto durante l'aggiornamento della partita"
       toast.error(errorMessage)
     } finally {
+      writing.current = false
       setSaving(false)
     }
   }
 
-  if (loading) {
+  if (atomicPlayWritesEnabled && pending.current &&
+      (pending.current.actorId !== user?.id || pending.current.playId !== id)) {
+    return <div role="alert" className="rounded-lg bg-amber-500/20 p-4 text-amber-200">
+      <p>Un salvataggio della partita precedente deve essere verificato. Torna all’account e alla partita originali prima di iniziare una nuova modifica.</p>
+      {pending.current.actorId === user?.id && <Link to={`/plays/${pending.current.playId}/edit`}
+        className="mt-3 inline-block rounded-lg bg-slate-700 px-4 py-2">Torna alla partita in sospeso</Link>}
+    </div>
+  }
+
+  if (loading || (atomicPlayWritesEnabled && (!loadedScope || loadedScope.actorId !== user?.id || loadedScope.playId !== id))) {
     return <Spinner className="h-64" />
   }
 
@@ -302,6 +426,17 @@ const EditPlay = () => {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
+        {uncertain && <div role="alert" className="rounded-lg bg-amber-500/20 p-4 text-amber-200">
+          <p>La risposta non è arrivata. Le modifiche potrebbero essere già salvate. Riprova la stessa richiesta.</p>
+          <button type="button" onClick={() => void saveAtomic()} disabled={saving}
+            className="mt-3 min-h-11 rounded-lg bg-slate-700 px-4 py-2 disabled:opacity-50">{saving ? 'Verifica...' : 'Riprova la stessa richiesta'}</button>
+        </div>}
+        {conflict && <div role="alert" className="rounded-lg bg-amber-500/20 p-4 text-amber-200">
+          <p>La partita è cambiata. La tua bozza resta visibile. Ricarica i dati aggiornati prima di salvare; la ricarica sostituisce la bozza.</p>
+          <button type="button" onClick={() => { setLoading(true); void fetchPlay(true) }}
+            className="mt-3 min-h-11 rounded-lg bg-slate-700 px-4 py-2">Ricarica e sostituisci la bozza</button>
+        </div>}
+        <fieldset disabled={saving || uncertain || conflict} className="space-y-6">
         {/* Game Selection */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-bold text-white mb-4">Gioco</h2>
@@ -379,6 +514,7 @@ const EditPlay = () => {
                 <option value="offline">IRL</option>
                 <option value="online">Online</option>
               </select>
+              {sourceNotice && <p className="mt-2 text-sm text-amber-300">La fonte storica «{sourceNotice}» verrà salvata come IRL, oppure scegli Online.</p>}
             </div>
           </div>
           <div className="mt-4">
@@ -490,6 +626,7 @@ const EditPlay = () => {
                     <label className="block text-sm font-medium text-slate-300 mb-2">Punteggio</label>
                     <input
                       type="number"
+                      step={atomicPlayWritesEnabled ? 'any' : undefined}
                       value={player.score as string}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerChange(index, 'score', e.target.value)}
                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -537,6 +674,7 @@ const EditPlay = () => {
             {saving ? 'Salvataggio...' : 'Salva Modifiche'}
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   )

@@ -375,25 +375,29 @@ export async function getGeneralELOHistory(supabase: SupabaseClient<Database>, u
  * di tutte le partite N+1, N+2, … per lo stesso gioco.
  * Il ricalcolo completo avverrà alla prossima apertura di Stats.
  */
-export async function invalidateELOHistory(supabase: SupabaseClient<Database>, playId: string): Promise<void> {
+export async function invalidateELOHistory(supabase: SupabaseClient<Database>, playId: string, expectedOwnerId?: string | null): Promise<void> {
+  if (expectedOwnerId === null) return
   try {
     // Recupera il game_id della partita modificata
     const { data: play, error: playError } = await supabase
       .from('plays')
-      .select('game_id')
+      .select('game_id,user_id')
       .eq('id', playId)
       .maybeSingle()
 
     if (playError) throw playError
     if (!play) return  // partita non trovata: nulla da invalidare
+    if (!play.user_id) return
+    if (expectedOwnerId !== undefined && expectedOwnerId !== play.user_id) throw new Error('Proprietario della partita cambiato')
 
     // Elimina tutte le entry game-specific per questo gioco
-    // (RLS garantisce che vengano eliminati solo i record dell'utente corrente)
+    // Global admins pass RLS: scope explicitly to the historical owner.
     const { error: gameDeleteError } = await supabase
       .from('elo_history')
       .delete()
       .eq('game_id', play.game_id ?? '')
       .eq('is_general', false)
+      .eq('user_id', play.user_id)
 
     if (gameDeleteError) throw gameDeleteError
 
@@ -403,6 +407,7 @@ export async function invalidateELOHistory(supabase: SupabaseClient<Database>, p
       .from('elo_history')
       .delete()
       .eq('is_general', true)
+      .eq('user_id', play.user_id)
 
     if (generalDeleteError) throw generalDeleteError
   } catch (error) {

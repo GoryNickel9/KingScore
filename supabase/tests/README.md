@@ -16,6 +16,8 @@ Update conserva le posizioni quando ID/player/score/winner, modalità ed esito t
 
 ## Limiti della preparazione
 
+Il passo successivo aggiunge writer web, import e adattatori NUMERIC testuali: [ATOMIC_PLAY_ROLLOUT.md](../../ATOMIC_PLAY_ROLLOUT.md). Per includerli nella suite locale aggiungere `-IncludeBgaImport -IncludeWebWriters`; il runner verifica anche il cutover RPC-only, sempre nel cluster locale. La configurazione remota non cambia.
+
 La migrazione è additiva e non è stata deployata. I writer web `AddPlay`, `EditPlay`, `PlayDetail`, l'import BGA e `replace_play_scores` usano ancora operazioni separate: prima del rollout Android devono adottare transazioni e ordine dei lock compatibili. Le prove fra RPC non garantiscono atomicità dei writer legacy. Non revocare INSERT/UPDATE/DELETE al sito prima di aver completato tale adeguamento.
 
 Le RPC V1 accettano da 1 a 63 partecipanti e payload fino a 1 MiB. Il limite del ranking consente di riprodurre il percorso V8 per piccoli array, inclusa la comparazione non transitiva dei punteggi nulli che l'utente ha chiesto di mantenere. Un input oltre il limite viene rifiutato, senza troncamento; le letture storiche non cambiano. NUMERIC conserva il valore ricevuto, mentre il confronto usa Float64 come il sito. Overflow e underflow non rappresentabili sono rifiutati. Altri motori JavaScript e array maggiori richiedono una specifica ulteriore: non presumere equivalenza universale del comparator con NULL.

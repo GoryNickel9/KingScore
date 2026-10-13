@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -11,6 +11,7 @@ import { listUserPlayers, createPlayer } from '../services/players'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
 import type { DbGame, DbPlayer } from '../types/rows'
+import { atomicPlayWritesEnabled, createPlay, parseDurationInput, parseScoreInput, PlayWriteError, type PlayInput } from '../services/playWrites'
 
 interface TempPlayer {
   id: string
@@ -84,6 +85,15 @@ const AddPlay = () => {
   const [bggQuery, setBggQuery] = useState<string>('')
   const [bggResults, setBggResults] = useState<BGGResult[]>([])
   const [bggLoading, setBggLoading] = useState<boolean>(false)
+  const writing = useRef(false)
+  const createdPlayers = useRef(new Map<string, { id: string; created: boolean }>())
+  const pending = useRef<{ actorId: string; requestId: string; payload: PlayInput } | null>(null)
+  const [uncertain, setUncertain] = useState(false)
+  const formActor = useRef(user?.id)
+  const currentActor = useRef(user?.id)
+  currentActor.current = user?.id
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   useEffect(() => {
     void fetchGames()
@@ -91,8 +101,10 @@ const AddPlay = () => {
   }, [])
 
   const fetchGames = async (): Promise<void> => {
+    const actorId = currentActor.current
     try {
-      setGames(await listGames(supabase))
+      const data = await listGames(supabase)
+      if (mounted.current && actorId === currentActor.current) setGames(data)
     } catch (error) {
       console.error('Error fetching games:', error)
     }
@@ -100,8 +112,16 @@ const AddPlay = () => {
 
   const fetchPlayers = async (): Promise<void> => {
     if (!user) return
+    const actorId = user.id
     try {
-      setPlayers(await listUserPlayers(supabase, user.id))
+      if (atomicPlayWritesEnabled) {
+        const { data, error } = await supabase.from('players').select('*').order('name')
+        if (error) throw error
+        if (mounted.current && actorId === currentActor.current) setPlayers(data ?? [])
+      } else {
+        const data = await listUserPlayers(supabase, user.id)
+        if (mounted.current && actorId === currentActor.current) setPlayers(data)
+      }
     } catch (error) {
       console.error('Error fetching players:', error)
     }
@@ -285,15 +305,15 @@ const AddPlay = () => {
     }))
   }
 
-  const handleAddQuickPlayer = (e: React.FormEvent<HTMLFormElement>): void => {
+  const handleAddQuickPlayer = (e: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLInputElement>): void => {
     e.preventDefault()
-    const form = e.currentTarget
+    const form = e.currentTarget.form!
     const input = form.elements.namedItem('playerName') as HTMLInputElement
     const name = input.value.trim()
     if (!name) return
 
     const newPlayer: TempPlayer = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${crypto.randomUUID()}`,
       name,
       isNew: true
     }
@@ -304,7 +324,7 @@ const AddPlay = () => {
     }))
 
     setPlayers([...players, newPlayer])
-    form.reset()
+    input.value = ''
   }
 
   const handlePlayerScoreChange = (playerId: string, field: keyof PlayerScore, value: string | boolean): void => {
@@ -317,8 +337,83 @@ const AddPlay = () => {
     }))
   }
 
+  const resolvePlayers = async (): Promise<string[]> => {
+    if (!user) throw new Error('Accedi per salvare la partita')
+    for (const tempId of formData.players.filter(id => id.startsWith('temp-'))) {
+      if (!mounted.current || currentActor.current !== user.id) throw new Error('Account cambiato: nessun nuovo invio effettuato')
+      const player = players.find(p => p.id === tempId)
+      if (!player) throw new Error('Giocatore temporaneo non trovato')
+      let entry = createdPlayers.current.get(tempId)
+      if (!entry) {
+        entry = { id: crypto.randomUUID(), created: false }
+        createdPlayers.current.set(tempId, entry)
+      }
+      if (!entry.created) {
+        // A fixed catalog ID also prevents duplicates after an uncertain insert.
+        const { data: existing, error } = await supabase.from('players').select('id').eq('id', entry.id).maybeSingle()
+        if (error) throw error
+        if (!mounted.current || currentActor.current !== user.id) throw new Error('Account cambiato: nessun nuovo invio effettuato')
+        if (!existing) {
+          const input = { id: entry.id, user_id: user.id, name: player.name }
+          await createPlayer(supabase, input)
+        }
+        entry.created = true
+      }
+    }
+    return formData.players.map(id => createdPlayers.current.get(id)?.id ?? id)
+  }
+
+  const saveAtomic = async (): Promise<void> => {
+    if (writing.current) return
+    if (currentActor.current !== formActor.current ||
+        (pending.current && pending.current.actorId !== currentActor.current)) {
+      toast.error('Torna all’account originale per verificare il salvataggio')
+      return
+    }
+    writing.current = true
+    setLoading(true)
+    try {
+      if (!pending.current) {
+        if (!user || !formData.gameId || !formData.playedAt || !formData.players.length) {
+          throw new Error('Seleziona gioco, data e almeno un giocatore')
+        }
+        const scores = formData.players.map(id => ({ id: null, player_id: id,
+          score: parseScoreInput(playerScores[id]?.score ?? ''),
+          winner: formData.isCooperative && formData.teamWon !== null ? formData.teamWon : playerScores[id]?.winner ?? false,
+          color: null, role: null }))
+        const duration = parseDurationInput(formData.durationMinutes)
+        const mappedPlayers = await resolvePlayers()
+        if (!mounted.current || currentActor.current !== user.id) return
+        pending.current = { actorId: user.id, requestId: crypto.randomUUID(), payload: {
+          game_id: formData.gameId, played_at: formData.playedAt, duration_minutes: duration,
+          source: formData.source === 'online' ? 'online' : 'offline', notes: formData.notes || null,
+          is_cooperative: formData.isCooperative, team_won: formData.isCooperative ? formData.teamWon : null,
+          scores: scores.map((score, index) => ({ ...score, player_id: mappedPlayers[index] })),
+        } }
+      }
+      const command = pending.current
+      await createPlay(supabase, command)
+      if (!mounted.current) return
+      pending.current = null
+      setUncertain(false)
+      try { if (currentActor.current === command.actorId && command.payload.scores.length >= 2) await performFullRecalc(supabase, command.actorId) }
+      catch { toast('ELO non aggiornato: verrà corretto dal ricalcolo notturno') }
+      if (!mounted.current) return
+      toast.success('Partita aggiunta con successo!')
+      if (currentActor.current === command.actorId) void navigate('/plays')
+    } catch (error) {
+      if (!mounted.current) return
+      if (error instanceof PlayWriteError && (error.kind === 'unknown' ||
+          (uncertain && (error.kind === 'unavailable' || error.kind === 'permission')))) setUncertain(true)
+      else { pending.current = null; setUncertain(false) }
+      toast.error(error instanceof Error ? error.message : 'Errore durante il salvataggio della partita')
+    } finally { writing.current = false; setLoading(false) }
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
+    if (atomicPlayWritesEnabled) { await saveAtomic(); return }
+    if (writing.current) return
     if (!formData.gameId || formData.players.length === 0) {
       toast.error('Seleziona un gioco e almeno un giocatore')
       return
@@ -329,26 +424,11 @@ const AddPlay = () => {
       return
     }
 
+    writing.current = true
     setLoading(true)
 
     try {
-      // Create new players if needed
-      const newPlayers = formData.players.filter(id => id.startsWith('temp-'))
-      const createdPlayers: { tempId: string; newId: string }[] = []
-
-      for (const tempId of newPlayers) {
-        const player = players.find(p => p.id === tempId) as TempPlayer | undefined
-        if (player) {
-          const created = await createPlayer(supabase, { user_id: user!.id, name: player.name })
-          createdPlayers.push({ tempId, newId: created.id })
-        }
-      }
-
-      // Map temp IDs to real IDs
-      const mappedPlayers = formData.players.map(id => {
-        const mapping = createdPlayers.find(m => m.tempId === id)
-        return mapping ? mapping.newId : id
-      })
+      const mappedPlayers = await resolvePlayers()
 
       // Create play
       const { data: play, error: playError } = await supabase
@@ -370,8 +450,8 @@ const AddPlay = () => {
 
       // Create play scores
       // Calcola le posizioni prima di salvare
-      const playersWithScores = mappedPlayers.map(playerId => {
-        const playerData = playerScores[playerId] || { score: undefined, winner: false }
+      const playersWithScores = mappedPlayers.map((playerId, index) => {
+        const playerData = playerScores[formData.players[index]] || { score: undefined, winner: false }
         
         // Se è cooperativo e il risultato del team è definito, sovrascrive il winner individuale
         const winner = formData.isCooperative && formData.teamWon !== null 
@@ -428,6 +508,7 @@ const AddPlay = () => {
       const pgErr = error as { message?: string; code?: string; details?: string; hint?: string }
       console.error('Error saving play:', pgErr.message, '| code:', pgErr.code, '| details:', pgErr.details, '| hint:', pgErr.hint)
     } finally {
+      writing.current = false
       setLoading(false)
     }
   }
@@ -435,6 +516,15 @@ const AddPlay = () => {
   const filteredGames = games.filter(game =>
     game.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  if (atomicPlayWritesEnabled && formActor.current !== user?.id) {
+    return <div role="alert" className="rounded-lg bg-amber-500/20 p-4 text-amber-200">
+      <p>{pending.current ? 'Un salvataggio deve essere verificato con l’account originale. Nessuna nuova partita verrà inviata con questo account.' :
+        'L’account è cambiato. La bozza precedente resta separata: ricarica la pagina per iniziare una nuova partita con questo account.'}</p>
+      {!pending.current && <button type="button" onClick={() => window.location.reload()}
+        className="mt-3 min-h-11 rounded-lg bg-slate-700 px-4 py-2">Ricarica e inizia una nuova bozza</button>}
+    </div>
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -444,6 +534,12 @@ const AddPlay = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {uncertain && <div role="alert" className="rounded-lg bg-amber-500/20 p-4 text-amber-200">
+          <p>La risposta non è arrivata. La partita potrebbe essere già salvata. Riprova la stessa richiesta prima di modificarla.</p>
+          <button type="button" onClick={() => void saveAtomic()} disabled={loading}
+            className="mt-3 min-h-11 rounded-lg bg-slate-700 px-4 py-2 disabled:opacity-50">{loading ? 'Verifica...' : 'Riprova la stessa richiesta'}</button>
+        </div>}
+        <fieldset disabled={loading || uncertain} className="space-y-6">
         {/* Game Selection */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -837,7 +933,7 @@ const AddPlay = () => {
                         <label className="block text-xs text-slate-400 mb-1">Punteggio</label>
                         <input
                           type="number"
-                          step="0.1"
+                          step={atomicPlayWritesEnabled ? 'any' : '0.1'}
                           placeholder="Punteggio"
                           value={playerScores[player.id]?.score || ''}
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerScoreChange(player.id, 'score', e.target.value)}
@@ -882,20 +978,23 @@ const AddPlay = () => {
             )
           })()}
 
-          <form onSubmit={handleAddQuickPlayer} className="mt-4 flex space-x-2">
+          <div className="mt-4 flex space-x-2">
             <input
               name="playerName"
               type="text"
+              onKeyDown={event => { if (event.key === 'Enter') handleAddQuickPlayer(event) }}
               placeholder="Aggiungi giocatore al volo..."
               className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <button
-              type="submit"
+              type="button"
+              onClick={handleAddQuickPlayer}
+              aria-label="Aggiungi giocatore"
               className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
             >
               <Plus className="w-5 h-5" />
             </button>
-          </form>
+          </div>
         </div>
 
         {/* Notes */}
@@ -937,6 +1036,7 @@ const AddPlay = () => {
             Salva Partita
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   )

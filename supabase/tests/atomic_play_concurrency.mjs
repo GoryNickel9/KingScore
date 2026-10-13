@@ -98,6 +98,41 @@ try {
   assert.equal(deleteReplay.deleted, true); assert.equal(deleteReplay.replayed, true);
   report.concurrencyChecks.push('two deletes: one deletion, one missing target; winner retries after deletion');
 
+  const [capabilities] = await query("SELECT json_build_object('bga',to_regprocedure('public.import_bga_play_v1(uuid,jsonb,jsonb,jsonb)') IS NOT NULL,'web',to_regprocedure('public.create_web_play_v1(uuid,jsonb)') IS NOT NULL);");
+  if (capabilities.bga) {
+    const metadata = { location: 'Original BGA location', bga_table_id: 'concurrent-bga-table' };
+    const imports = [11,12].map(n => `SELECT public.import_bga_play_v1(${literal(request(n))},${json(payload)},${json(metadata)},'[2]'::jsonb);`);
+    const results = await gatedRace(`SELECT pg_advisory_xact_lock(hashtextextended(${literal('import-bga/' + account + '/' + metadata.bga_table_id)},0))`,imports);
+    assert(results.every(result => result.code === 0), JSON.stringify(results));
+    const values = results.map(result => JSON.parse(result.stdout.trim()));
+    assert.equal(new Set(values.map(value => value.play_id)).size,1);
+    assert.deepEqual(values.map(value => value.skipped).sort(),[false,true]);
+    const [rows] = await query(`SELECT json_build_object('plays',(SELECT count(*) FROM public.plays WHERE user_id=${literal(account)} AND bga_table_id=${literal(metadata.bga_table_id)}),
+      'position',(SELECT "position" FROM public.play_scores WHERE play_id=${literal(values[0].play_id)}));`);
+    assert.equal(rows.plays,1); assert.equal(rows.position,2);
+    report.concurrencyChecks.push('two BGA requests for one table: one import and one skip, external position preserved');
+    const retryMetadata = { ...metadata, bga_table_id: 'same-request-bga-table' };
+    const sameRequest = `SELECT public.import_bga_play_v1(${literal(request(13))},${json(payload)},${json(retryMetadata)},'[null]'::jsonb);`;
+    const sameResults = await gatedRace(`SELECT pg_advisory_xact_lock(hashtextextended(${literal(account + '/' + request(13))},0))`,[sameRequest,sameRequest]);
+    assert(sameResults.every(result => result.code === 0),JSON.stringify(sameResults));
+    const sameValues = sameResults.map(result => JSON.parse(result.stdout.trim()));
+    assert.deepEqual(sameValues.map(value => value.replayed).sort(),[false,true]);
+    assert.equal(sameValues[0].play_id,sameValues[1].play_id);
+    report.concurrencyChecks.push('same BGA request: one commit and one receipt replay');
+  }
+  if (capabilities.web) {
+    const exactPayload = { ...payload, scores: [{ ...payload.scores[0], score: '9007199254740993.125' }] };
+    const [webPlay] = await query(auth + `SELECT public.create_web_play_v1(${literal(request(21))},${json(exactPayload)});`);
+    const concurrent = [
+      `SELECT public.update_web_play_v1(${literal(request(22))},${literal(webPlay.play_id)},${literal(webPlay.revision)},${json({ ...exactPayload,notes:'web writer' })});`,
+      `SELECT public.update_play_v1(${literal(request(23))},${literal(webPlay.play_id)},${literal(webPlay.revision)},${json({ ...payload,notes:'Android writer' })});`,
+    ];
+    const results = await gatedRace(`SELECT id FROM public.plays WHERE id=${literal(webPlay.play_id)} FOR UPDATE`,concurrent);
+    assert.equal(results.filter(result => result.code === 0).length,1);
+    assert.match(results.find(result => result.code !== 0).stderr,/PT409/);
+    report.concurrencyChecks.push('web and Android updates share the same revision and parent lock: one commit and one conflict');
+  }
+
   // Compare the actual unmodified web function, not a duplicate reference implementation.
   const cases = [];
   const states = [
