@@ -3,6 +3,8 @@
 param(
     [string] $PostgresBin = 'C:\Program Files\PostgreSQL\17\bin',
     [string] $ConcurrentScript,
+    [string] $HttpScript,
+    [string] $PostgrestBin,
     [string] $NodeBin = 'node',
     [switch] $IncludeBgaImport,
     [switch] $IncludeWebWriters,
@@ -38,6 +40,19 @@ if ($IncludeWebWriters) {
     if ($BootstrapOnly -or -not $IncludeBgaImport) { throw '-IncludeWebWriters requires -IncludeBgaImport and cannot be used with -BootstrapOnly.' }
     $required += @($webMigration, $webTests, $cutover, $cutoverTests)
 }
+if ($HttpScript) {
+    if (-not $IncludeWebWriters) { throw '-HttpScript requires -IncludeWebWriters.' }
+    if (-not $PostgrestBin) { throw '-HttpScript requires a verified local -PostgrestBin executable.' }
+    $HttpScript = [IO.Path]::GetFullPath($HttpScript)
+    $PostgrestBin = [IO.Path]::GetFullPath($PostgrestBin)
+    if (-not $HttpScript.StartsWith($repo + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetExtension($HttpScript) -ne '.mjs' -or
+        -not $PostgrestBin.StartsWith($repo + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetExtension($PostgrestBin) -ne '.exe') {
+        throw 'HTTP script and PostgREST executable must be local workspace files (.mjs/.exe).'
+    }
+    $required += @($HttpScript, $PostgrestBin)
+}
 if ($ConcurrentScript) {
     if ($BootstrapOnly) { throw '-ConcurrentScript cannot be used with -BootstrapOnly.' }
     $ConcurrentScript = [IO.Path]::GetFullPath($ConcurrentScript)
@@ -46,8 +61,8 @@ if ($ConcurrentScript) {
         throw 'The concurrency script must be a local .mjs file inside this repository.'
     }
     $required += $ConcurrentScript
-    $NodeBin = (Get-Command $NodeBin -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 }
+if ($ConcurrentScript -or $HttpScript) { $NodeBin = (Get-Command $NodeBin -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
 foreach ($path in $required) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required local file missing: $path. No cluster was started." }
 }
@@ -66,6 +81,7 @@ $report = [ordered]@{
     mode = $(if ($BootstrapOnly) { 'bootstrap' } else { 'atomic-play-writes' })
     includeBgaImport = [bool]$IncludeBgaImport
     includeWebWriters = [bool]$IncludeWebWriters
+    includeHttp = [bool]$HttpScript
     startedAtUtc = [DateTime]::UtcNow.ToString('o')
     finishedAtUtc = $null
     host = '127.0.0.1'
@@ -93,6 +109,9 @@ function Invoke-IsolatedProcess {
     $start.RedirectStandardError = $true
     foreach ($key in @($start.Environment.Keys)) {
         if ($key.StartsWith('PG', [StringComparison]::OrdinalIgnoreCase)) { [void]$start.Environment.Remove($key) }
+        if ($Step -eq 'http-tests' -and $key.ToUpperInvariant() -in @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NODE_USE_ENV_PROXY')) {
+            [void]$start.Environment.Remove($key)
+        }
     }
     # Even a user's default pgpass/psqlrc cannot influence these local sessions.
     $start.Environment['PGPASSFILE'] = $passFile
@@ -172,6 +191,9 @@ try {
         }
         if ($ConcurrentScript) {
             Invoke-IsolatedProcess 'concurrency' $NodeBin @($ConcurrentScript, [IO.Path]::GetFullPath($PostgresBin), [string]$report.port, $runDirectory)
+        }
+        if ($HttpScript) {
+            Invoke-IsolatedProcess 'http-tests' $NodeBin @($HttpScript, [IO.Path]::GetFullPath($PostgresBin), [string]$report.port, $runDirectory, $PostgrestBin)
         }
     }
     $report.status = $(if ($BootstrapOnly) { 'BOOTSTRAP_PASS' } else { 'PASS' })

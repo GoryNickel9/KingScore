@@ -39,6 +39,16 @@ npm run build
 
 Il runner applica su un cluster loopback separato le tre migrazioni additive, le suite SQL e il cutover simulato. Le prove concorrenti coprono create/update/delete, doppio import BGA e aggiornamento simultaneo web/Android. I test callback React usano hook controllati: verificano le decisioni dei callback, non DOM, focus, accessibilità o comportamento reale del browser. Le claim SQL sono sintetiche; firma JWT, login e gateway Supabase richiedono ancora collaudo HTTP.
 
+Il collaudo HTTP locale ora verifica un gateway PostgREST 14.1 reale e JWT HS256 firmati per i test: 43 controlli passano, compresi permessi, firme invalide/scadenza, status 400/401/403/404/409, decimali esatti, replay, BGA e cutover. Non usa il servizio GoTrue: login, account reali e configurazione Supabase cloud restano da verificare.
+
+Su Windows, scaricare il [binario ufficiale PostgREST 14.1](https://github.com/PostgREST/postgrest/releases/tag/v14.1) in una directory locale ignorata. L'archivio Windows x86-64 verificato ha SHA256 `7d34ac6d2c9ba8cb5cb7d169454e24f29be002de913bc12683b1c64f5c789d05`; il binario non entra nel repository o nell'APK. Per ripetere anche le prove HTTP:
+
+```powershell
+pwsh -NoProfile -File scripts/test-atomic-plays.ps1 -IncludeBgaImport -IncludeWebWriters -ConcurrentScript "$PWD/supabase/tests/atomic_play_concurrency.mjs" -HttpScript "$PWD/supabase/tests/atomic_play_http.mjs" -PostgrestBin "$PWD/.work/postgrest-14.1/postgrest.exe"
+```
+
+Gateway e cluster hanno porte loopback univoche e vengono arrestati nel finally. JWT e chiave temporanea restano nei file locali ignorati, senza entrare nei report. Il runner non installa servizi di sistema, non crea progetti cloud e non usa il database collegato a Supabase CLI.
+
 ## Sequenza di attivazione
 
 1. Preparare un ambiente di prova separato e verificare nuovamente catalogo, grant e policy. Il fixture SQL locale contiene ruoli e funzioni auth sintetici: non applicarlo a un Supabase cloud.

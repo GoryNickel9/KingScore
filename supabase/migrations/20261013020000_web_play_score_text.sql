@@ -10,6 +10,9 @@ BEGIN
     OR pg_catalog.octet_length(p_payload::text) > 1048576 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Invalid web play input';
   END IF;
+  IF pg_catalog.jsonb_array_length(p_payload->'scores') NOT BETWEEN 1 AND 63 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='V1 requires 1 to 63 participants';
+  END IF;
   FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(p_payload->'scores') LOOP
     IF pg_catalog.jsonb_typeof(item) <> 'object' THEN
       RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Invalid web score input';
