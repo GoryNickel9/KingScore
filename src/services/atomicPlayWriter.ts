@@ -1,10 +1,10 @@
 import { preparePlaySave, type PreparedPlaySave, type PlaySaveRpc } from './playSaveRequests'
 
 export interface PlayWriterSession { actorId: string; accessToken: string; admin: boolean }
-export interface PendingPlaySave { actorId: string; rpc: PlaySaveRpc; body: string }
+export interface PendingPlaySave { actorId: string; rpc: PlaySaveRpc; body: string; receiptBody?: string }
 export interface PlaySaveReceipt { playId: string; revision: string | null; replayed: boolean; skipped: boolean }
 export type PlayWriteOutcome =
-  | { kind: 'saved'; receipt: PlaySaveReceipt }
+  | { kind: 'saved'; receipt: PlaySaveReceipt; restored: boolean }
   | { kind: 'rejected'; status: number }
   | { kind: 'uncertain' }
 
@@ -111,7 +111,16 @@ export class AtomicPlayWriter {
     const request = this.restore(input.actorId.toLowerCase(), input)
     return this.dependencies.lock(request.actorId, async () => {
       await this.requireSession(request.actorId)
-      if (this.dependencies.journal.load(request.actorId)) throw new Error('Resolve pending save first')
+      const prior = this.dependencies.journal.load(request.actorId)
+      if (prior) {
+        const previous = this.restore(request.actorId, prior)
+        if (prior.receiptBody === undefined) throw new Error('Resolve pending save first')
+        const confirmed = receipt(JSON.parse(prior.receiptBody), previous)
+        if (previous.requestId?.toLowerCase() === request.requestId?.toLowerCase()) {
+          if (previous.rpc !== request.rpc || previous.body !== request.body) throw new Error('Request ID conflict')
+          return { kind: 'saved', receipt: confirmed, restored: true }
+        }
+      }
       this.dependencies.journal.save(request.actorId, { actorId: request.actorId, rpc: request.rpc, body: request.body })
       const stored = this.dependencies.journal.load(request.actorId)
       if (!stored || this.restore(request.actorId, stored).body !== request.body || stored.rpc !== request.rpc) {
@@ -128,7 +137,11 @@ export class AtomicPlayWriter {
       await this.requireSession(actor)
       const stored = this.dependencies.journal.load(actor)
       if (!stored) throw new Error('No pending save')
-      return this.send(this.restore(actor, stored), true)
+      const request = this.restore(actor, stored)
+      if (stored.receiptBody !== undefined) {
+        return { kind: 'saved', receipt: receipt(JSON.parse(stored.receiptBody), request), restored: true }
+      }
+      return this.send(request, true)
     })
   }
 
@@ -146,8 +159,16 @@ export class AtomicPlayWriter {
       await this.requireSession(request.actorId)
       if (response.status === 200) {
         const parsed = receipt(value, request)
-        this.dependencies.journal.clear(request.actorId)
-        return { kind: 'saved', receipt: parsed }
+        const receiptBody = JSON.stringify(value)
+        this.dependencies.journal.save(request.actorId, {
+          actorId: request.actorId, rpc: request.rpc, body: request.body, receiptBody,
+        })
+        const confirmation = this.dependencies.journal.load(request.actorId)
+        if (!confirmation || confirmation.receiptBody !== receiptBody ||
+          confirmation.rpc !== request.rpc || this.restore(request.actorId, confirmation).body !== request.body) {
+          throw new Error('Confirmation not persisted')
+        }
+        return { kind: 'saved', receipt: parsed, restored: false }
       }
       // A rejection during recovery cannot disprove an earlier committed save.
       // Keep 409 too: a reused UUID may refer to an existing receipt with different content.
@@ -159,7 +180,7 @@ export class AtomicPlayWriter {
       }
       return { kind: 'uncertain' }
     } catch {
-      // Includes timeout, account switch, malformed success and failed journal cleanup.
+      // Includes timeout, account switch, malformed success and failed confirmation storage.
       return { kind: 'uncertain' }
     } finally { clearTimeout(timer) }
   }
@@ -175,7 +196,8 @@ export function browserPlayJournal(namespace: string, storage: Storage, locks: L
         if (body === null) return null
         const value: unknown = JSON.parse(body)
         if (!value || typeof value !== 'object' || Array.isArray(value) ||
-          Object.keys(value).length !== 3 || !('actorId' in value) || !('rpc' in value) || !('body' in value) ||
+          Object.keys(value).length !== ('receiptBody' in value ? 4 : 3) || !('actorId' in value) || !('rpc' in value) || !('body' in value) ||
+          ('receiptBody' in value && typeof value.receiptBody !== 'string') ||
           value.actorId !== actor || typeof value.rpc !== 'string' || typeof value.body !== 'string') {
           throw new Error('Corrupt pending journal')
         }

@@ -36,7 +36,7 @@ function fixture() {
 }
 
 describe('atomic mutation transport', () => {
-  it('persists before sending the exact decimal body; clears only after a valid receipt', async () => {
+  it('persists before sending the exact decimal body and persists a valid confirmation', async () => {
     const f = fixture(); const input = create()
     f.deps.fetch = vi.fn(async (_url, init) => {
       expect(f.rows.get(actor)?.body).toBe(input.body)
@@ -47,8 +47,8 @@ describe('atomic mutation transport', () => {
     })
     expect(await f.writer().save(input)).toEqual({ kind: 'saved', receipt: {
       playId: play, revision: 'rev1', replayed: false, skipped: false,
-    } })
-    expect(f.rows.size).toBe(0)
+    }, restored: false })
+    expect(f.rows.get(actor)?.receiptBody).toBeDefined()
     expect(f.deps.fetch).toHaveBeenCalledTimes(1)
   })
 
@@ -148,10 +148,15 @@ describe('atomic mutation transport', () => {
     expect(f.deps.fetch).not.toHaveBeenCalled()
   })
 
-  it('retains an uncertain result when receipt cleanup fails', async () => {
-    const f = fixture(); f.deps.journal.clear = () => { throw new Error('Storage unavailable') }
+  it('retains an uncertain result when confirmation storage fails', async () => {
+    const f = fixture(); const save = f.deps.journal.save
+    f.deps.journal.save = (key, value) => {
+      if (value.receiptBody !== undefined) throw new Error('Storage unavailable')
+      save(key, value)
+    }
     expect(await f.writer().save(create())).toEqual({ kind: 'uncertain' })
     expect(f.rows.size).toBe(1)
+    expect(f.rows.get(actor)?.receiptBody).toBeUndefined()
   })
 
   it('checks delete target/deleted and BGA skipped response semantics', async () => {
@@ -161,10 +166,31 @@ describe('atomic mutation transport', () => {
     expect(await f.writer().save(deleted)).toEqual({ kind: 'uncertain' })
     f.deps.fetch = vi.fn(async () => new Response(JSON.stringify({ play_id: play, deleted: true, replayed: true })))
     expect(await f.writer().recover(actor)).toMatchObject({ kind: 'saved', receipt: { revision: null, replayed: true } })
-    const imported = preparePlaySave(actor, 'import_bga_play_v1', { p_request_id: requestId,
+    const imported = preparePlaySave(actor, 'import_bga_play_v1', { p_request_id: other,
       p_payload: create().arguments().p_payload, p_metadata: { location: null, bga_table_id: 'table' }, p_positions: [null] })
     f.deps.fetch = vi.fn(async () => new Response(JSON.stringify({ play_id: play, revision: 'rev1', replayed: false, skipped: true })))
     expect(await f.writer().save(imported)).toMatchObject({ kind: 'saved', receipt: { skipped: true } })
+  })
+
+  it('restores a confirmed result after restart without a second mutation request', async () => {
+    const f = fixture(); const input = create()
+    expect(await f.writer().save(input)).toMatchObject({ kind: 'saved', restored: false })
+    const restarted = f.writer()
+    expect(await restarted.recover(actor)).toMatchObject({ kind: 'saved', restored: true })
+    expect(await restarted.save(input)).toMatchObject({ kind: 'saved', restored: true })
+    expect(f.deps.fetch).toHaveBeenCalledTimes(1)
+    const changed = preparePlaySave(actor, 'create_play_v1', { ...input.arguments(),
+      p_payload: { ...(input.arguments().p_payload as Record<string, unknown>), notes: 'Changed' } })
+    await expect(restarted.save(changed)).rejects.toThrow('Request ID conflict')
+    expect(f.deps.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows a new explicit UUID after confirmation while retaining per-account safety', async () => {
+    const f = fixture(); await f.writer().save(create())
+    const input = preparePlaySave(actor, 'create_play_v1', { ...create().arguments(), p_request_id: other })
+    expect(await f.writer().save(input)).toMatchObject({ kind: 'saved', restored: false })
+    expect(f.deps.fetch).toHaveBeenCalledTimes(2)
+    expect(f.rows.get(actor)?.body).toBe(input.body)
   })
 
   it('aborts a hung transport after 30 seconds without retrying', async () => {
