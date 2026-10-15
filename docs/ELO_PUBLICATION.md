@@ -24,9 +24,9 @@ Il runner controlla gli hash del core prima di eseguire i casi:
 
 ## Perimetro dei risultati
 
-Nel prototipo `scopeId` identifica il proprietario storico delle partite, come il filtro di `performFullRecalc` attuale. L'amministratore che modifica una partita non diventa proprietario della classifica. Ogni proprietario ha una generazione separata; due account con lo stesso gioco e giocatore non possono sostituirsi a vicenda.
+L'utente ha scelto una classifica pubblica unica con tutte le partite di tutti gli account. Nel prototipo aggiornato `scopeId: "global"` identifica questo storico completo. Il calcolo parte dalle partite di tutti gli account, senza combinare rating calcolati separatamente. Gli scope UUID restano disponibili soltanto per diagnostica e isolamento.
 
-Il codice esistente ha però proiezioni incompatibili fra loro: `player_ratings` non ha owner, alcune cache leggono senza owner mentre il fallback lo filtra. La prova conserva la coorte del ricalcolo per utente, ma non decide implicitamente come debba aggregare il sito pubblico. Prima dell'integrazione occorre rendere esplicita questa scelta in tabelle, API e reader. I bucket HU/3/4/5+ sono calcoli indipendenti sul proprio sottoinsieme: non devono usare questa generazione come se fossero semplici filtri del risultato completo.
+Il codice esistente ha proiezioni incompatibili fra loro: `player_ratings` non ha owner, alcune cache leggono senza owner mentre il fallback lo filtra. Il [contratto di lettura](ELO_READ_CONTRACT.md) definisce le proiezioni globali e i caller da sostituire prima dell'attivazione. I bucket HU/3/4/5+ sono calcoli indipendenti sul proprio sottoinsieme: non devono usare questa generazione come se fossero semplici filtri del risultato completo.
 
 L'ordine dell'array dei partecipanti influisce sui casi con punteggi assenti o uguali. Le query correnti non ne fissano un ordine esplicito. La fixture usa una colonna **sintetica** `ordinal` per conservare e testare la sequenza ricevuta: non afferma che quella colonna esista nel database online. Servono una decisione e una verifica dello storico prima di introdurre un ordine persistente reale; ordinare per UUID senza questa verifica può cambiare i risultati pur lasciando intatta la formula.
 
@@ -46,16 +46,18 @@ La generazione è un unico payload JSONB. Non esistono batch visibili al reader,
 
 | Operazione | Contratto |
 | --- | --- |
-| `elo_local.snapshot(owner)` | `{scopeId, sourceRevision, plays}` completo e consistente |
+| `elo_local.snapshot_global()` | `{scopeId:"global", sourceRevision, plays}` completo e consistente; `snapshot(owner)` resta diagnostico |
 | `buildEloPublication(snapshot, publicationId)` | `{publicationId, scopeId, sourceRevision, algorithm, result}` senza I/O |
 | `elo_local.publish(body)` | Conferma `{publicationId, scopeId, sourceRevision, replayed}`; revisione superata → SQLSTATE `40001`; UUID riusato con altro corpo → `23505` |
-| `elo_local.read(owner)` | `{status, sourceRevision, publishedRevision, publicationId, result}`; `result` presente solo con stato `current` |
+| `elo_local.read_global()` | `{scopeId, algorithm, status, sourceRevision, publishedRevision, publicationId, result}`; `result` presente solo con stato `current`; `read(owner)` resta diagnostico |
 
 Solo il worker fidato può acquisire snapshot e pubblicare. Il reader non può pubblicare; il worker non può modificare sorgenti o generazioni direttamente. Il database controlla involucro e tipi principali, ma si fida del worker per il contenuto matematico: l'app non deve poter inviare i propri rating alla funzione di pubblicazione. Le simulazioni non vengono eseguite dentro la transazione di salvataggio della partita.
 
 ## Risultati verificati
 
 Il checkpoint supera 36 nuovi test dell'adattatore (286 test web complessivi), 28 casi PostgreSQL 17.4, typecheck, lint mirato e build. Il report [elo-publication-validation.json](evidence/elo-publication-validation.json) conserva casi, hash e limiti. Il cluster del run `b14ee366b35043409efae700484548d3` è stato arrestato; nessun servizio remoto è stato contattato.
+
+Il checkpoint successivo del [contratto di lettura globale](ELO_READ_CONTRACT.md) supera 323 test web e 38 casi PostgreSQL; typecheck, lint mirato e build passano. Il [report aggiornato](evidence/elo-read-validation.json) conserva il run `529a5896a55849e5a2f1073a5fa2e05b`, con cluster arrestato e nessun contatto remoto. La formula conserva gli stessi hash.
 
 I due errori iniziali del runner sono conservati nei log: selezione ambigua di Node dal PATH e confronto testuale dell'indirizzo PostgreSQL con suffisso `/32`. Sono stati corretti rispettivamente selezionando un solo eseguibile e verificando `host(inet_server_addr())`; le protezioni loopback della fixture non sono state allentate.
 
@@ -74,4 +76,4 @@ I test dell'adattatore comprendono valori noti 997/1003 dopo due vittorie altern
 
 Il caso di risposta persa ripete la chiamata SQL dopo un commit già concluso: non simula una caduta HTTP reale. I ruoli locali non certificano Auth/RLS Supabase. Il runner può pubblicare fixture e resettare il contatore come proprietario del database esclusivamente per isolare i casi; questi privilegi non vengono concessi ai ruoli applicativi sintetici.
 
-Prima di preparare una migrazione reale rimangono: coorti e ordine dei partecipanti espliciti; inventario dello schema effettivo; collegamento dell'invalidazione ai writer reali, incluse cascade e import; worker riavviabile con recupero delle richieste incerte; lettori senza scritture opportunistiche di cache; chiusura dei writer ELO legacy e notturni; retention, limiti, backup e ripristino verificati. Il risultato locale dimostra il protocollo, non chiude questi lavori di integrazione.
+Prima di preparare una migrazione reale rimangono: ordine dei partecipanti persistito e verificato; inventario dello schema effettivo; collegamento dell'invalidazione ai writer reali, incluse cascade e import; worker riavviabile con recupero delle richieste incerte; collegamento dei nuovi lettori e chiusura delle scritture ELO legacy e notturne; retention, limiti, backup e ripristino verificati. Il risultato locale dimostra il protocollo, non chiude questi lavori di integrazione.

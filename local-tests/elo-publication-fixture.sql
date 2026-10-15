@@ -49,12 +49,12 @@ CREATE TABLE elo_local.source_clock (
 INSERT INTO elo_local.source_clock(singleton) VALUES (true);
 CREATE TABLE elo_local.publications (
   publication_id uuid PRIMARY KEY,
-  scope_id uuid NOT NULL,
+  scope_id text NOT NULL CHECK (scope_id = 'global' OR scope_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
   source_revision bigint NOT NULL CHECK (source_revision >= 0),
   payload jsonb NOT NULL
 );
 CREATE TABLE elo_local.heads (
-  scope_id uuid PRIMARY KEY,
+  scope_id text PRIMARY KEY CHECK (scope_id = 'global' OR scope_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
   publication_id uuid NOT NULL REFERENCES elo_local.publications(publication_id)
 );
 
@@ -75,10 +75,11 @@ CREATE TRIGGER elo_dirty_plays BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON 
 CREATE TRIGGER elo_dirty_scores BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON public.play_scores
   FOR EACH STATEMENT EXECUTE FUNCTION elo_local.mark_dirty();
 
-CREATE FUNCTION elo_local.snapshot(owner_id uuid) RETURNS jsonb
+-- Private shared implementation: public entry points choose an owner or global.
+CREATE FUNCTION elo_local.snapshot_scope(requested_scope text) RETURNS jsonb
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT jsonb_build_object(
-    'scopeId', owner_id::text,
+    'scopeId', requested_scope,
     'sourceRevision', clock.revision::text,
     'plays', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
@@ -95,18 +96,30 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
           WHERE s.play_id = p.id
         ), '[]'::jsonb)
       ) ORDER BY p.played_at, p.id)
-      FROM public.plays p WHERE p.user_id = owner_id
+      FROM public.plays p WHERE requested_scope = 'global' OR p.user_id::text = requested_scope
     ), '[]'::jsonb)
   )
   FROM elo_local.source_clock clock WHERE singleton;
 $$;
+REVOKE ALL ON FUNCTION elo_local.snapshot_scope(text) FROM PUBLIC;
+
+CREATE FUNCTION elo_local.snapshot(owner_id uuid) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT elo_local.snapshot_scope(owner_id::text);
+$$;
 REVOKE ALL ON FUNCTION elo_local.snapshot(uuid) FROM PUBLIC;
+
+CREATE FUNCTION elo_local.snapshot_global() RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT elo_local.snapshot_scope('global');
+$$;
+REVOKE ALL ON FUNCTION elo_local.snapshot_global() FROM PUBLIC;
 
 CREATE FUNCTION elo_local.publish(body jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   new_id uuid;
-  owner_id uuid;
+  requested_scope text;
   requested_revision bigint;
   live_revision bigint;
   prior_body jsonb;
@@ -117,13 +130,14 @@ BEGIN
         IS DISTINCT FROM ARRAY['algorithm','publicationId','result','scopeId','sourceRevision']::text[]
      OR jsonb_typeof(body->'publicationId') IS DISTINCT FROM 'string'
      OR jsonb_typeof(body->'scopeId') IS DISTINCT FROM 'string'
+     OR (body->>'scopeId' <> 'global' AND body->>'scopeId' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
      OR jsonb_typeof(body->'sourceRevision') IS DISTINCT FROM 'string'
      OR body->>'sourceRevision' !~ '^(0|[1-9][0-9]*)$'
      OR body->>'algorithm' IS DISTINCT FROM 'kingscore-elo-legacy-v1' THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Invalid publication envelope';
   END IF;
   new_id := (body->>'publicationId')::uuid;
-  owner_id := (body->>'scopeId')::uuid;
+  requested_scope := body->>'scopeId';
   requested_revision := (body->>'sourceRevision')::bigint;
   output := body->'result';
   IF jsonb_typeof(output) IS DISTINCT FROM 'object'
@@ -148,25 +162,27 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'Publication ID reused with different payload';
     END IF;
     -- Receipt replay never rewinds the head, even after subsequent source edits.
-    RETURN jsonb_build_object('publicationId', new_id::text, 'scopeId', owner_id::text,
+    RETURN jsonb_build_object('publicationId', new_id::text, 'scopeId', requested_scope,
       'sourceRevision', requested_revision::text, 'replayed', true);
   END IF;
   IF live_revision <> requested_revision THEN
     RAISE EXCEPTION USING ERRCODE = '40001', MESSAGE = 'Source changed; take a fresh snapshot and recompute';
   END IF;
   INSERT INTO elo_local.publications(publication_id, scope_id, source_revision, payload)
-    VALUES (new_id, owner_id, requested_revision, body);
-  INSERT INTO elo_local.heads(scope_id, publication_id) VALUES (owner_id, new_id)
+    VALUES (new_id, requested_scope, requested_revision, body);
+  INSERT INTO elo_local.heads(scope_id, publication_id) VALUES (requested_scope, new_id)
     ON CONFLICT (scope_id) DO UPDATE SET publication_id = EXCLUDED.publication_id;
-  RETURN jsonb_build_object('publicationId', new_id::text, 'scopeId', owner_id::text,
+  RETURN jsonb_build_object('publicationId', new_id::text, 'scopeId', requested_scope,
     'sourceRevision', requested_revision::text, 'replayed', false);
 END;
 $$;
 REVOKE ALL ON FUNCTION elo_local.publish(jsonb) FROM PUBLIC;
 
-CREATE FUNCTION elo_local.read(owner_id uuid) RETURNS jsonb
+CREATE FUNCTION elo_local.read_scope(requested_scope text) RETURNS jsonb
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT jsonb_build_object(
+    'scopeId', requested_scope,
+    'algorithm', publication.payload->>'algorithm',
     'status', CASE WHEN publication.publication_id IS NULL THEN 'missing'
       WHEN publication.source_revision <> clock.revision THEN 'stale' ELSE 'current' END,
     'sourceRevision', clock.revision::text,
@@ -176,16 +192,28 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
       THEN publication.payload->'result' ELSE NULL END
   )
   FROM elo_local.source_clock clock
-  LEFT JOIN elo_local.heads head ON head.scope_id = owner_id
+  LEFT JOIN elo_local.heads head ON head.scope_id = requested_scope
   LEFT JOIN elo_local.publications publication ON publication.publication_id = head.publication_id
   WHERE clock.singleton;
 $$;
+REVOKE ALL ON FUNCTION elo_local.read_scope(text) FROM PUBLIC;
+
+CREATE FUNCTION elo_local.read(owner_id uuid) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT elo_local.read_scope(owner_id::text);
+$$;
 REVOKE ALL ON FUNCTION elo_local.read(uuid) FROM PUBLIC;
+
+CREATE FUNCTION elo_local.read_global() RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT elo_local.read_scope('global');
+$$;
+REVOKE ALL ON FUNCTION elo_local.read_global() FROM PUBLIC;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA elo_local FROM PUBLIC, local_elo_reader, local_elo_worker, local_elo_writer;
 GRANT USAGE ON SCHEMA elo_local TO local_elo_reader, local_elo_worker;
-GRANT EXECUTE ON FUNCTION elo_local.snapshot(uuid), elo_local.publish(jsonb) TO local_elo_worker;
-GRANT EXECUTE ON FUNCTION elo_local.read(uuid) TO local_elo_reader, local_elo_worker;
+GRANT EXECUTE ON FUNCTION elo_local.snapshot(uuid), elo_local.snapshot_global(), elo_local.publish(jsonb) TO local_elo_worker;
+GRANT EXECUTE ON FUNCTION elo_local.read(uuid), elo_local.read_global() TO local_elo_reader, local_elo_worker;
 GRANT USAGE ON SCHEMA public TO local_elo_writer;
 GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON public.games, public.players, public.plays, public.play_scores TO local_elo_writer;
 COMMIT;

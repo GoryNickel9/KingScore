@@ -1,10 +1,10 @@
 import { simulateAllPlays } from './simulation'
 import type { SimulationPlay, SimulationResult } from './simulation'
-
-export const ELO_ALGORITHM = 'kingscore-elo-legacy-v1' as const
+import { ELO_ALGORITHM } from './algorithm'
+export { ELO_ALGORITHM } from './algorithm'
 
 export interface EloSourceSnapshot {
-  /** Historical owner of the complete source history, not the editing admin. */
+  /** Public standings use 'global'; UUID scopes are isolated diagnostic histories. */
   scopeId: string
   sourceRevision: string
   plays: Array<Omit<SimulationPlay, 'game_id'> & { game_id: string | null }>
@@ -18,7 +18,7 @@ export interface EloPublication {
   result: SimulationResult
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const REVISION = /^(0|[1-9][0-9]*)$/
 const MAX_REVISION = '9223372036854775807'
 
@@ -67,7 +67,7 @@ function validateResult(result: SimulationResult, plays: EloSourceSnapshot['play
 export function buildEloPublication(snapshot: EloSourceSnapshot, publicationId: string): EloPublication {
   uuid(publicationId, 'publicationId')
   if (!snapshot || typeof snapshot !== 'object') fail('snapshot')
-  uuid(snapshot.scopeId, 'scopeId')
+  if (snapshot.scopeId !== 'global') uuid(snapshot.scopeId, 'scopeId')
   const revision = snapshot.sourceRevision
   if (typeof revision !== 'string' || !REVISION.test(revision)
     || revision.length > MAX_REVISION.length

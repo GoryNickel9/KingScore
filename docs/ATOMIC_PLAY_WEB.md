@@ -47,3 +47,5 @@ Collaudo browser eseguito: admin su partita di altro proprietario; confronto 409
 La migrazione congelata è stata rieseguita separatamente nel runner PostgreSQL/PostgREST della repo Android: 16 profili di compatibilità e 21 casi di accettazione PASS, senza contatti remoti; server fermati. Il browser non è stato collegato direttamente a quel database: i due livelli di verifica restano distinti.
 
 GitHub CI non eseguita. Prima di qualsiasi deploy occorrono inventario reale autorizzato, decisioni sui percorsi legacy e sull'ELO, backup e ripristino collaudati, verifica Auth/RLS effettiva e approvazione esplicita delle modifiche cloud.
+
+Il successivo [contratto di lettura ELO](ELO_READ_CONTRACT.md) fissa una classifica globale su tutte le partite, come richiesto dall'utente. Decoder e proiezioni sono verificati separatamente sul PC; le pagine legacy non sono ancora collegate al nuovo servizio e l'editor resta subordinato alle condizioni backend.

@@ -1,0 +1,208 @@
+{
+  "date": "2026-10-15",
+  "scope": "PC-only global ELO read contract",
+  "status": "PASS",
+  "formulaChanged": false,
+  "publicScope": "global",
+  "unitTests": {
+    "new": 37,
+    "files": 15,
+    "total": 323,
+    "status": "PASS"
+  },
+  "typecheck": "PASS",
+  "targetedLint": "PASS",
+  "build": "PASS",
+  "database": {
+    "status": "PASS",
+    "host": "127.0.0.1",
+    "port": 64696,
+    "runDirectory": "C:\\Users\\GoryNickel\\Documents\\GitHub\\KingScore-Android\\.work\\King-Score-atomic\\.work\\local-elo-publication\\529a5896a55849e5a2f1073a5fa2e05b",
+    "startedAtUtc": "2026-10-15T09:31:58.8277006Z",
+    "finishedAtUtc": "2026-10-15T09:33:49.4430691Z",
+    "postgresVersion": "psql (PostgreSQL) 17.4",
+    "serverStopped": true,
+    "remoteContacted": false,
+    "fixtureSha256": "06445e26deb8c22d43c22de0201ac5d81595c59c5bff68fd2fa4571b6c064265",
+    "acceptance": {
+      "status": "PASS",
+      "mode": "local-elo-publication-prototype",
+      "host": "127.0.0.1",
+      "remoteContacted": false,
+      "cases": [
+        {
+          "name": "missing-generation-is-explicit",
+          "status": "PASS"
+        },
+        {
+          "name": "publish-complete-generation-with-current-formula",
+          "status": "PASS"
+        },
+        {
+          "name": "snapshot-orders-plays-but-preserves-null-sensitive-score-array",
+          "status": "PASS"
+        },
+        {
+          "name": "source-mutation-rejects-old-calculation-and-hides-old-cache",
+          "status": "PASS"
+        },
+        {
+          "name": "ABA-edit-still-invalidates-the-old-revision",
+          "status": "PASS"
+        },
+        {
+          "name": "source-transaction-rollback-restores-both-input-and-revision",
+          "status": "PASS"
+        },
+        {
+          "name": "source-snapshot-does-not-see-half-of-uncommitted-edit",
+          "status": "PASS"
+        },
+        {
+          "name": "failed-head-swap-rolls-back-publication-and-retains-prior-head",
+          "status": "PASS"
+        },
+        {
+          "name": "readers-see-only-prior-complete-generation-before-publish-commit",
+          "status": "PASS"
+        },
+        {
+          "name": "lost-publish-response-replays-without-a-second-generation",
+          "status": "PASS"
+        },
+        {
+          "name": "replaying-an-old-receipt-never-rewinds-the-published-head",
+          "status": "PASS"
+        },
+        {
+          "name": "receipt-replay-after-edit-confirms-commit-without-claiming-freshness",
+          "status": "PASS"
+        },
+        {
+          "name": "publication-uuid-cannot-be-reused-with-another-content-or-owner",
+          "status": "PASS"
+        },
+        {
+          "name": "two-publishers-for-the-same-uuid-serialize-and-return-one-replay",
+          "status": "PASS"
+        },
+        {
+          "name": "publisher-waits-for-source-writer-then-rejects-the-obsolete-calculation",
+          "status": "PASS"
+        },
+        {
+          "name": "source-writer-waits-for-publish-then-marks-the-generation-stale",
+          "status": "PASS"
+        },
+        {
+          "name": "overlapping-owner-histories-do-not-overwrite-each-other",
+          "status": "PASS"
+        },
+        {
+          "name": "move-to-another-game-removes-the-old-game-from-the-generation",
+          "status": "PASS"
+        },
+        {
+          "name": "historical-owner-transfer-invalidates-both-scope-results",
+          "status": "PASS"
+        },
+        {
+          "name": "deleting-last-game-cascades-and-publishes-an-empty-generation",
+          "status": "PASS"
+        },
+        {
+          "name": "deleting-a-player-cascades-and-removes-obsolete-player-ratings",
+          "status": "PASS"
+        },
+        {
+          "name": "renamed-player-invalidates-and-refreshes-history-metadata",
+          "status": "PASS"
+        },
+        {
+          "name": "truncate-and-empty-history-do-not-return-old-generals",
+          "status": "PASS"
+        },
+        {
+          "name": "incompatible-score-fails-before-publication-and-retains-stale-status",
+          "status": "PASS"
+        },
+        {
+          "name": "incomplete-or-invalid-envelope-cannot-change-current-generation",
+          "status": "PASS"
+        },
+        {
+          "name": "worker-reader-and-source-writer-permissions-are-separated",
+          "status": "PASS"
+        },
+        {
+          "name": "revision-beyond-javascript-safe-integer-stays-exact",
+          "status": "PASS"
+        },
+        {
+          "name": "global-missing-read-has-exact-envelope-and-no-publish-side-effect",
+          "status": "PASS"
+        },
+        {
+          "name": "global-current-empty-generation-is-distinct-from-missing",
+          "status": "PASS"
+        },
+        {
+          "name": "global-ratings-recompute-all-owners-instead-of-merging-owner-ratings",
+          "status": "PASS"
+        },
+        {
+          "name": "global-snapshot-orders-cross-owner-plays-by-date-then-id-and-preserves-score-order",
+          "status": "PASS"
+        },
+        {
+          "name": "decoder-rejects-actual-sql-owner-envelope-when-global-is-required",
+          "status": "PASS"
+        },
+        {
+          "name": "global-publication-turns-stale-after-another-owner-edits-and-recovers-as-one-generation",
+          "status": "PASS"
+        },
+        {
+          "name": "global-and-owner-read-paths-work-in-read-only-transactions-without-dml",
+          "status": "PASS"
+        },
+        {
+          "name": "all-four-projections-share-one-sql-global-generation-and-hide-stale-data",
+          "status": "PASS"
+        },
+        {
+          "name": "global-replay-does-not-replace-a-newer-global-or-owner-head",
+          "status": "PASS"
+        },
+        {
+          "name": "scope-validation-rejects-noncanonical-or-unknown-values-before-head-swap",
+          "status": "PASS"
+        },
+        {
+          "name": "complete-history-over-1000-plays-is-never-treated-as-a-partial-cache",
+          "status": "PASS"
+        }
+      ],
+      "formulaChanged": false,
+      "sourceSha256": {
+        "src/utils/elo/simulation.ts": "6928038ff5fe0ccbb3b8807a12ac7268ebe033741d9692192d9a36c930996b7f",
+        "src/utils/elo/positions.ts": "65d5c06f4d94ecb714c468db5607c9ac9258c8ea3a8d21b1657b82e007d2d6d5"
+      },
+      "failure": null,
+      "startedAt": "2026-10-15T09:32:21.292Z",
+      "finishedAt": "2026-10-15T09:33:46.746Z"
+    },
+    "failure": null
+  },
+  "githubCiExecuted": false,
+  "webPushed": false,
+  "deployed": false,
+  "remoteServicesChanged": false,
+  "limitations": [
+    "New readers are not connected to existing web pages or Android runtime",
+    "No remote Auth/RLS or HTTP transport certification",
+    "Participant ordinal remains synthetic in the PC fixture",
+    "HU/3/4/5+ require independently calculated versioned generations",
+    "Production worker, source invalidation and cutover remain unimplemented"
+  ]
+}

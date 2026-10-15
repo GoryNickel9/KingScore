@@ -10,6 +10,8 @@ $cluster = Join-Path $runDirectory 'cluster'
 $fixture = Join-Path $repo 'local-tests/elo-publication-fixture.sql'
 $nodeRunner = Join-Path $PSScriptRoot 'test-elo-publication.mjs'
 $adapter = Join-Path $repo 'src/utils/elo/publication.ts'
+$readModel = Join-Path $repo 'src/utils/elo/readModel.ts'
+$projections = Join-Path $repo 'src/utils/elo/projections.ts'
 $esbuild = Join-Path $repo 'node_modules/esbuild/bin/esbuild'
 $binaries = @{}
 foreach ($name in @('initdb', 'pg_ctl', 'psql')) {
@@ -17,7 +19,7 @@ foreach ($name in @('initdb', 'pg_ctl', 'psql')) {
     if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw "Missing PostgreSQL binary: $binary" }
     $binaries[$name] = $binary
 }
-foreach ($file in @($fixture, $nodeRunner, $adapter, $esbuild)) {
+foreach ($file in @($fixture, $nodeRunner, $adapter, $readModel, $projections, $esbuild)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing local test input: $file" }
 }
 $node = (Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
@@ -77,6 +79,8 @@ $launchAttempted = $false
 try {
     $report.postgresVersion = Invoke-OwnProcess 'version' $binaries.psql @('--version')
     Invoke-OwnProcess 'bundle' $node @($esbuild, $adapter, '--bundle', '--platform=node', '--format=esm', "--outfile=$(Join-Path $runDirectory 'publication.mjs')") | Out-Null
+    Invoke-OwnProcess 'bundle-read-model' $node @($esbuild, $readModel, '--bundle', '--platform=node', '--format=esm', "--outfile=$(Join-Path $runDirectory 'read-model.mjs')") | Out-Null
+    Invoke-OwnProcess 'bundle-projections' $node @($esbuild, $projections, '--bundle', '--platform=node', '--format=esm', "--outfile=$(Join-Path $runDirectory 'projections.mjs')") | Out-Null
     Invoke-OwnProcess 'initdb' $binaries.initdb @('-D', $cluster, '-U', 'postgres', '--auth=trust', '--encoding=UTF8', '--locale=C') 120 | Out-Null
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()

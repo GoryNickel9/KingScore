@@ -28,6 +28,7 @@ const id = () => `00000000-0000-0000-0000-${String(++sequence).padStart(12, '0')
 const children = new Set()
 const cases = []
 let currentCase
+let decodeEloRead
 const report = { status: 'FAIL', mode: 'local-elo-publication-prototype', host: '127.0.0.1', remoteContacted: false, cases,
   formulaChanged: false, sourceSha256: {}, failure: null, startedAt: new Date().toISOString() }
 
@@ -47,8 +48,13 @@ function rejected(statement, code) {
   assert.notEqual(result.status, 0, 'Expected database rejection')
   if (code) assert.match(result.stderr, new RegExp(code))
 }
-function snapshot(scope = owner) { return query(`SET ROLE local_elo_worker; SELECT elo_local.snapshot(${quote(scope)}::uuid)`) }
-function read(scope = owner) { return query(`SET ROLE local_elo_reader; SELECT elo_local.read(${quote(scope)}::uuid)`) }
+function snapshot(scope = owner) {
+  return query(`SET ROLE local_elo_worker; SELECT ${scope === 'global' ? 'elo_local.snapshot_global()' : `elo_local.snapshot(${quote(scope)}::uuid)`}`)
+}
+function rawRead(scope = owner) {
+  return query(`SET ROLE local_elo_reader; SELECT ${scope === 'global' ? 'elo_local.read_global()' : `elo_local.read(${quote(scope)}::uuid)`}`)
+}
+function read(scope = owner) { return decodeEloRead(rawRead(scope), scope) }
 const publishSql = body => `SET ROLE local_elo_worker; SELECT elo_local.publish(${json(body)})`
 function publish(body) { return query(publishSql(body)) }
 function reset() {
@@ -57,8 +63,7 @@ function reset() {
     INSERT INTO public.games VALUES (${quote(game)},'Game'),(${quote(secondGame)},'Second game');
     INSERT INTO public.players VALUES (${quote(a)},'Anna',NULL),(${quote(b)},'Bruno',NULL),(${quote(c)},'Carlo',NULL)`)
 }
-function play({ scope = owner, gameId = game, day = '2026-10-15', scores = [{ player: a, value: 10, winner: true }, { player: b, value: 5, winner: false }] } = {}) {
-  const playId = id()
+function play({ scope = owner, gameId = game, day = '2026-10-15', playId = id(), scores = [{ player: a, value: 10, winner: true }, { player: b, value: 5, winner: false }] } = {}) {
   const rows = scores.map((row, index) => `(${quote(id())},${quote(playId)},${quote(row.player)},${row.value === null ? 'NULL' : row.value},${row.winner === null ? 'NULL' : !!row.winner},${!!row.draw},${row.position ?? index + 1},${index})`)
   sql(`BEGIN; INSERT INTO public.plays(id,user_id,game_id,played_at) VALUES (${quote(playId)},${quote(scope)},${gameId === null ? 'NULL' : quote(gameId)},${quote(day)});
     ${rows.length ? `INSERT INTO public.play_scores(id,play_id,player_id,score,winner,draw,position,ordinal) VALUES ${rows.join(',')};` : ''} COMMIT`)
@@ -121,6 +126,8 @@ try {
     report.sourceSha256[file] = actual
   }
   const { buildEloPublication } = await import(pathToFileURL(join(directory, 'publication.mjs')).href)
+  ;({ decodeEloRead } = await import(pathToFileURL(join(directory, 'read-model.mjs')).href))
+  const { generalStandings, gameStandings, generalHistory, gameHistory } = await import(pathToFileURL(join(directory, 'projections.mjs')).href)
   const build = (scope = owner) => buildEloPublication(snapshot(scope), randomUUID())
 
   await test('missing-generation-is-explicit', () => { reset(); assert.equal(read().status, 'missing'); assert.equal(read().result, null) })
@@ -281,6 +288,124 @@ try {
     reset(); play(); sql("UPDATE elo_local.source_clock SET revision=9007199254740993")
     const body = build(); assert.equal(body.sourceRevision, '9007199254740993'); publish(body)
     assert.equal(read().publishedRevision, '9007199254740993')
+  })
+  await test('global-missing-read-has-exact-envelope-and-no-publish-side-effect', () => {
+    reset()
+    const revision = snapshot('global').sourceRevision
+    assert.deepEqual(read('global'), { scopeId: 'global', algorithm: null, status: 'missing',
+      sourceRevision: revision, publishedRevision: null, publicationId: null, result: null })
+    assert.equal(sql('SELECT count(*) FROM elo_local.publications'), '0')
+    assert.equal(sql('SELECT count(*) FROM elo_local.heads'), '0')
+  })
+  await test('global-current-empty-generation-is-distinct-from-missing', () => {
+    reset(); const body = build('global'); publish(body)
+    const value = read('global')
+    assert.equal(value.status, 'current'); assert.equal(value.algorithm, 'kingscore-elo-legacy-v1')
+    assert.deepEqual(value.result, { gamePlayers: {}, generalPlayers: {}, gameHistory: [], generalHistory: [], processedPlays: 0, skippedPlays: 0 })
+    assert.equal(read(owner).status, 'missing')
+  })
+  await test('global-ratings-recompute-all-owners-instead-of-merging-owner-ratings', () => {
+    reset(); play(); play({ scope: other, scores: [{ player: b, value: 10, winner: true }, { player: a, value: 1 }] })
+    const first = build(owner); const second = build(other); const global = build('global')
+    publish(first); publish(second); publish(global)
+    assert.equal(global.result.processedPlays, 2)
+    assert.equal(read(owner).result.gamePlayers[game][a].rating, 1024)
+    assert.equal(read(other).result.gamePlayers[game][a].rating, 976)
+    assert.equal(read('global').result.gamePlayers[game][a].rating, 997)
+    assert.equal(read('global').result.gamePlayers[game][b].rating, 1003)
+    assert.deepEqual(read('global').result, global.result)
+    assert.equal(sql('SELECT count(*) FROM elo_local.heads'), '3')
+  })
+  await test('global-snapshot-orders-cross-owner-plays-by-date-then-id-and-preserves-score-order', () => {
+    reset()
+    const low = '00000000-0000-0000-0000-000000009001'
+    const high = '00000000-0000-0000-0000-000000009002'
+    const earlier = '00000000-0000-0000-0000-000000009003'
+    play({ scope: other, playId: high })
+    play({ scope: owner, playId: low, scores: [{ player: c, value: null }, { player: a, value: null }, { player: b, value: 5 }] })
+    play({ scope: other, playId: earlier, day: '2026-10-14' })
+    const source = snapshot('global')
+    assert.equal(source.scopeId, 'global'); assert.deepEqual(source.plays.map(row => row.id), [earlier, low, high])
+    assert.deepEqual(source.plays[1].play_scores.map(row => row.player_id), [c, a, b])
+    assert.equal(snapshot(owner).plays.length, 1); assert.equal(snapshot(other).plays.length, 2)
+    const body = buildEloPublication(source, randomUUID()); publish(body); assert.deepEqual(read('global').result, body.result)
+  })
+  await test('decoder-rejects-actual-sql-owner-envelope-when-global-is-required', () => {
+    reset(); play(); publish(build(owner)); publish(build('global'))
+    assert.throws(() => decodeEloRead(rawRead(owner), 'global'))
+    assert.throws(() => decodeEloRead(rawRead('global'), owner))
+    assert.equal(read('global').status, 'current'); assert.equal(read(owner).status, 'current')
+  })
+  await test('global-publication-turns-stale-after-another-owner-edits-and-recovers-as-one-generation', () => {
+    reset(); play(); const p = play({ scope: other }); const old = build('global'); publish(old)
+    sql(`UPDATE public.play_scores SET winner=NOT winner WHERE play_id=${quote(p)}`)
+    const dirty = read('global')
+    assert.equal(dirty.status, 'stale'); assert.equal(dirty.scopeId, 'global')
+    assert.equal(dirty.algorithm, 'kingscore-elo-legacy-v1'); assert.equal(dirty.result, null)
+    assert.equal(dirty.publicationId, old.publicationId); assert.equal(dirty.publishedRevision, old.sourceRevision)
+    rejected(publishSql({ ...old, publicationId: randomUUID() }), '40001')
+    const fresh = build('global'); publish(fresh)
+    assert.equal(read('global').status, 'current'); assert.deepEqual(read('global').result, fresh.result)
+  })
+  await test('global-and-owner-read-paths-work-in-read-only-transactions-without-dml', () => {
+    reset(); play(); play({ scope: other }); publish(build(owner)); publish(build('global'))
+    const fingerprint = () => sql(`SELECT md5(jsonb_build_object(
+      'clock',(SELECT jsonb_agg(to_jsonb(t)) FROM elo_local.source_clock t),
+      'heads',(SELECT jsonb_agg(to_jsonb(t) ORDER BY scope_id) FROM elo_local.heads t),
+      'publications',(SELECT jsonb_agg(to_jsonb(t) ORDER BY publication_id) FROM elo_local.publications t)
+    )::text)`)
+    const before = fingerprint()
+    for (const [scope, expression] of [['global', 'elo_local.read_global()'], [owner, `elo_local.read(${quote(owner)}::uuid)`]]) {
+      const value = query(`BEGIN READ ONLY; SET LOCAL ROLE local_elo_reader; SELECT ${expression}; COMMIT`)
+      assert.equal(decodeEloRead(value, scope).status, 'current')
+    }
+    const globalSnapshot = query('BEGIN READ ONLY; SET LOCAL ROLE local_elo_worker; SELECT elo_local.snapshot_global(); COMMIT')
+    assert.equal(globalSnapshot.scopeId, 'global'); assert.equal(globalSnapshot.plays.length, 2)
+    assert.equal(fingerprint(), before)
+    rejected('SET ROLE local_elo_reader; UPDATE public.play_scores SET score=0', '42501')
+    rejected('SET ROLE local_elo_reader; SELECT elo_local.snapshot_global()', '42501')
+    rejected("SET ROLE local_elo_reader; SELECT elo_local.read_scope('global')", '42501')
+    rejected("SET ROLE local_elo_worker; SELECT elo_local.snapshot_scope('global')", '42501')
+  })
+  await test('all-four-projections-share-one-sql-global-generation-and-hide-stale-data', () => {
+    reset(); play(); play({ scope: other, gameId: secondGame }); const body = build('global'); publish(body)
+    const current = read('global')
+    const views = [generalStandings(current), gameStandings(current, game), generalHistory(current), gameHistory(current, game)]
+    for (const view of views) {
+      assert.equal(view.scopeId, 'global'); assert.equal(view.publicationId, body.publicationId)
+      assert.equal(view.publishedRevision, body.sourceRevision); assert.equal(view.sourceRevision, body.sourceRevision)
+      assert.equal(view.status, 'current'); assert.equal(view.algorithm, body.algorithm)
+    }
+    assert.equal(views[0].data.length, 2); assert.equal(views[1].data.length, 2)
+    assert.equal(views[2].data.length, 4); assert.equal(views[3].data.length, 2)
+    assert.equal(views[0].data.find(row => row.playerId === a).rating, 1024)
+    assert.equal(views[0].data.find(row => row.playerId === a).gamesPlayed, 2)
+    assert.equal(views[1].data.find(row => row.playerId === a).rating, 1024)
+    assert.equal(generalHistory(current, a).data.length, 2); assert.equal(gameHistory(current, secondGame, b).data.length, 1)
+    sql("UPDATE public.players SET alias='Renamed after publication' WHERE name='Anna'")
+    const dirty = read('global')
+    for (const view of [generalStandings(dirty), gameStandings(dirty, game), generalHistory(dirty), gameHistory(dirty, game)]) {
+      assert.equal(view.status, 'stale'); assert.equal(view.data, null); assert.equal(view.publicationId, body.publicationId)
+    }
+    const missing = read(owner)
+    for (const view of [generalStandings(missing), gameStandings(missing, game), generalHistory(missing), gameHistory(missing, game)]) {
+      assert.equal(view.status, 'missing'); assert.equal(view.data, null); assert.equal(view.publicationId, null)
+    }
+  })
+  await test('global-replay-does-not-replace-a-newer-global-or-owner-head', () => {
+    reset(); play(); const old = build('global'); publish(old)
+    sql("UPDATE public.players SET alias='Global rename' WHERE name='Anna'")
+    const fresh = build('global'); const ownerBody = build(owner); publish(fresh); publish(ownerBody)
+    assert.equal(publish(old).replayed, true)
+    assert.equal(read('global').publicationId, fresh.publicationId); assert.equal(read(owner).publicationId, ownerBody.publicationId)
+  })
+  await test('scope-validation-rejects-noncanonical-or-unknown-values-before-head-swap', () => {
+    reset(); play(); const body = build('global'); publish(body)
+    for (const scope of ['GLOBAL', 'global ', '', 'all', 'AAAAAAAA-0000-0000-0000-000000000000']) {
+      rejected(publishSql({ ...body, publicationId: randomUUID(), scopeId: scope }), '22023')
+    }
+    assert.equal(read('global').publicationId, body.publicationId)
+    assert.equal(sql('SELECT count(*) FROM elo_local.heads'), '1')
   })
   await test('complete-history-over-1000-plays-is-never-treated-as-a-partial-cache', () => {
     reset()

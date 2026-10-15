@@ -22,6 +22,17 @@ const build = (value = snapshot()) => buildEloPublication(value, publicationId)
 const legacy = (value: EloSourceSnapshot) => simulateAllPlays(value.plays as SimulationPlay[])
 
 describe('buildEloPublication legacy computation envelope', () => {
+  it('rejects noncanonical UUIDs instead of publishing a response rejected by readers', () => {
+    const uppercase = 'AAAAAAAA-0000-0000-0000-000000000000'
+    expect(() => build({ ...snapshot(), scopeId: uppercase })).toThrow('scopeId')
+    expect(() => buildEloPublication(snapshot(), uppercase)).toThrow('publicationId')
+    expect(() => build(snapshot([{ ...play(1), id: uppercase }]))).toThrow('play.id')
+  })
+  it('calculates the complete explicit global scope with the unchanged core', () => {
+    const input = { ...snapshot([play(1), play(2)]), scopeId: 'global' }
+    expect(build(input).scopeId).toBe('global')
+    expect(build(input).result).toEqual(legacy(input))
+  })
   it('keeps the historical owner, exact bigint revision and algorithm identity', () => {
     const input = { ...snapshot(), sourceRevision: '9007199254740993' }
     expect(build(input)).toMatchObject({ publicationId, scopeId: owner, sourceRevision: '9007199254740993', algorithm: ELO_ALGORITHM })
