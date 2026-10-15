@@ -11,7 +11,7 @@ Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si 
 ## 🎲 Caratteristiche
 
 - **Autenticazione multi-utente**: Ogni utente ha il proprio storico privato
-- **Inserimento manuale**: Aggiungi partite manualmente. Nei moduli di creazione e modifica la durata è obbligatoria: inserisci un numero intero di minuti maggiore di zero.
+- **Inserimento manuale**: Aggiungi partite manualmente. Nei moduli di creazione e modifica servono una durata intera maggiore di zero e almeno un vincitore. Nei cooperativi indica se il gruppo ha vinto o perso; la sconfitta del gruppo non richiede vincitori individuali.
 - **Dettagli partita**: Il luogo non compare nei moduli, nello storico o nei dettagli. I valori già salvati restano nel database e vengono conservati durante la modifica di una partita.
 - **Importazione BGA**: Importa partite da Board Game Arena
 - **Ricerca giochi BGA**: Cerca giochi su Board Game Arena

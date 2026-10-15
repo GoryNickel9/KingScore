@@ -158,8 +158,9 @@ const EditPlayForm = ({ id }: { id: string }) => {
           id: player.id, player_id: player.playerId, score: player.score === '' ? null : player.score,
           winner: player.winner, color: player.color, role: player.role,
         }))) })
-    } catch {
-      toast.error('Controlla data, durata, punteggi e partecipanti. I punteggi devono essere numeri decimali con il punto.')
+    } catch (error) {
+      toast.error(error instanceof Error && !(error instanceof TypeError) ? error.message
+        : 'Controlla data, durata, punteggi e partecipanti. I punteggi devono essere numeri decimali con il punto.')
       return
     }
     const outcome = await coordinator.run(() => api.writer.save(request))
@@ -262,8 +263,7 @@ const EditPlayForm = ({ id }: { id: string }) => {
           {/* Indicatore Vincitori */}
           {!formData.isCooperative && formData.players.length > 0 && (() => {
             const winnersCount = formData.players.filter(p => p.winner).length
-            if (formData.isCooperative) return null
-            if (winnersCount === 0) return null
+            if (winnersCount === 0) return <p role="status" className="mt-4 text-sm text-amber-400">Seleziona almeno un vincitore prima di salvare.</p>
             if (winnersCount === 1) {
               return (
                 <div className="mt-4 text-sm text-slate-300">

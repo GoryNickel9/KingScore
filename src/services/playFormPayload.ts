@@ -11,6 +11,11 @@ export function playFormPayload(form: PlayFormFields, scores: PlayScoreInput[]):
   const duration = parsePlayDuration(form.durationMinutes)
   if (duration === null) throw new Error('Inserisci una durata valida in minuti interi, maggiore di zero.')
   if (form.source !== 'offline' && form.source !== 'online') throw new Error('Seleziona una fonte valida.')
+  if (form.isCooperative) {
+    if (form.teamWon === null) throw new Error('Indica se il gruppo ha vinto o perso.')
+  } else if (!scores.some(score => score.winner === true)) {
+    throw new Error('Seleziona almeno un vincitore prima di salvare.')
+  }
   return {
     game_id: form.gameId, played_at: form.playedAt,
     duration_minutes: duration,

@@ -347,8 +347,9 @@ const AddPlayForm = () => {
     })))
     try {
       preparePlaySave(actor, 'create_play_v1', { p_request_id: requestId, p_payload: payload() })
-    } catch {
-      toast.error('Controlla data, durata e punteggi. Usa numeri decimali con il punto, senza separatori delle migliaia.')
+    } catch (error) {
+      toast.error(error instanceof Error && !(error instanceof TypeError) ? error.message
+        : 'Controlla data, durata e punteggi. Usa numeri decimali con il punto, senza separatori delle migliaia.')
       return
     }
     const outcome = await writes.coordinator.run(async current => {
@@ -822,8 +823,7 @@ const AddPlayForm = () => {
           {/* Indicatore Vincitori */}
           {!formData.isCooperative && formData.players.length > 0 && (() => {
             const winnersCount = formData.players.filter(playerId => playerScores[playerId]?.winner).length
-            if (formData.isCooperative) return null
-            if (winnersCount === 0) return null
+            if (winnersCount === 0) return <p role="status" className="mt-4 text-sm text-amber-400">Seleziona almeno un vincitore prima di salvare.</p>
             if (winnersCount === 1) {
               return (
                 <div className="mt-4 text-sm text-slate-300">
