@@ -67,3 +67,4 @@ supabase/.env.local
 supabase/.temp/
 # Disposable local test logs, fixtures and screenshots.
 .work/
+.vercel/

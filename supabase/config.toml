@@ -7,7 +7,6 @@ project_id = "rixivmeipbizoxyvrvaf"
 # piattaforma è obbligatoria perché il check interno decodifica il payload
 # senza validarne la firma.
 verify_jwt = true
-# Lo schedule NON è definito qui: resta configurato nella dashboard
-# (Edge Functions → Schedules) con timezone esplicita Europe/Rome, che
-# gestisce correttamente l'ora legale — un cron UTC in config.toml
-# scivolerebbe di un'ora per metà anno.
+# Il refresh globale è pianificato ogni minuto tramite pg_cron e pg_net:
+# scripts/atomic-play-migrations/04-schedule-elo.sql.
+# La credenziale rimane in Vault; il comando cron non contiene segreti.

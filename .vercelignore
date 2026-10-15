@@ -1,0 +1,12 @@
+.work/
+.git/
+.vercel/
+.env*
+node_modules/
+dist/
+local-tests/
+docs/
+scripts/
+supabase/
+**/*.test.ts
+**/*.test.tsx

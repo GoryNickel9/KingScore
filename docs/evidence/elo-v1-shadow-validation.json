@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "host": "127.0.0.1",
+  "remoteContacted": false,
+  "realApplicationDataCopiedLocally": true,
+  "serverStopped": true,
+  "cases": [
+    {
+      "name": "private application baseline copied with exact NUMERIC and audited game cascade",
+      "status": "PASS"
+    },
+    {
+      "name": "post-capture edit rejected before DDL and transaction left no installed schemas or ordinal column",
+      "status": "PASS"
+    },
+    {
+      "name": "guarded 01+02+backfill+initial publication+03 commit as one transaction and match captured result",
+      "status": "PASS"
+    },
+    {
+      "name": "post-install ordered source reproduces captured global core result byte-for-byte",
+      "status": "PASS"
+    },
+    {
+      "name": "all historical score IDs, NUMERIC values, positions and metadata preserved",
+      "status": "PASS"
+    },
+    {
+      "name": "post-cutover legacy table and column write privileges closed for all three client roles",
+      "status": "PASS"
+    }
+  ],
+  "installationSha256": "afb0dafcdd89078c8360dc51c8f91e0fc6b55f1b4d812716d3ac9cd1e308991d",
+  "sourcePlays": 483,
+  "sourceScores": 1359,
+  "resultSha256": "ac53f0e22a200b75a05daf7a4420acd556f3c8e2748544b752c19e2368d027ad",
+  "processedPlays": 482,
+  "skippedPlays": 1,
+  "piiInConsoleOrReport": false,
+  "privateProcessLogsSanitized": true,
+  "caseCount": 6
+}

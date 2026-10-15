@@ -1,0 +1,86 @@
+{
+  "status": "PASS",
+  "mode": "synthetic-elo-v1-candidate",
+  "node": "v24.19.0",
+  "startedAtUtc": "2026-10-15T10:07:22.305Z",
+  "host": "127.0.0.1",
+  "remoteContacted": false,
+  "fixtureContainsApplicationData": false,
+  "fixtureSha256": "5036e362b532c06fc382684a5355b15c6036dd340672321989b40b13ba7a2e02",
+  "cases": [
+    {
+      "name": "exact missing public envelope and worker-only grants",
+      "status": "PASS"
+    },
+    {
+      "name": "installation tolerates missing order but snapshot fails explicitly",
+      "status": "PASS"
+    },
+    {
+      "name": "reject duplicate/negative ordinal without changing ratings",
+      "status": "PASS"
+    },
+    {
+      "name": "snapshot global order and optional draw are compatible with existing core",
+      "status": "PASS"
+    },
+    {
+      "name": "publish/read/replay complete immutable generation",
+      "status": "PASS"
+    },
+    {
+      "name": "request identity conflicts and stale CAS are distinct",
+      "status": "PASS"
+    },
+    {
+      "name": "old replay never rewinds current generation",
+      "status": "PASS"
+    },
+    {
+      "name": "all source tables invalidate and failed source transaction rolls back revision",
+      "status": "PASS"
+    },
+    {
+      "name": "real worker uses RPCs to publish current and skips repeat",
+      "status": "PASS"
+    },
+    {
+      "name": "concurrent source writer holds advisory lock and stale publication waits then rejects",
+      "status": "PASS"
+    },
+    {
+      "name": "catalog cascade and delete invalidate complete source",
+      "status": "PASS"
+    },
+    {
+      "name": "empty-source worker can publish no phantom ratings",
+      "status": "PASS"
+    },
+    {
+      "name": "03 retires direct legacy writes and old RPC while atomic RPC remains usable",
+      "status": "PASS"
+    },
+    {
+      "name": "04 scheduler body uses private Vault lookup, dirty-only requests and exact cron job (local mocks)",
+      "status": "PASS"
+    }
+  ],
+  "serverStopped": true,
+  "sourceSha256": {
+    "src/utils/elo/worker.ts": "46ada9abe18625bc2a1cebbdcf444152d9df95af4d3fca3e2e1127c654ddce7f",
+    "src/utils/elo/publication.ts": "fd1c56036abde794c4329855e7e246943661cbc334d2f45d8ef15d48de781358",
+    "src/utils/elo/readModel.ts": "916936ab83306f0fb7b6eb646b6664f710d9a04021c0723180a25f5db8f0e551",
+    "src/utils/elo/algorithm.ts": "a292ef0f3e24ade0ee3883beb8b52fa2e6c13efa5041601252abb8ad4f69ba0b",
+    "src/utils/elo/simulation.ts": "6928038ff5fe0ccbb3b8807a12ac7268ebe033741d9692192d9a36c930996b7f",
+    "src/utils/elo/positions.ts": "65d5c06f4d94ecb714c468db5607c9ac9258c8ea3a8d21b1657b82e007d2d6d5",
+    "01-install-rpcs.sql": "d02ba6e95ecc4dc2f9838c23fc6f61bab5a8be2b8939fa5f5b63e517e672b077",
+    "02-elo-publication.sql": "55cc801aa6674fac50c317754e16db8e92e81dcbf998afe5fb404b4ab45dcfbb",
+    "03-cutover-writers.sql": "cc14df1255f22687cf68fb742a5a397812d6dbec988222b3a84d428a4d9ec349",
+    "04-schedule-elo.sql": "d4ed512985882951562d79b120f2eeff289e3312b43f21f3b6537b0ac2d48757"
+  },
+  "postgresVersion": "psql (PostgreSQL) 17.4",
+  "schedulerExtensionInstallTested": false,
+  "schedulerNetworkDeliveryTested": false,
+  "finishedAtUtc": "2026-10-15T10:09:33.743Z",
+  "caseCount": 14
+}

@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "at": "2026-10-15T11:22:12.067379+00:00",
+  "directPlayWritesDenied": true,
+  "originalRegistrationHookRestored": true,
+  "publicationStatus": "current",
+  "registrationsClosed": true,
+  "schedulerDeliveredHttp200": true,
+  "temporaryAccounts": 0,
+  "temporaryHistoricalPublications": 0,
+  "temporaryReceipts": 0,
+  "counts": {
+    "at": "2026-10-15T11:20:22.062431+00:00",
+    "comments": 7,
+    "games": 18,
+    "players": 6,
+    "plays": 483,
+    "publicationStatus": "current",
+    "registrationsClosed": true,
+    "scores": 1359
+  },
+  "historicalPublicationsDeleted": 4,
+  "sourceRevision": "41",
+  "globalResultMatchesPreInstall": true,
+  "formulaChanged": false,
+  "localCleanupSqlCases": 8,
+  "localRegistrationExceptionCases": 7
+}

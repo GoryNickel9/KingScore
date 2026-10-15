@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "operation": "prepare",
+  "remoteContacted": true,
+  "limitedTemporaryDataOnly": true,
+  "cases": [
+    {
+      "name": "authenticated-create-and-exact-request-replay",
+      "status": "PASS"
+    },
+    {
+      "name": "administrator-updates-another-owner-play-and-conflict-is-rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "ordinary-account-cannot-write-plays-and-legacy-direct-write-is-denied",
+      "status": "PASS"
+    },
+    {
+      "name": "ordinary-account-creates-edits-and-deletes-only-own-comment",
+      "status": "PASS"
+    },
+    {
+      "name": "server-worker-publishes-a-current-global-generation-over-HTTPS",
+      "status": "PASS"
+    }
+  ],
+  "prepared": true,
+  "cleaned": false,
+  "at": "2026-10-15T10:35:35.148Z"
+}
