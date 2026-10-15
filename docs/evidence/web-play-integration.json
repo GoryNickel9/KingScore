@@ -1,0 +1,79 @@
+{
+  "date": "2026-10-15",
+  "scope": "local-only, no deploy",
+  "unit": {
+    "files": 12,
+    "tests": 250,
+    "failures": 0
+  },
+  "typecheck": "PASS",
+  "lint": {
+    "errors": 0,
+    "warnings": 16
+  },
+  "build": {
+    "defaultFlag": "PASS",
+    "enabledFlag": "PASS"
+  },
+  "browser": {
+    "backend": "synthetic-loopback-HTTP; not PostgreSQL or remote Auth",
+    "verified": [
+      "global admin keeps historical owner and score metadata",
+      "409 preserves draft and requires explicit replacement",
+      "temporary player retains exact decimal and winner",
+      "delete uses snapshot revision",
+      "incomplete receipt blocks writes; reload and explicit replay use identical UUID/body, one receipt",
+      "incompatible historical snapshot blocks editing",
+      "BGA text to RPC preserves date and exact decimal",
+      "delete modal shows updated notes and scores when main page is stale",
+      "revoked admin sends no further REST calls"
+    ],
+    "browserMayRetryEmptyConnection": {
+      "observed": true,
+      "createPosts": 2,
+      "sameRequest": true,
+      "duplicatePlay": false
+    },
+    "evidenceSha256": {
+      "create-fixture.json": "37278d59d894821f3e871c7ee65f7f59a580b45ca7316162de8e34966c206730",
+      "final-fixture.json": "912f5ccc5ada71bbaa4efda5c7b52c8159a9126929fe39487453330d74c89077",
+      "first-conflict-fixture.json": "6126ddead0a0d11fd9b05b9b29f940bbe035f690ce138cb41af127ad97a004c8",
+      "recovery-fixture.json": "8ca2f9bf78eca5a2fd21fb7e88805f9a2b55e3d22314490467196c36a00b8e78"
+    }
+  },
+  "database": {
+    "mode": "separate loopback PostgreSQL/PostgREST runner",
+    "compatibilityProfiles": 16,
+    "acceptanceCases": 21,
+    "status": "PASS",
+    "serverStopped": true,
+    "remoteContacted": false,
+    "run": "9305f263d6f84c14bfb0bff615999463",
+    "migrationSha256": "f0b4e4a28ba4bcc89c164627de8e9db2275b9aaaf1c51a083cfdbaebf8305047"
+  },
+  "sourceSha256": {
+    "src/services/atomicPlayWriter.ts": "2249758fbe71a9795fe36ee4cca7c6269b6da5e3b79b83c6907115dd83553532",
+    "src/services/browserPlayWrites.ts": "d1798785cee9bd985b738fe531a91bc405a27ec31696eb2972c3025e41540e0f",
+    "src/services/playWriteCoordinator.ts": "edf51751cd95c00146be5ac18c9654a8e2e14bc3e75ddda1e234c18750a9d858",
+    "src/hooks/usePlayWrites.ts": "35517a2b5112a73819787e3c9fe1452a2d0cf4a335a726579a50d49a74fdf192",
+    "src/components/PlayWriteStatus.tsx": "a8e4e944a73c813e1354334284e2777d8906e77944b15cd00b602090e9dbffe5",
+    "src/pages/AddPlay.tsx": "5eaecf4e7bc77c7d2825eb73d4c974c5844e70852f0d9423a454d3de3d6529e0",
+    "src/pages/EditPlay.tsx": "ed1634e348298da0a001eb14d602d347be31c9fd986ba5ed3c1d008d833e2670",
+    "src/pages/PlayDetail.tsx": "03eeee9a052cd0d9c9860795498e70f28f2af22cf6ce498d36ebc79d4282e109",
+    "src/pages/Import.tsx": "3e8bea5cb4210d6c3b6400763e658328464a6a996b768c7a79bc577406625c39",
+    "src/services/bgaImport.ts": "1f5e7f4ff3f428984e9c761fef8780dbf4a5f322d66d672baf8d81188034dd06",
+    "src/services/bgaImportParser.ts": "a808381168c32086174f1b9ae398845e6e86265606dfec821dc4979d37d041bc",
+    "src/services/playEditorReader.ts": "373c26a7050fc82da0955be5e919b9d970561df2cd02a7ac3f06d2bd499cfd38",
+    "src/services/playFormPayload.ts": "4a39d2c764d3ddf08f0a25030336a87882fe1311b09fb7707d8544f48fed0ac7"
+  },
+  "githubCiExecuted": false,
+  "remoteAuthRlsVerified": false,
+  "browserAgainstPostgresVerified": false,
+  "deploymentReady": false,
+  "blockers": [
+    "real schema/Auth/permissions inventory",
+    "legacy DML and catalog cascade cutover",
+    "ELO publication protocol",
+    "backup/restore and pending replay drain procedure"
+  ]
+}

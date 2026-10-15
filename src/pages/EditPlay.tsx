@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../lib/supabase'
-import { invalidateELOHistory } from '../utils/eloCalculator'
 import { Save, ArrowLeft, Gamepad2, Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Spinner } from '../components/Spinner'
+import { PlayWriteStatus } from '../components/PlayWriteStatus'
+import { usePlayWrites } from '../hooks/usePlayWrites'
+import { atomicPlayWritesEnabled } from '../services/browserPlayWrites'
+import { playFormPayload } from '../services/playFormPayload'
+import { preparePlaySave } from '../services/playSaveRequests'
+import type { PlayEditorSnapshot } from '../services/playEditorReader'
 import type { DbGame, DbPlayer } from '../types/rows'
-import { assignPositions } from '../utils/elo/positions'
 import { listGames } from '../services/games'
 import { listUserPlayers } from '../services/players'
 
@@ -15,272 +18,170 @@ interface EditPlayerRow {
   id: string | null
   playerId: string
   playerName: string
-  score: string | number
+  score: string
   winner: boolean
+  color: string | null
+  role: string | null
 }
-
 interface EditFormData {
-  gameId: string
-  gameName: string
-  playedAt: string
-  durationMinutes: string
-  source: string
-  notes: string
-  players: EditPlayerRow[]
-  isCooperative: boolean
-  teamWon: boolean | null
+  gameId: string; gameName: string; playedAt: string; durationMinutes: string
+  source: string; notes: string; players: EditPlayerRow[]
+  isCooperative: boolean; teamWon: boolean | null
+}
+function formFromSnapshot(snapshot: PlayEditorSnapshot): EditFormData {
+  const { play, game, scores } = snapshot.detail
+  return {
+    gameId: play.game_id ?? '', gameName: game?.name ?? '', playedAt: play.played_at,
+    durationMinutes: play.duration_minutes === null ? '' : String(play.duration_minutes),
+    source: play.source ?? '', notes: play.notes ?? '', isCooperative: play.is_cooperative ?? false,
+    teamWon: play.team_won,
+    players: scores.map(({ score, player }) => ({ id: score.id, playerId: score.player_id ?? '',
+      playerName: player?.alias || player?.name || 'Giocatore non disponibile', score: score.score ?? '',
+      winner: score.winner ?? false, color: score.color, role: score.role })),
+  }
+}
+function SnapshotSummary({ form }: { form: EditFormData }) {
+  return <div className="space-y-2 text-sm text-slate-300">
+    <p>{form.gameName || 'Gioco non disponibile'} · {form.playedAt}</p>
+    <p>Durata: {form.durationMinutes || 'non specificata'} · Fonte: {form.source || 'non specificata'}</p>
+    <p>Risultato: {form.isCooperative ? `cooperativo, team ${form.teamWon === null ? 'non specificato' : form.teamWon ? 'vincitore' : 'sconfitto'}` : 'competitivo'}</p>
+    <p className="whitespace-pre-wrap break-words">Note: {form.notes || 'nessuna'}</p>
+    <ol className="list-decimal pl-5">{form.players.map((player, index) => <li key={player.id ?? index}>
+      {player.playerName}: {player.score || 'senza punteggio'}{player.winner ? ' · vincitore' : ''}
+      {player.color !== null ? ` · colore: ${player.color}` : ''}{player.role !== null ? ` · ruolo: ${player.role}` : ''}
+    </li>)}</ol>
+  </div>
 }
 
 const EditPlay = () => {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
+  return <EditPlayForm key={`${user?.id ?? ''}:${user?.app_metadata?.role ?? ''}:${id ?? ''}`} id={id ?? ''} />
+}
+const EditPlayForm = ({ id }: { id: string }) => {
+  const writes = usePlayWrites()
+  const { actor, api, coordinator } = writes
+  const { user } = useAuth()
   const navigate = useNavigate()
-
-  const [formData, setFormData] = useState<EditFormData>({
-    gameId: '',
-    gameName: '',
-    playedAt: '',
-    durationMinutes: '',
-    source: 'offline',
-    notes: '',
-    players: [],
-    isCooperative: false,
-    teamWon: null
-  })
-
+  const active = useRef(false)
+  const loadGeneration = useRef(0)
+  const compareGeneration = useRef(0)
+  const confirmedBefore = useRef<string | undefined>(undefined)
+  const [snapshot, setSnapshot] = useState<PlayEditorSnapshot | null>(null)
+  const [formData, setFormData] = useState<EditFormData>({ gameId: '', gameName: '', playedAt: '',
+    durationMinutes: '', source: '', notes: '', players: [], isCooperative: false, teamWon: null })
   const [games, setGames] = useState<DbGame[]>([])
   const [players, setPlayers] = useState<DbPlayer[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
-  const [saving, setSaving] = useState<boolean>(false)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [conflict, setConflict] = useState(false)
+  const [latest, setLatest] = useState<PlayEditorSnapshot | null>(null)
+  const [comparing, setComparing] = useState(false)
+  const [compareError, setCompareError] = useState(false)
+  const enabled = atomicPlayWritesEnabled && user?.app_metadata?.role === 'admin'
+  const saving = writes.state.phase === 'busy'
 
-  useEffect(() => {
-    void fetchPlay()
-    void fetchGames()
-    void fetchPlayers()
-  }, [id])
-
-  const fetchPlay = async (): Promise<void> => {
+  const loadInitial = useCallback(async () => {
+    if (!enabled) { setLoading(false); return }
+    const generation = ++loadGeneration.current
+    setLoading(true); setLoadError(false)
     try {
-      const { data, error } = await supabase
-        .from('plays')
-        .select(`
-          *,
-          games(*),
-          play_scores(
-            *,
-            players(*)
-          )
-        `)
-        .eq('id', id!)
-        .eq('user_id', user!.id)
-        .single()
-
-      if (error) throw error
-
-      if (data) {
-        setFormData({
-          gameId: data.game_id || '',
-          gameName: data.games?.name || '',
-          playedAt: data.played_at ? data.played_at.split('T')[0] : new Date().toISOString().split('T')[0],
-          durationMinutes: data.duration_minutes !== null && data.duration_minutes !== undefined ? String(data.duration_minutes) : '',
-          source: data.source || 'offline',
-          notes: data.notes || '',
-          isCooperative: data.is_cooperative || false,
-          teamWon: data.team_won ?? null,
-          players: data.play_scores?.map(score => ({
-            id: score.id,
-            playerId: score.player_id ?? '',
-            playerName: score.players?.alias || score.players?.name || '',
-            score: score.score ?? '',
-            winner: score.winner || false
-          })) || []
-        })
-      }
-    } catch (error) {
-      console.error('Error fetching play:', error)
-      toast.error('Errore durante il caricamento della partita')
-      void navigate('/plays')
+      const client = await api.catalogClient(actor)
+      const [next, catalogGames, catalogPlayers] = await Promise.all([
+        api.editor(actor, id), listGames(client), listUserPlayers(client, actor),
+      ])
+      await api.requireActor(actor)
+      if (!active.current || generation !== loadGeneration.current) return
+      setSnapshot(next); setFormData(formFromSnapshot(next))
+      setGames([...new Map([...catalogGames, ...(next.detail.game ? [next.detail.game] : [])].map(game => [game.id, game])).values()])
+      setPlayers([...new Map([...catalogPlayers, ...next.detail.scores.flatMap(item => item.player ? [item.player] : [])].map(player => [player.id, player])).values()])
+    } catch {
+      if (active.current && generation === loadGeneration.current) setLoadError(true)
     } finally {
-      setLoading(false)
+      if (active.current && generation === loadGeneration.current) setLoading(false)
     }
-  }
+  }, [enabled, api, actor, id])
+  useEffect(() => {
+    active.current = true
+    void loadInitial()
+    return () => { active.current = false }
+  }, [loadInitial])
 
-  const fetchGames = async (): Promise<void> => {
+  const compareLatest = useCallback(async () => {
+    const generation = ++compareGeneration.current
+    setComparing(true); setCompareError(false); setLatest(null)
     try {
-      setGames(await listGames(supabase))
-    } catch (error) {
-      console.error('Error fetching games:', error)
+      const next = await api.editor(actor, id)
+      if (active.current && generation === compareGeneration.current) setLatest(next)
+    } catch {
+      if (active.current && generation === compareGeneration.current) setCompareError(true)
+    } finally {
+      if (active.current && generation === compareGeneration.current) setComparing(false)
     }
-  }
-
-  const fetchPlayers = async (): Promise<void> => {
-    try {
-      setPlayers(await listUserPlayers(supabase, user!.id))
-    } catch (error) {
-      console.error('Error fetching players:', error)
+  }, [api, actor, id])
+  useEffect(() => {
+    if (writes.state.phase !== 'ready' && writes.state.phase !== 'pending') return
+    const receipt = writes.state.confirmed
+    const key = receipt ? `${receipt.playId}:${receipt.revision ?? 'deleted'}` : ''
+    if (confirmedBefore.current !== undefined && confirmedBefore.current !== key && receipt?.playId === id &&
+        snapshot && receipt.revision !== snapshot.revision) {
+      setConflict(true)
+      void compareLatest()
     }
-  }
+    confirmedBefore.current = key
+  }, [writes.state.phase, writes.state.confirmed, id, snapshot, compareLatest])
 
   const handleGameSelect = (game: DbGame): void => {
-    setFormData(prev => ({
-      ...prev,
-      gameId: game.id,
-      gameName: game.name
-    }))
+    setFormData(prev => ({ ...prev, gameId: game.id, gameName: game.name }))
   }
-
   const handlePlayerAdd = (): void => {
-    setFormData(prev => ({
-      ...prev,
-      players: [
-        ...prev.players,
-        {
-          id: null,
-          playerId: '',
-          playerName: '',
-          score: '',
-          winner: false
-        }
-      ]
-    }))
+    setFormData(prev => ({ ...prev, players: [...prev.players, { id: null, playerId: '',
+      playerName: '', score: '', winner: false, color: null, role: null }] }))
   }
-
   const handlePlayerRemove = (index: number): void => {
-    setFormData(prev => ({
-      ...prev,
-      players: prev.players.filter((_, i) => i !== index)
-    }))
+    setFormData(prev => ({ ...prev, players: prev.players.filter((_, i) => i !== index) }))
   }
-
-  const handlePlayerChange = (index: number, field: keyof EditPlayerRow, value: string | number | boolean | null): void => {
-    setFormData(prev => ({
-      ...prev,
-      players: prev.players.map((player, i) =>
-        i === index ? { ...player, [field]: value } : player
-      )
-    }))
+  const handlePlayerChange = (index: number, field: keyof EditPlayerRow, value: string | boolean): void => {
+    setFormData(prev => ({ ...prev, players: prev.players.map((player, i) => i === index ? { ...player, [field]: value } : player) }))
   }
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault()
-
-    if (!formData.gameId) {
-      toast.error('Seleziona un gioco')
-      return
-    }
-
-    if (formData.players.length < 2) {
-      toast.error('Aggiungi almeno 2 giocatori')
-      return
-    }
-
-    // Verifica che tutti i giocatori abbiano un playerId valido
-    const invalidPlayers = formData.players.filter(player => !player.playerId)
-    if (invalidPlayers.length > 0) {
-      toast.error('Seleziona un giocatore per ogni riga')
-      return
-    }
-
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (writes.blocked || conflict || !snapshot?.editability.editable) return
+    if (!formData.gameId) { toast.error('Seleziona un gioco'); return }
+    if (formData.players.length < 1) { toast.error('Aggiungi almeno un giocatore'); return }
+    if (formData.players.some(player => !player.playerId)) { toast.error('Seleziona un giocatore per ogni riga'); return }
+    let request
     try {
-      setSaving(true)
-
-      // Aggiorna la partita — NON usare .single() con UPDATE...RETURNING quando ci sono
-      // più policy RLS SELECT attive: PostgREST riceve righe duplicate e risponde 406.
-      // Invece: .select() restituisce un array, controlliamo data[0].
-      const { data: updatedPlayData, error: playError } = await supabase
-        .from('plays')
-        .update({
-          game_id: formData.gameId,
-          played_at: formData.playedAt,
-          duration_minutes: formData.durationMinutes === '' ? null : Number.parseInt(formData.durationMinutes, 10),
-          source: formData.source,
-          notes: formData.notes || null,
-          is_cooperative: formData.isCooperative,
-          team_won: formData.isCooperative ? formData.teamWon : null
-        })
-        .eq('id', id!)
-        .eq('user_id', user!.id)
-        .select()
-
-      if (playError) {
-        throw new Error(`Errore aggiornamento partita: ${playError.message}`)
-      }
-
-      const updatedPlay = updatedPlayData?.[0]
-      if (!updatedPlay) {
-        throw new Error('Partita non trovata o permesso negato: nessuna riga aggiornata')
-      }
-
-      // Valida gli score prima di modificare il DB per evitare data loss
-      const validatedScores = formData.players.map(player => {
-        const scoreValue = player.score === '' ? null : Number.parseInt(String(player.score), 10)
-        if (scoreValue === null || Number.isNaN(scoreValue)) {
-          throw new Error(`Il punteggio per "${player.playerName}" non è valido`)
-        }
-
-        // Se cooperativo e teamWon è definito, sovrascrive il winner individuale
-        const winner = formData.isCooperative && formData.teamWon !== null
-          ? formData.teamWon
-          : player.winner
-
-        return { playerId: player.playerId, score: scoreValue, winner }
-      })
-
-      // Posizioni ricalcolate con la fonte unica di verità condivisa col
-      // ricalcolo ELO (prima si riusavano quelle stale caricate dal form)
-      const positionedScores = assignPositions(validatedScores, {
-        cooperative: formData.isCooperative,
-        teamWon: formData.isCooperative ? formData.teamWon : null
-      })
-
-      const scoresToInsert = positionedScores.map(player => ({
-        play_id: id,
-        player_id: player.playerId,
-        score: player.score,
-        winner: player.winner,
-        position: player.position
-      }))
-
-      // Sostituzione atomica dei punteggi (fix TD-004): delete + insert in
-      // un'unica transazione lato DB. Prima erano due richieste separate e un
-      // fallimento di rete in mezzo lasciava la partita senza punteggi — dati
-      // grezzi, non ricostruibili dal ricalcolo ELO.
-      const { data: insertedScores, error: replaceError } = await supabase.rpc('replace_play_scores', {
-        p_play_id: id!,
-        p_scores: scoresToInsert.map(({ player_id, score, winner, position }) => ({
-          player_id,
-          score,
-          winner,
-          position
-        }))
-      })
-
-      if (replaceError) {
-        throw new Error(`Errore sostituzione punteggi: ${replaceError.message}`)
-      }
-
-      // Verifica che i punteggi siano stati inseriti correttamente
-      if ((insertedScores ?? []).length !== formData.players.length) {
-        throw new Error('Errore: non tutti i punteggi sono stati inseriti correttamente')
-      }
-
-      // Invalida la cache ELO: la partita modificata rende obsoleto lo storico
-      // calcolato in precedenza per questo gioco e per l'ELO Generale.
-      try { await invalidateELOHistory(supabase, id!) } catch { /* non bloccare il flusso */ }
-
-      toast.success('Partita aggiornata con successo!')
+      request = preparePlaySave(actor, 'update_play_v1', { p_request_id: crypto.randomUUID(), p_play_id: id,
+        p_expected_revision: snapshot.revision, p_payload: playFormPayload(formData, formData.players.map(player => ({
+          id: player.id, player_id: player.playerId, score: player.score === '' ? null : player.score,
+          winner: player.winner, color: player.color, role: player.role,
+        }))) })
+    } catch {
+      toast.error('Controlla data, durata, punteggi e partecipanti. I punteggi devono essere numeri decimali con il punto.')
+      return
+    }
+    const outcome = await coordinator.run(() => api.writer.save(request))
+    if (!active.current || !outcome) return
+    if (outcome.kind === 'saved') {
+      toast.success('Partita aggiornata. Le classifiche ELO richiedono un ricalcolo separato.')
       void navigate(`/plays/${id}`)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Errore sconosciuto durante l'aggiornamento della partita"
-      toast.error(errorMessage)
-    } finally {
-      setSaving(false)
+    } else if (outcome.kind === 'rejected') {
+      if (outcome.status === 409) {
+        setConflict(true)
+        void compareLatest()
+      } else toast.error('La modifica non è stata accettata. Verifica dati e autorizzazioni prima di riprovare.')
     }
   }
 
-  if (loading) {
-    return <Spinner className="h-64" />
-  }
+  if (!enabled) return <PlayWriteStatus writes={writes} />
+  if (loading) return <Spinner className="h-64" />
+  if (loadError || !snapshot) return <div role="alert" className="space-y-4 rounded-xl bg-slate-800 p-6 text-slate-200">
+    <p>Impossibile caricare la partita per la modifica. Verifica connessione e autorizzazioni.</p>
+    <button type="button" onClick={() => { void loadInitial() }} className="rounded-lg bg-emerald-600 px-4 py-3">Riprova caricamento</button>
+    <Link to={`/plays/${id}`} className="block text-emerald-400 underline">Torna alla partita</Link>
+    <PlayWriteStatus writes={writes} />
+  </div>
 
   return (
     <div className="space-y-6">
@@ -300,8 +201,30 @@ const EditPlay = () => {
         </div>
       </div>
 
+      <PlayWriteStatus writes={writes} />
+      {!snapshot.editability.editable && <div role="alert" className="rounded-lg border border-amber-500 p-4 text-amber-200">
+        Questa partita contiene dati storici non compatibili con l’editor. Non può essere modificata qui.
+        <div className="mt-3"><SnapshotSummary form={formData} /></div>
+      </div>}
+      {conflict && <section aria-label="Confronto modifiche" className="space-y-4 rounded-xl border border-amber-500 bg-slate-800 p-6">
+        <p role="alert" className="text-amber-200">La partita è cambiata o un salvataggio precedente è stato confermato. La tua bozza è conservata. Confronta i dati e ricarica prima di modificare ancora.</p>
+        <div className="grid gap-6 md:grid-cols-2">
+          <div><h2 className="mb-3 font-semibold text-white">La tua bozza</h2><SnapshotSummary form={formData} /></div>
+          <div><h2 className="mb-3 font-semibold text-white">Dati aggiornati</h2>
+            {latest ? <SnapshotSummary form={formFromSnapshot(latest)} /> : <p role="status" className="text-slate-300">{comparing ? 'Caricamento dati aggiornati…' : 'Dati aggiornati non disponibili. La bozza rimane conservata.'}</p>}
+          </div>
+        </div>
+        {compareError && <p role="alert" className="text-amber-200">Impossibile caricare i dati aggiornati. Verifica connessione e autorizzazioni.</p>}
+        {latest ? <button type="button" disabled={writes.blocked} onClick={() => {
+          setSnapshot(latest); setFormData(formFromSnapshot(latest)); setConflict(false); setLatest(null)
+          setGames(prev => [...new Map([...prev, ...(latest.detail.game ? [latest.detail.game] : [])].map(game => [game.id, game])).values()])
+          setPlayers(prev => [...new Map([...prev, ...latest.detail.scores.flatMap(item => item.player ? [item.player] : [])].map(player => [player.id, player])).values()])
+        }} className="rounded-lg bg-amber-600 px-4 py-3 text-white disabled:opacity-50">Sostituisci la bozza con i dati aggiornati</button> :
+          <button type="button" disabled={comparing || writes.blocked} onClick={() => { void compareLatest() }} className="rounded-lg bg-slate-700 px-4 py-3 text-white disabled:opacity-50">Ricarica confronto</button>}
+      </section>}
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit}>
+        <fieldset disabled={writes.blocked || conflict || !snapshot.editability.editable} className="space-y-6 disabled:opacity-70">
         {/* Game Selection */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <h2 className="text-xl font-bold text-white mb-4">Gioco</h2>
@@ -490,7 +413,8 @@ const EditPlay = () => {
                     <label className="block text-sm font-medium text-slate-300 mb-2">Punteggio</label>
                     <input
                       type="number"
-                      value={player.score as string}
+                      step="any"
+                      value={player.score}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerChange(index, 'score', e.target.value)}
                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       placeholder="Punteggio"
@@ -530,13 +454,14 @@ const EditPlay = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || writes.blocked || conflict || !snapshot.editability.editable}
             className="flex items-center px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:bg-emerald-800 disabled:cursor-not-allowed transition"
           >
             <Save className="w-5 h-5 mr-2" />
             {saving ? 'Salvataggio...' : 'Salva Modifiche'}
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   )

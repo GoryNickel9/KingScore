@@ -7,7 +7,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'scripts/.compare-elo.mjs']),
+  globalIgnores(['dist', '.work', 'scripts/.compare-elo.mjs']),
 
   // Codice TypeScript del progetto (src + scripts + config vite/vitest):
   // lint type-aware via projectService, che associa ogni file al suo tsconfig.
@@ -72,4 +72,5 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  { files: ['scripts/*.mjs'], languageOptions: { ecmaVersion: 'latest', globals: globals.node } },
 ])

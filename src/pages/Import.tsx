@@ -4,9 +4,11 @@ import { supabase } from '../lib/supabase'
 import { Download, AlertCircle, CheckCircle, Loader2, Info, Users, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getErrorMessage } from '../utils/errors'
-import { performFullRecalc } from '../utils/elo/recalc'
 import { runBgaImport } from '../services/bgaImport'
 import type { BgaImportResult } from '../services/bgaImport'
+import { usePlayWrites } from '../hooks/usePlayWrites'
+import { PlayWriteStatus } from '../components/PlayWriteStatus'
+import { parseLines, resolvePlayerString, type ResolvedPlay, type ResolvedPlayer } from '../services/bgaImportParser'
 
 interface LogEntry {
   timestamp: string
@@ -29,154 +31,9 @@ const LOG_CONFIG: Record<LogType, LogConfig> = {
   info:    { icon: Info,        iconClass: 'text-blue-500',    textClass: 'text-slate-300' },
 }
 
-// ─── Levenshtein similarity ───────────────────────────────────────────────────
-const levenshtein = (a: string, b: string): number => {
-  const m = a.length, n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
-  for (let j = 0; j <= n; j++) dp[0][j] = j
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i-1] === b[j-1]
-        ? dp[i-1][j-1]
-        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
-  return dp[m][n]
-}
-
-const similarity = (a: string, b: string): number => {
-  if (!a || !b) return 0
-  const dist = levenshtein(a.toLowerCase(), b.toLowerCase())
-  return 1 - dist / Math.max(a.length, b.length)
-}
-
-// ─── BoardGameGeek (BGG): la fetch delle immagini vive in services/bgaImport.ts ─
-
-interface ResolveResult {
-  name: string
-  score: number | null
-  autoResolved: boolean
-  similarityScore: number
-}
-
-// Resolve "GoryNickel9112" → { name: "GoryNickel9", score: 112, autoResolved: bool }
-const resolvePlayerString = (raw: string, knownNames: string[]): ResolveResult => {
-  const scoreMatch = raw.match(/(-?\d+)\s*$/)
-  if (!scoreMatch) return { name: raw, score: null, autoResolved: false, similarityScore: 0 }
-
-  const scoreStr = scoreMatch[1]
-  const nameRaw = raw.slice(0, raw.lastIndexOf(scoreStr)).trim()
-
-  if (knownNames.length === 0)
-    return { name: nameRaw || raw, score: parseInt(scoreStr, 10), autoResolved: false, similarityScore: 0 }
-
-  // Exact prefix match (most reliable)
-  for (const known of knownNames) {
-    if (raw.toLowerCase().startsWith(known.toLowerCase())) {
-      const suffix = raw.slice(known.length).trim()
-      if (/^-?\d+$/.test(suffix))
-        return { name: known, score: parseInt(suffix, 10), autoResolved: true, similarityScore: 1 }
-    }
-  }
-
-  // Fuzzy match on name portion
-  let best: ResolveResult = { name: nameRaw || raw, score: parseInt(scoreStr, 10), autoResolved: false, similarityScore: 0 }
-  for (const known of knownNames) {
-    const sim = similarity(nameRaw, known)
-    if (sim > best.similarityScore)
-      best = { name: known, score: parseInt(scoreStr, 10), autoResolved: sim >= 0.9, similarityScore: sim }
-  }
-  return best
-}
-
-interface RawPlayer {
-  position: string
-  raw: string
-  winner: boolean
-}
-
-interface ParsedPlay {
-  bga_table_id: string
-  game_name: string
-  played_at: string | null
-  duration_minutes: number | null
-  location: string | null
-  rawPlayers: RawPlayer[]
-}
-
-interface ResolvedPlayer extends RawPlayer, ResolveResult {}
-
-interface ResolvedPlay extends Omit<ParsedPlay, 'rawPlayers'> {
-  players: ResolvedPlayer[]
-}
-
-// ─── Parse raw text into plays with rawPlayers ────────────────────────────────
-const parseLines = (txtContent: string): ParsedPlay[] => {
-  const lines = txtContent.split('\n').map((l: string) => l.trim()).filter(Boolean)
-  const parsedPlays: ParsedPlay[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i]
-    const skip = ['Storico delle partite', 'Visualizza di più']
-    const isGameName = line
-      && !line.startsWith('#')
-      && !line.match(/^\d+°/)
-      && !line.startsWith('(')
-      && !line.includes('alle ore')
-      && !line.includes('mn')
-      && !line.includes('→')
-      && !skip.includes(line)
-
-    if (isGameName) {
-      const gameName = line; i++
-
-      let tableId: string | null = null
-      if (i < lines.length && lines[i].startsWith('#')) { tableId = lines[i].trim(); i++ }
-
-      let playedAt: string | null = null
-      if (i < lines.length && lines[i].includes('alle ore')) {
-        const dateLine = lines[i]
-        const mFull = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}).*?(\d{1,2}):(\d{2})/)
-        const mTime = dateLine.match(/(\d{1,2}):(\d{2})/)
-        if (mFull) {
-          const [, day, month, year, hour, minute] = mFull
-          playedAt = new Date(`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}T${hour.padStart(2,'0')}:${minute.padStart(2,'0')}:00`).toISOString()
-        } else if (mTime) {
-          const [, hour, minute] = mTime
-          const base = new Date()
-          if (dateLine.includes('ieri')) base.setDate(base.getDate() - 1)
-          base.setHours(parseInt(hour), parseInt(minute), 0, 0)
-          playedAt = base.toISOString()
-        }
-        i++
-      }
-
-      let durationMinutes: number | null = null
-      if (i < lines.length && lines[i].includes('mn')) {
-        const m = lines[i].match(/(\d+)\s*mn/)
-        if (m) durationMinutes = parseInt(m[1], 10)
-        i++
-      }
-
-      const rawPlayers: RawPlayer[] = []
-      while (i < lines.length) {
-        const m = lines[i].match(/^(\d+)°\s*(.+)$/)
-        if (m) { rawPlayers.push({ position: m[1], raw: m[2].trim(), winner: m[1] === '1' }); i++ }
-        else break
-      }
-      while (i < lines.length && lines[i].includes('→')) i++
-
-      if (gameName && tableId)
-        parsedPlays.push({ bga_table_id: tableId, game_name: gameName, played_at: playedAt, duration_minutes: durationMinutes, location: null, rawPlayers })
-    } else {
-      i++
-    }
-  }
-  return parsedPlays
-}
-
 interface ConfirmedEntry {
   name: string
-  score: number
+  score: string
 }
 
 interface DisambiguationStepProps {
@@ -197,13 +54,13 @@ const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
 
   const getEntry = (player: ResolvedPlayer): ConfirmedEntry => {
     if (confirmedMap[player.raw]) return confirmedMap[player.raw]
-    return { name: player.name, score: player.score ?? 0 }
+    return { name: player.name, score: player.score ?? '' }
   }
 
   const updateEntry = (raw: string, field: keyof ConfirmedEntry, value: string): void => {
     setConfirmedMap(prev => {
-      const current = prev[raw] ?? { name: '', score: 0 }
-      return { ...prev, [raw]: { ...current, [field]: field === 'score' ? (parseInt(value) || 0) : value } }
+      const current = prev[raw] ?? { name: '', score: '' }
+      return { ...prev, [raw]: { ...current, [field]: value } }
     })
   }
 
@@ -212,7 +69,7 @@ const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
     const toInit: Record<string, ConfirmedEntry> = {}
     currentPlay?.players.forEach(p => {
       if (!p.autoResolved && !confirmedMap[p.raw])
-        toInit[p.raw] = { name: p.name, score: p.score ?? 0 }
+        toInit[p.raw] = { name: p.name, score: p.score ?? '' }
     })
     if (Object.keys(toInit).length > 0)
       setConfirmedMap(prev => ({ ...toInit, ...prev }))
@@ -226,7 +83,7 @@ const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
     const snapshot = { ...confirmedMap }
     currentPlay?.players.forEach(p => {
       if (!p.autoResolved && !snapshot[p.raw])
-        snapshot[p.raw] = { name: p.name, score: p.score ?? 0 }
+        snapshot[p.raw] = { name: p.name, score: p.score ?? '' }
     })
     setConfirmedMap(snapshot)
 
@@ -319,6 +176,7 @@ const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
                 {needsInput ? (
                   <input
                     type="number"
+                    step="any"
                     value={entry.score ?? ''}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateEntry(player.raw, 'score', e.target.value)}
                     className="w-full px-2 py-1.5 bg-slate-600 border border-slate-500 rounded text-white text-sm font-mono text-right focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -348,7 +206,8 @@ const DisambiguationStep = ({ plays, onConfirm }: DisambiguationStepProps) => {
 // ─── Main Component ───────────────────────────────────────────────────────────
 type ImportStep = 'input' | 'disambiguate' | 'importing'
 
-const Import = () => {
+const ImportPage = () => {
+  const writes = usePlayWrites()
   const { user } = useAuth()
   const [txtContent, setTxtContent] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
@@ -364,13 +223,13 @@ const Import = () => {
   // ── Step 1: parse and resolve what we can ────────────────────────────────
   const handleParse = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
+    if (writes.blocked || loading) return
     setLoading(true)
     setLogs([])
     setResult(null)
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError || !session) throw new Error('Sessione scaduta. Effettua nuovamente il login.')
+      await writes.api.requireActor(writes.actor)
       if (!txtContent.trim()) throw new Error('Nessun contenuto incollato')
 
       addLog('Analisi del testo in corso...', 'info')
@@ -435,34 +294,35 @@ const Import = () => {
   // ── Core import ───────────────────────────────────────────────────────────
   // La persistenza (con pre-caricamento anti-N+1) vive in services/bgaImport.ts
   const runImport = async (plays: ResolvedPlay[], confirmedItems: (ConfirmedEntry & { raw: string })[]): Promise<void> => {
-    try {
-      const result = await runBgaImport(supabase, user!.id, plays, confirmedItems, {
-        onLog: addLog,
-        onProgress: setProgress
+    const result = await writes.coordinator.run(async current => {
+      const client = await writes.api.catalogClient(writes.actor)
+      if (!current()) throw new Error('Pagina chiusa')
+      return runBgaImport(client, writes.actor, plays, confirmedItems, {
+        onLog: addLog, onProgress: setProgress,
+      }, { writer: writes.api.writer,
+        session: async () => {
+          if (!current()) return null
+          const session = await writes.api.dependencies.session()
+          return current() ? session : null
+        },
+        online: writes.api.dependencies.online,
+        hasPendingSave: () => {
+          const record = writes.api.dependencies.journal.load(writes.actor)
+          return record !== null && record.receiptBody === undefined
+        },
       })
-
-      // Un solo ricalcolo ELO completo a fine import, con i rating correnti.
-      // Fix TD-001: prima ogni partita aggiornava l'ELO "a caldo" partendo da
-      // rating 1000. Fix TD-005: la cache elo_history non veniva mai
-      // rigenerata dopo l'import; performFullRecalc la ricostruisce.
-      if (result.imported > 0) {
-        try {
-          await performFullRecalc(supabase, user!.id)
-        } catch (eloError) {
-          addLog(`ELO non ricalcolato: ${getErrorMessage(eloError)} (verrà corretto dal ricalcolo notturno)`, 'warning')
-        }
-      }
-
-      addLog('Importazione completata!', 'success')
+    })
+    if (result) {
       setResult(result)
-      toast.success(`Importazione completata! ${result.imported} partite importate`)
+      if (result.stopped) {
+        addLog('Importazione interrotta. Verifica il salvataggio precedente prima di riprendere.', 'warning')
+      } else {
+        addLog('Importazione terminata. Le classifiche ELO richiedono un ricalcolo separato.', 'info')
+        toast.success(`${result.imported} partite importate, ${result.skipped} già presenti, ${result.errors} errori`)
+      }
       setStep('input')
-    } catch (error) {
-      addLog(`Errore: ${getErrorMessage(error)}`, 'error')
-      toast.error(getErrorMessage(error))
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -473,6 +333,8 @@ const Import = () => {
         <p className="mt-2 text-slate-400">Importa le tue partite.</p>
       </div>
 
+      <PlayWriteStatus writes={writes} />
+      <fieldset disabled={writes.blocked || loading} className="space-y-6">
       {/* Step: input */}
       {step === 'input' && (
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
@@ -561,8 +423,14 @@ const Import = () => {
           )}
         </div>
       )}
+      </fieldset>
     </div>
   )
+}
+
+const Import = () => {
+  const { user } = useAuth()
+  return <ImportPage key={user?.id ?? 'signed-out'} />
 }
 
 export default Import

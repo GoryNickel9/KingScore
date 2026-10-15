@@ -5,10 +5,13 @@ import { supabase } from '../lib/supabase'
 import { ArrowLeft, Calendar, Clock, Edit, Trash2, Trophy, Gamepad2, AlertTriangle, TrendingUp, TrendingDown, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
-import { performFullRecalc } from '../utils/elo/recalc'
 import { Spinner } from '../components/Spinner'
 import PlayComments from '../components/PlayComments'
 import type { DbPlayWithScores } from '../types/rows'
+import { usePlayWrites } from '../hooks/usePlayWrites'
+import { PlayWriteStatus } from '../components/PlayWriteStatus'
+import { preparePlaySave } from '../services/playSaveRequests'
+import type { PlayEditorSnapshot } from '../services/playEditorReader'
 
 interface EloHistoryEntry {
   playId: string
@@ -22,7 +25,9 @@ interface PlayerEloResult {
   ratingChange: number
 }
 
-const PlayDetail = () => {
+const PlayDetailPage = () => {
+  const writes = usePlayWrites()
+  const [deleteSnapshot, setDeleteSnapshot] = useState<PlayEditorSnapshot | null>(null)
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -111,31 +116,28 @@ const PlayDetail = () => {
     }
   }
 
+  const openDelete = async (): Promise<void> => {
+    if (!id) return
+    const snapshot = await writes.coordinator.run(() => writes.api.editor(writes.actor, id))
+    if (!snapshot) return
+    setDeleteSnapshot(snapshot)
+    setShowDeleteModal(true)
+  }
+
   const handleDelete = async (): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('plays')
-        .delete()
-        .eq('id', id!)
-
-      if (error) throw error
-
-      // Fix TD-005: le righe elo_history scendono a cascata via FK, ma i
-      // rating per gioco resterebbero sovrastimati fino al job notturno
-      if (user) {
-        try {
-          await performFullRecalc(supabase, user.id)
-        } catch (eloError) {
-          console.error('Errore nel ricalcolo ELO post-delete:', eloError)
-          toast('ELO non aggiornato: verrà corretto dal ricalcolo notturno')
-        }
-      }
-
-      toast.success('Partita eliminata con successo!')
+    if (!id || !deleteSnapshot || writes.blocked) return
+    const request = preparePlaySave(writes.actor, 'delete_play_v1', {
+      p_request_id: crypto.randomUUID(), p_play_id: id, p_expected_revision: deleteSnapshot.revision,
+    })
+    const outcome = await writes.coordinator.run(() => writes.api.writer.save(request))
+    if (outcome?.kind === 'saved') {
+      toast.success('Partita eliminata. Le classifiche ELO richiedono un ricalcolo separato.')
       void navigate('/plays')
-    } catch (error) {
-      console.error('Error deleting play:', error)
-      toast.error("Errore durante l'eliminazione della partita")
+    } else if (outcome?.kind === 'rejected') {
+      setDeleteSnapshot(null)
+      toast.error(outcome.status === 409
+        ? 'La partita è cambiata. Chiudi questa finestra e ricontrolla i dati prima di eliminarla.'
+        : 'Eliminazione rifiutata. Verifica account e permessi.')
     }
   }
 
@@ -219,7 +221,8 @@ const PlayDetail = () => {
               Modifica
             </Link>
             <button
-              onClick={() => setShowDeleteModal(true)}
+              disabled={writes.blocked}
+              onClick={openDelete}
               className="flex items-center px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition"
             >
               <Trash2 className="w-4 h-4 mr-2" />
@@ -228,6 +231,8 @@ const PlayDetail = () => {
           </div>
         )}
       </div>
+
+      {user?.app_metadata?.role === 'admin' && <PlayWriteStatus writes={writes} />}
 
       {/* Game Info Card */}
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
@@ -452,26 +457,40 @@ const PlayDetail = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-play-title" className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-xl max-h-[85vh] overflow-y-auto">
             <div className="flex items-center mb-4">
               <div className="bg-red-500/20 p-3 rounded-full mr-4">
                 <AlertTriangle className="w-6 h-6 text-red-500" />
               </div>
-              <h3 className="text-xl font-bold text-white">Conferma Eliminazione</h3>
+              <h3 id="delete-play-title" className="text-xl font-bold text-white">Conferma Eliminazione</h3>
             </div>
 
             <p className="text-slate-300 mb-6">
               Sei sicuro di voler eliminare questa partita? Questa azione non può essere annullata.
             </p>
 
+            {deleteSnapshot && <section aria-label="Dati aggiornati da eliminare" className="text-slate-300 mb-4 space-y-2 break-words">
+              <p>Controlla i dati aggiornati della partita che verrà eliminata:</p>
+              <p>{deleteSnapshot.detail.game?.name ?? 'Gioco non disponibile'}, {deleteSnapshot.detail.play.played_at}</p>
+              <p>Durata: {deleteSnapshot.detail.play.duration_minutes ?? 'non specificata'} · Fonte: {deleteSnapshot.detail.play.source ?? 'non specificata'}</p>
+              <p className="whitespace-pre-wrap">Note: {deleteSnapshot.detail.play.notes || 'nessuna'}</p>
+              <p>{deleteSnapshot.detail.play.is_cooperative ? `Cooperativa · Team ${deleteSnapshot.detail.play.team_won === null ? 'non specificato' : deleteSnapshot.detail.play.team_won ? 'vincitore' : 'sconfitto'}` : 'Competitiva'}</p>
+              <ul className="list-disc pl-5">{deleteSnapshot.detail.scores.map(({ score, player }) => <li key={score.id}>
+                {player?.alias || player?.name || 'Giocatore non disponibile'}: {score.score ?? 'senza punteggio'}{score.winner ? ' · vincitore' : ''}
+                {score.color !== null ? ` · colore: ${score.color}` : ''}{score.role !== null ? ` · ruolo: ${score.role}` : ''}
+              </li>)}</ul>
+            </section>}
+            <PlayWriteStatus writes={writes} />
             <div className="flex space-x-3">
               <button
+                disabled={writes.state.phase === 'busy'}
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
               >
                 Annulla
               </button>
               <button
+                disabled={writes.blocked || !deleteSnapshot}
                 onClick={handleDelete}
                 className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
               >
@@ -483,6 +502,12 @@ const PlayDetail = () => {
       )}
     </div>
   )
+}
+
+const PlayDetail = () => {
+  const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  return <PlayDetailPage key={`${user?.id ?? 'public'}:${id}`} />
 }
 
 export default PlayDetail

@@ -62,7 +62,7 @@ async function responseValue(response: Response): Promise<unknown> {
   } finally { await reader.cancel(); reader.releaseLock() }
 }
 
-/** Mutation transport only. Pages remain on the existing path until RPC rollout is authorized. */
+/** Mutation transport; unavailable RPCs never fall back to separate table writes. */
 export class AtomicPlayWriter {
   private readonly base: string
   constructor(baseUrl: string, private readonly apiKey: string, private readonly dependencies: PlayWriterDependencies) {
@@ -91,11 +91,17 @@ export class AtomicPlayWriter {
   }
 
   pending(actorId: string): Promise<PreparedPlaySave | null> {
+    return this.inspect(actorId).then(value => value?.request ?? null)
+  }
+
+  inspect(actorId: string): Promise<{ request: PreparedPlaySave; confirmed: PlaySaveReceipt | null } | null> {
     const actor = actorId.toLowerCase()
     return this.dependencies.lock(actor, async () => {
       await this.requireSession(actor)
       const pending = this.dependencies.journal.load(actor)
-      return pending ? this.restore(actor, pending) : null
+      if (!pending) return null
+      const request = this.restore(actor, pending)
+      return { request, confirmed: pending.receiptBody === undefined ? null : receipt(JSON.parse(pending.receiptBody), request) }
     })
   }
 
@@ -171,10 +177,10 @@ export class AtomicPlayWriter {
         return { kind: 'saved', receipt: parsed, restored: false }
       }
       // A rejection during recovery cannot disprove an earlier committed save.
-      // Keep 409 too: a reused UUID may refer to an existing receipt with different content.
+      // A fresh PT409 rejects this exact body; recovery must retain any earlier uncertainty.
       const code = value && typeof value === 'object' && 'code' in value ? value.code : null
       const rejected = code === `PT${response.status}` || (response.status === 403 && code === '42501')
-      if (!recovery && [400, 401, 403, 404].includes(response.status) && rejected) {
+      if (!recovery && [400, 401, 403, 404, 409].includes(response.status) && rejected) {
         this.dependencies.journal.clear(request.actorId)
         return { kind: 'rejected', status: response.status }
       }

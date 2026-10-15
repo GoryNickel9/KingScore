@@ -65,3 +65,5 @@ supabase/.env.local
 
 # Stato locale della Supabase CLI
 supabase/.temp/
+# Disposable local test logs, fixtures and screenshots.
+.work/

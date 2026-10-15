@@ -4,13 +4,15 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { performFullRecalc } from '../utils/elo/recalc'
-import { assignPositions } from '../utils/elo/positions'
 import { listGames, createGame } from '../services/games'
 import { listUserPlayers, createPlayer } from '../services/players'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
 import type { DbGame, DbPlayer } from '../types/rows'
+import { usePlayWrites } from '../hooks/usePlayWrites'
+import { PlayWriteStatus } from '../components/PlayWriteStatus'
+import { playFormPayload } from '../services/playFormPayload'
+import { preparePlaySave } from '../services/playSaveRequests'
 
 interface TempPlayer {
   id: string
@@ -49,7 +51,8 @@ interface BGGResult {
   yearPublished: number | null
 }
 
-const AddPlay = () => {
+const AddPlayForm = () => {
+  const writes = usePlayWrites()
   const { user } = useAuth()
   const navigate = useNavigate()
 
@@ -70,6 +73,7 @@ const AddPlay = () => {
   const [games, setGames] = useState<DbGame[]>([])
   const [players, setPlayers] = useState<(DbPlayer | TempPlayer)[]>([])
   const [searchTerm, setSearchTerm] = useState<string>('')
+  const [quickPlayerName, setQuickPlayerName] = useState('')
   const [showAddGame, setShowAddGame] = useState<boolean>(false)
   const [newGame, setNewGame] = useState<NewGameForm>({
     name: '',
@@ -80,7 +84,7 @@ const AddPlay = () => {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState<boolean>(false)
-  const [loading, setLoading] = useState<boolean>(false)
+  const loading = writes.state.phase === 'busy'
   const [bggQuery, setBggQuery] = useState<string>('')
   const [bggResults, setBggResults] = useState<BGGResult[]>([])
   const [bggLoading, setBggLoading] = useState<boolean>(false)
@@ -285,15 +289,12 @@ const AddPlay = () => {
     }))
   }
 
-  const handleAddQuickPlayer = (e: React.FormEvent<HTMLFormElement>): void => {
-    e.preventDefault()
-    const form = e.currentTarget
-    const input = form.elements.namedItem('playerName') as HTMLInputElement
-    const name = input.value.trim()
+  const handleAddQuickPlayer = (): void => {
+    const name = quickPlayerName.trim()
     if (!name) return
 
     const newPlayer: TempPlayer = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${crypto.randomUUID()}`,
       name,
       isNew: true
     }
@@ -304,7 +305,7 @@ const AddPlay = () => {
     }))
 
     setPlayers([...players, newPlayer])
-    form.reset()
+    setQuickPlayerName('')
   }
 
   const handlePlayerScoreChange = (playerId: string, field: keyof PlayerScore, value: string | boolean): void => {
@@ -329,106 +330,46 @@ const AddPlay = () => {
       return
     }
 
-    setLoading(true)
-
+    if (writes.blocked) return
+    const actor = writes.actor
+    const requestId = crypto.randomUUID()
+    // Validate the entire form before creating any separate catalog records.
+    const ids = new Map(formData.players.map(id => [id, id.startsWith('temp-') ? crypto.randomUUID() : id]))
+    const payload = () => playFormPayload(formData, formData.players.map(originalId => ({
+      id: null, player_id: ids.get(originalId)!, score: playerScores[originalId]?.score || null,
+      winner: playerScores[originalId]?.winner ?? false, color: null, role: null,
+    })))
     try {
-      // Create new players if needed
-      const newPlayers = formData.players.filter(id => id.startsWith('temp-'))
-      const createdPlayers: { tempId: string; newId: string }[] = []
-
-      for (const tempId of newPlayers) {
-        const player = players.find(p => p.id === tempId) as TempPlayer | undefined
-        if (player) {
-          const created = await createPlayer(supabase, { user_id: user!.id, name: player.name })
-          createdPlayers.push({ tempId, newId: created.id })
-        }
+      preparePlaySave(actor, 'create_play_v1', { p_request_id: requestId, p_payload: payload() })
+    } catch {
+      toast.error('Controlla data, durata e punteggi. Usa numeri decimali con il punto, senza separatori delle migliaia.')
+      return
+    }
+    const outcome = await writes.coordinator.run(async current => {
+      const client = await writes.api.catalogClient(actor)
+      if (!current()) throw new Error('Pagina chiusa')
+      for (const originalId of formData.players.filter(id => id.startsWith('temp-'))) {
+        const player = players.find(p => p.id === originalId)
+        if (!player?.name.trim()) throw new Error('Nome giocatore mancante')
+        const created = await createPlayer(client, { user_id: actor, name: player.name })
+        await writes.api.requireActor(actor)
+        if (!current()) throw new Error('Pagina chiusa')
+        ids.set(originalId, created.id)
+        // Reuse a successfully created catalog row if a later catalog operation fails.
+        setPlayers(prev => prev.map(p => p.id === originalId ? created : p))
+        setFormData(prev => ({ ...prev, players: prev.players.map(id => id === originalId ? created.id : id) }))
+        setPlayerScores(prev => ({ ...prev, [created.id]: prev[originalId] ?? {} }))
       }
-
-      // Map temp IDs to real IDs
-      const mappedPlayers = formData.players.map(id => {
-        const mapping = createdPlayers.find(m => m.tempId === id)
-        return mapping ? mapping.newId : id
-      })
-
-      // Create play
-      const { data: play, error: playError } = await supabase
-        .from('plays')
-        .insert({
-          user_id: user!.id,
-          game_id: formData.gameId,
-          played_at: formData.playedAt,
-          duration_minutes: formData.durationMinutes ? parseInt(formData.durationMinutes) : null,
-          source: formData.source,
-          notes: formData.notes || null,
-          is_cooperative: formData.isCooperative,
-          team_won: formData.isCooperative ? formData.teamWon : null
-        })
-        .select()
-        .single()
-
-      if (playError) throw playError
-
-      // Create play scores
-      // Calcola le posizioni prima di salvare
-      const playersWithScores = mappedPlayers.map(playerId => {
-        const playerData = playerScores[playerId] || { score: undefined, winner: false }
-        
-        // Se è cooperativo e il risultato del team è definito, sovrascrive il winner individuale
-        const winner = formData.isCooperative && formData.teamWon !== null 
-          ? formData.teamWon 
-          : playerData.winner || false
-        
-        return {
-          playerId,
-          score: playerData.score ? parseFloat(playerData.score) : null,
-          winner
-        }
-      })
-
-      // Calcola le posizioni con la fonte unica di verità (la stessa del
-      // ricalcolo ELO): cooperativo → 1/2 per tutti, altrimenti vincitori a 1
-      // e non vincitori ordinati per punteggio decrescente
-      const playersWithPositions = assignPositions(playersWithScores, {
-        cooperative: formData.isCooperative,
-        teamWon: formData.isCooperative ? formData.teamWon : null
-      })
-
-      const playScoresData = playersWithPositions.map(player => ({
-        play_id: play.id,
-        player_id: player.playerId,
-        score: player.score ?? null,
-        winner: player.winner,
-        position: player.position
+      if (!current()) throw new Error('Pagina chiusa')
+      return writes.api.writer.save(preparePlaySave(actor, 'create_play_v1', {
+        p_request_id: requestId, p_payload: payload(),
       }))
-
-      const { error: scoresError } = await supabase
-        .from('play_scores')
-        .insert(playScoresData)
-
-      if (scoresError) throw scoresError
-
-      // Ricalcola da zero tutti gli ELO con i rating correnti.
-      // Fix TD-001: il vecchio aggiornamento "a caldo" parteva da rating
-      // hardcoded 1000/K=48 e sovrascriveva i rating reali fino al job
-      // notturno. performFullRecalc rigenera anche la cache elo_history,
-      // quindi non serve invalidarla.
-      try {
-        if (mappedPlayers.length >= 2) {
-          await performFullRecalc(supabase, user!.id)
-        }
-      } catch (eloError) {
-        console.error('Errore nel ricalcolo ELO:', eloError)
-        toast.error('ELO non aggiornato: verrà corretto dal ricalcolo notturno')
-      }
-
-      toast.success('Partita aggiunta con successo!')
-      void navigate('/plays')
-    } catch (error) {
-      toast.error('Errore durante il salvataggio della partita')
-      const pgErr = error as { message?: string; code?: string; details?: string; hint?: string }
-      console.error('Error saving play:', pgErr.message, '| code:', pgErr.code, '| details:', pgErr.details, '| hint:', pgErr.hint)
-    } finally {
-      setLoading(false)
+    })
+    if (outcome?.kind === 'saved') {
+      toast.success('Partita salvata. Le classifiche ELO richiedono un ricalcolo separato.')
+      void navigate(`/plays/${outcome.receipt.playId}`)
+    } else if (outcome?.kind === 'rejected') {
+      toast.error('Salvataggio rifiutato. Controlla i dati e i permessi; la bozza è conservata.')
     }
   }
 
@@ -443,7 +384,9 @@ const AddPlay = () => {
         <p className="mt-2 text-slate-400">Registra i dettagli della tua partita</p>
       </div>
 
+      <PlayWriteStatus writes={writes} />
       <form onSubmit={handleSubmit} className="space-y-6">
+        <fieldset disabled={writes.blocked} className="space-y-6">
         {/* Game Selection */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-md">
           <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -837,7 +780,7 @@ const AddPlay = () => {
                         <label className="block text-xs text-slate-400 mb-1">Punteggio</label>
                         <input
                           type="number"
-                          step="0.1"
+                          step="any"
                           placeholder="Punteggio"
                           value={playerScores[player.id]?.score || ''}
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePlayerScoreChange(player.id, 'score', e.target.value)}
@@ -882,20 +825,26 @@ const AddPlay = () => {
             )
           })()}
 
-          <form onSubmit={handleAddQuickPlayer} className="mt-4 flex space-x-2">
+          <div className="mt-4 flex space-x-2">
             <input
               name="playerName"
+              aria-label="Nome nuovo giocatore"
+              value={quickPlayerName}
+              onChange={e => setQuickPlayerName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddQuickPlayer() } }}
               type="text"
               placeholder="Aggiungi giocatore al volo..."
               className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <button
-              type="submit"
+              type="button"
+              aria-label="Aggiungi nuovo giocatore"
+              onClick={handleAddQuickPlayer}
               className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
             >
               <Plus className="w-5 h-5" />
             </button>
-          </form>
+          </div>
         </div>
 
         {/* Notes */}
@@ -923,7 +872,7 @@ const AddPlay = () => {
           </button>
           <button
             type="submit"
-            disabled={loading}
+            disabled={writes.blocked}
             className="flex items-center px-6 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -937,9 +886,15 @@ const AddPlay = () => {
             Salva Partita
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   )
+}
+
+const AddPlay = () => {
+  const { user } = useAuth()
+  return <AddPlayForm key={user?.id ?? 'signed-out'} />
 }
 
 export default AddPlay

@@ -64,7 +64,7 @@ describe('atomic mutation transport', () => {
     expect(vi.mocked(f.deps.fetch).mock.calls[0][1]?.body).toBe(vi.mocked(f.deps.fetch).mock.calls[1][1]?.body)
   })
 
-  it.each([400, 401, 403, 404])('accepts matching RPC rejection %s only on a first attempt', async status => {
+  it.each([400, 401, 403, 404, 409])('accepts matching RPC rejection %s only on a first attempt', async status => {
     const f = fixture()
     f.deps.fetch = vi.fn(async () => new Response(JSON.stringify({ code: `PT${status}` }), { status }))
     expect(await f.writer().save(create())).toEqual({ kind: 'rejected', status })
@@ -74,7 +74,7 @@ describe('atomic mutation transport', () => {
     expect(f.rows.size).toBe(1)
   })
 
-  it.each([409, 500, 503])('keeps a pending request for status %s, with no automatic retry', async status => {
+  it.each([500, 503])('keeps a pending request for status %s, with no automatic retry', async status => {
     const f = fixture()
     f.deps.fetch = vi.fn(async () => new Response(JSON.stringify({ code: `PT${status}` }), { status, headers: { 'Retry-After': '0' } }))
     expect(await f.writer().save(create())).toEqual({ kind: 'uncertain' })
