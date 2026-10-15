@@ -18,6 +18,8 @@ Giochi e giocatori di catalogo vengono creati separatamente. Possono rimanere se
 
 I nuovi handler non invocano il vecchio ricalcolo/invalidation dopo la mutazione: erano richieste separate, non coordinate con la revisione, e nel caso di admin globale potevano usare l'account sbagliato. La conferma riguarda partita e punteggi; il messaggio segnala che le classifiche richiedono un ricalcolo separato. Questa differenza di comportamento resta un blocco alla pubblicazione, finché viene definito e verificato il protocollo ELO.
 
+Il successivo [contratto ELO con prove locali](ELO_PUBLICATION.md) verifica una generazione completa associata alla revisione sorgente, mantenendo la formula. Rimane un prototipo separato: non è ancora collegato ai writer o ai reader reali.
+
 Restano da coordinare anche i writer server/notturni, `replace_play_scores`, vecchie schede web e cancellazioni di giochi/giocatori che producono cascade. La migrazione `scripts/atomic-play-migrations/01-install-rpcs.sql` è additiva: non chiude questi percorsi. Non attivare il flag in produzione soltanto perché build e unit test passano.
 
 L'accesso pubblico del sito resta invariato. Il login obbligatorio e il blocco totale senza Internet dell'app Android non vengono trasferiti alle pagine pubbliche web.

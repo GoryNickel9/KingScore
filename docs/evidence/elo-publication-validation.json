@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-15",
+  "scope": "PC-only ELO publication definition and prototype",
+  "status": "PASS",
+  "formulaChanged": false,
+  "legacySources": {
+    "src/utils/elo/simulation.ts": "6928038ff5fe0ccbb3b8807a12ac7268ebe033741d9692192d9a36c930996b7f",
+    "src/utils/elo/positions.ts": "65d5c06f4d94ecb714c468db5607c9ac9258c8ea3a8d21b1657b82e007d2d6d5"
+  },
+  "unitTests": {
+    "new": 36,
+    "total": 286,
+    "files": 13,
+    "status": "PASS"
+  },
+  "database": {
+    "engine": "psql (PostgreSQL) 17.4",
+    "cases": [
+      {
+        "name": "missing-generation-is-explicit",
+        "status": "PASS"
+      },
+      {
+        "name": "publish-complete-generation-with-current-formula",
+        "status": "PASS"
+      },
+      {
+        "name": "snapshot-orders-plays-but-preserves-null-sensitive-score-array",
+        "status": "PASS"
+      },
+      {
+        "name": "source-mutation-rejects-old-calculation-and-hides-old-cache",
+        "status": "PASS"
+      },
+      {
+        "name": "ABA-edit-still-invalidates-the-old-revision",
+        "status": "PASS"
+      },
+      {
+        "name": "source-transaction-rollback-restores-both-input-and-revision",
+        "status": "PASS"
+      },
+      {
+        "name": "source-snapshot-does-not-see-half-of-uncommitted-edit",
+        "status": "PASS"
+      },
+      {
+        "name": "failed-head-swap-rolls-back-publication-and-retains-prior-head",
+        "status": "PASS"
+      },
+      {
+        "name": "readers-see-only-prior-complete-generation-before-publish-commit",
+        "status": "PASS"
+      },
+      {
+        "name": "lost-publish-response-replays-without-a-second-generation",
+        "status": "PASS"
+      },
+      {
+        "name": "replaying-an-old-receipt-never-rewinds-the-published-head",
+        "status": "PASS"
+      },
+      {
+        "name": "receipt-replay-after-edit-confirms-commit-without-claiming-freshness",
+        "status": "PASS"
+      },
+      {
+        "name": "publication-uuid-cannot-be-reused-with-another-content-or-owner",
+        "status": "PASS"
+      },
+      {
+        "name": "two-publishers-for-the-same-uuid-serialize-and-return-one-replay",
+        "status": "PASS"
+      },
+      {
+        "name": "publisher-waits-for-source-writer-then-rejects-the-obsolete-calculation",
+        "status": "PASS"
+      },
+      {
+        "name": "source-writer-waits-for-publish-then-marks-the-generation-stale",
+        "status": "PASS"
+      },
+      {
+        "name": "overlapping-owner-histories-do-not-overwrite-each-other",
+        "status": "PASS"
+      },
+      {
+        "name": "move-to-another-game-removes-the-old-game-from-the-generation",
+        "status": "PASS"
+      },
+      {
+        "name": "historical-owner-transfer-invalidates-both-scope-results",
+        "status": "PASS"
+      },
+      {
+        "name": "deleting-last-game-cascades-and-publishes-an-empty-generation",
+        "status": "PASS"
+      },
+      {
+        "name": "deleting-a-player-cascades-and-removes-obsolete-player-ratings",
+        "status": "PASS"
+      },
+      {
+        "name": "renamed-player-invalidates-and-refreshes-history-metadata",
+        "status": "PASS"
+      },
+      {
+        "name": "truncate-and-empty-history-do-not-return-old-generals",
+        "status": "PASS"
+      },
+      {
+        "name": "incompatible-score-fails-before-publication-and-retains-stale-status",
+        "status": "PASS"
+      },
+      {
+        "name": "incomplete-or-invalid-envelope-cannot-change-current-generation",
+        "status": "PASS"
+      },
+      {
+        "name": "worker-reader-and-source-writer-permissions-are-separated",
+        "status": "PASS"
+      },
+      {
+        "name": "revision-beyond-javascript-safe-integer-stays-exact",
+        "status": "PASS"
+      },
+      {
+        "name": "complete-history-over-1000-plays-is-never-treated-as-a-partial-cache",
+        "status": "PASS"
+      }
+    ],
+    "serverStopped": true,
+    "remoteContacted": false,
+    "fixtureSha256": "c06f70cf149093c41ad0f040c4d62c6812396755f816b11d00f27afd97fb4937",
+    "run": "b14ee366b35043409efae700484548d3"
+  },
+  "typecheck": "PASS",
+  "targetedLint": "PASS",
+  "build": "PASS",
+  "sourceSha256": {
+    "src/utils/elo/publication.ts": "fff9b853727cb8bca0c5ced55f25836664ac6ac8804b4ccaef151760bc2bc960",
+    "src/utils/elo/publication.test.ts": "a0a9f2ceee555a30de24c076c01bdf2636756181cee0af0ad16f0e22ff560449",
+    "src/utils/elo/simulation.ts": "6928038ff5fe0ccbb3b8807a12ac7268ebe033741d9692192d9a36c930996b7f",
+    "src/utils/elo/positions.ts": "65d5c06f4d94ecb714c468db5607c9ac9258c8ea3a8d21b1657b82e007d2d6d5",
+    "local-tests/elo-publication-fixture.sql": "c06f70cf149093c41ad0f040c4d62c6812396755f816b11d00f27afd97fb4937",
+    "scripts/test-local-elo-publication.ps1": "4d1ab8ff90d6123c0b77bf4d0bfadf1bc6b8c26474bb7af2292a46e693584a60",
+    "scripts/test-elo-publication.mjs": "8aa64ac5cebf77d2558929837ee239e4539bffeb5c4ab5acc8e20a763883032b"
+  },
+  "reportSha256": {
+    "report.json": "fb8b326900589b51369eb919a489d4addb02657b955c7498e1ac2bf7d254e0c5",
+    "acceptance-report.json": "ec847700d5f24a6b54619c67616654a8219a6207026baad5137c3c1d08342708"
+  },
+  "githubCiExecuted": false,
+  "deploymentReady": false,
+  "browserOrWorkerIntegrated": false,
+  "httpFaultInjectionVerified": false,
+  "remoteAuthRlsVerified": false,
+  "remaining": [
+    "production cohort and participant input order",
+    "real writer invalidation and restartable worker",
+    "generation-based readers and legacy ELO cutover",
+    "retention sizing backup restore and real Auth/RLS"
+  ]
+}
