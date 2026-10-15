@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { atomicEloReadsEnabled } from './readClient'
 import type { Database } from '../../types/db'
 import { simulateAllPlays } from './simulation'
 import type { SimulationPlay } from './simulation'
@@ -122,9 +123,11 @@ async function fetchAllPlaysForSimulation(
     if (gameId) {
       query = query.eq('game_id', gameId)
     }
-    if (userId) {
+    if (userId && !atomicEloReadsEnabled) {
       query = query.eq('user_id', userId)
     }
+
+    if (atomicEloReadsEnabled) query = query.order('elo_ordinal', { referencedTable: 'play_scores', ascending: true })
 
     return query.range(from, to)
   }) as Promise<SimulationPlay[]>

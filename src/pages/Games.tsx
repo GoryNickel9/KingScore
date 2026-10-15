@@ -214,7 +214,7 @@ const Games = () => {
 
     try {
       // Delete associated plays first (if any)
-      if (hasPlays) {
+      if (hasPlays && import.meta.env.VITE_ATOMIC_PLAY_WRITES !== 'true') {
         console.log('Eliminazione partite associate...')
         const { data: deletedPlays, error: deletePlaysError } = await supabase
           .from('plays')

@@ -1,7 +1,7 @@
-import { simulateAllPlays } from './simulation'
-import type { SimulationPlay, SimulationResult } from './simulation'
-import { ELO_ALGORITHM } from './algorithm'
-export { ELO_ALGORITHM } from './algorithm'
+import { simulateAllPlays } from './simulation.ts'
+import type { SimulationPlay, SimulationResult } from './simulation.ts'
+import { ELO_ALGORITHM } from './algorithm.ts'
+export { ELO_ALGORITHM } from './algorithm.ts'
 
 export interface EloSourceSnapshot {
   /** Public standings use 'global'; UUID scopes are isolated diagnostic histories. */

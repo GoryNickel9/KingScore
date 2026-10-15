@@ -317,7 +317,7 @@ const ImportPage = () => {
       if (result.stopped) {
         addLog('Importazione interrotta. Verifica il salvataggio precedente prima di riprendere.', 'warning')
       } else {
-        addLog('Importazione terminata. Le classifiche ELO richiedono un ricalcolo separato.', 'info')
+        addLog('Importazione terminata. Le classifiche ELO saranno aggiornate dal server.', 'info')
         toast.success(`${result.imported} partite importate, ${result.skipped} già presenti, ${result.errors} errori`)
       }
       setStep('input')

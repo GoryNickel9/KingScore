@@ -1,4 +1,4 @@
-import { ELO_ALGORITHM } from './algorithm'
+import { ELO_ALGORITHM } from './algorithm.ts'
 import type { GameHistoryPoint, SimulationResult } from './simulation'
 
 type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T

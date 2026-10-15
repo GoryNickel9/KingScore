@@ -10,6 +10,9 @@ import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculat
 import { fetchAllPages } from '../utils/pagination'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
+import { atomicEloReadsEnabled, readGlobalElo, eloReadStatus } from '../utils/elo/readClient'
+import { generalHistory, gameHistory } from '../utils/elo/projections'
+import type { EloRead } from '../utils/elo/readModel'
 
 interface WinRateEntry {
   gameId: string
@@ -82,9 +85,27 @@ const Stats = () => {
   const [generalEloHistory, setGeneralEloHistory] = useState<EloHistoryEntry[]>([])
   const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState<boolean>(false)
   const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
+  const [publication, setPublication] = useState<EloRead | null>(null)
+  const [publicationFailed, setPublicationFailed] = useState(false)
 
   useEffect(() => {
     void fetchStats()
+    if (atomicEloReadsEnabled) {
+      let active = true
+      setLoadingGeneralEloHistory(true)
+      void readGlobalElo(supabase).then(read => {
+        if (!active) return
+        setPublication(read)
+        setGeneralEloHistory([...(generalHistory(read).data ?? [])])
+        const histories: Record<string, EloHistoryEntry[]> = {}
+        for (const id of Object.keys(read.result?.gamePlayers ?? {})) {
+          if (id !== 'null') histories[id] = [...(gameHistory(read, id).data ?? [])]
+        }
+        setEloHistory(histories)
+      }).catch(() => { if (active) setPublicationFailed(true) })
+        .finally(() => { if (active) setLoadingGeneralEloHistory(false) })
+      return () => { active = false }
+    }
     void fetchGeneralEloHistory()
   }, [])
 
@@ -98,6 +119,10 @@ const Stats = () => {
 
     // Se stiamo espandendo e non abbiamo ancora lo storico ELO, recuperalo
     if (isExpanding && !eloHistory[gameId]) {
+      if (atomicEloReadsEnabled) {
+        if (publication && gameId) setEloHistory(prev => ({ ...prev, [gameId]: [...(gameHistory(publication, gameId).data ?? [])] }))
+        return
+      }
       try {
         setLoadingEloHistory(prev => ({ ...prev, [gameId]: true }))
         const history = await getELOHistoryForGame(supabase, gameId, user?.id)
@@ -379,6 +404,7 @@ const Stats = () => {
   if (stats.allGamesStats.length === 0) {
     return (
       <div className="space-y-6">
+        {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
         <div>
           <h1 className="text-3xl font-bold text-white">Statistiche</h1>
           <p className="mt-2 text-slate-400">Analisi dettagliata delle partite</p>
@@ -402,6 +428,7 @@ const Stats = () => {
 
   return (
     <div className="space-y-6">
+      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
       <div>
         <h1 className="text-3xl font-bold text-white">Statistiche</h1>
         <p className="mt-2 text-slate-400">Analisi dettagliata delle partite</p>

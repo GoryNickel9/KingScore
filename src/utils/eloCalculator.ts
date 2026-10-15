@@ -6,6 +6,21 @@ import { performFullRecalc } from './elo/recalc'
 import type { RecalcSummary } from './elo/recalc'
 import { fetchAllPages } from './pagination'
 import type { DbGeneralRatingWithPlayer, DbPlayerGeneralRating } from '../types/rows'
+import { atomicEloReadsEnabled, readGlobalElo } from './elo/readClient'
+import { generalStandings, gameHistory, generalHistory } from './elo/projections'
+
+async function publishedGeneralRatings(client: SupabaseClient<Database>): Promise<DbGeneralRatingWithPlayer[]> {
+  const view = generalStandings(await readGlobalElo(client))
+  return (view.data ?? []).map(player => ({
+    id: player.playerId, player_id: player.playerId, rating: player.rating,
+    games_played: player.gamesPlayed, wins: player.wins, losses: player.losses, draws: player.draws,
+    last_played_at: player.lastPlayedAt, user_id: null, created_at: null, updated_at: null, players: null,
+  }))
+}
+
+function requireLegacyWrites(): void {
+  if (atomicEloReadsEnabled) throw new Error('Il ricalcolo ELO viene gestito dal server. Le scritture legacy sono disabilitate.')
+}
 
 // Le formule ELO pure vivono nel core condiviso con l'Edge Function notturna
 // (src/utils/elo/simulation.ts); riesportate per retrocompatibilità.
@@ -32,9 +47,9 @@ export type { PlayerInput, EloResult } from './elo/simulation'
  * Per giochi con 2 giocatori: metodo ELO classico.
  * Per giochi con 3+ giocatori: metodo pairwise (all-pairs).
  *
- * Questo modulo gestisce SOLO cache e persistenza: l'algoritmo di simulazione
- * vive nel core puro src/utils/elo/simulation.ts, la pipeline di ricalcolo
- * bulk in src/utils/elo/recalc.ts.
+ * Con il flag atomico attivo le letture usano soltanto la pubblicazione globale
+ * e le scritture legacy sono vietate. A flag disattivato restano i percorsi
+ * cache/persistenza precedenti, con simulazione nel core e ricalcolo bulk.
  */
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -76,6 +91,7 @@ interface ELOHistoryDBEntry {
  * Ottieni l'ELO Generale per un giocatore
  */
 export async function getGeneralELO(supabase: SupabaseClient<Database>, playerId: string): Promise<DbPlayerGeneralRating | null> {
+  if (atomicEloReadsEnabled) return (await publishedGeneralRatings(supabase)).find(player => player.player_id === playerId) ?? null
   try {
     const { data, error } = await supabase
       .from('player_general_ratings')
@@ -95,6 +111,7 @@ export async function getGeneralELO(supabase: SupabaseClient<Database>, playerId
  * Ottieni tutti gli ELO Generali per un utente
  */
 export async function getAllGeneralELO(supabase: SupabaseClient<Database>, userId: string | null): Promise<DbGeneralRatingWithPlayer[]> {
+  if (atomicEloReadsEnabled) return publishedGeneralRatings(supabase)
   try {
     let query = supabase
       .from('player_general_ratings')
@@ -125,6 +142,7 @@ export async function getAllGeneralELO(supabase: SupabaseClient<Database>, userI
  * massive (~6-10 richieste totali).
  */
 export async function recalculateAllELO(supabase: SupabaseClient<Database>, userId: string): Promise<RecalcSummary> {
+  requireLegacyWrites()
   return performFullRecalc(supabase, userId)
 }
 
@@ -134,6 +152,7 @@ export async function recalculateAllELO(supabase: SupabaseClient<Database>, user
  * Gli errori di chiave duplicata (es. chiamate concorrenti) vengono ignorati silenziosamente.
  */
 export async function saveELOHistoryEntries(supabase: SupabaseClient<Database>, entries: ELOHistoryDBEntry[]): Promise<void> {
+  requireLegacyWrites()
   if (entries.length === 0) return
   const BATCH_SIZE = 500
   for (let i = 0; i < entries.length; i += BATCH_SIZE) {
@@ -154,6 +173,7 @@ export async function saveELOHistoryEntries(supabase: SupabaseClient<Database>, 
  * Questa funzione simula il calcolo degli ELO nel tempo senza salvare nel database
  */
 export async function getELOHistoryForGame(supabase: SupabaseClient<Database>, gameId: string, userId: string | null = null): Promise<ELOHistoryEntry[]> {
+  if (atomicEloReadsEnabled) return [...(gameHistory(await readGlobalElo(supabase), gameId).data ?? [])]
   try {
     // ── Controllo cache ───────────────────────────────────────────────────────
     // Lettura paginata: anche per gioco le righe (partite × giocatori) possono
@@ -259,6 +279,7 @@ export async function getELOHistoryForGame(supabase: SupabaseClient<Database>, g
  * Questa funzione simula il calcolo degli ELO Generali nel tempo senza salvare nel database
  */
 export async function getGeneralELOHistory(supabase: SupabaseClient<Database>, userId: string | null = null): Promise<GeneralELOHistoryEntry[]> {
+  if (atomicEloReadsEnabled) return [...(generalHistory(await readGlobalElo(supabase)).data ?? [])]
   try {
     // ── Controllo cache (solo per utenti autenticati) ─────────────────────────
     // Lettura paginata: con ~2,8 giocatori per partita la cache supera le
@@ -376,6 +397,7 @@ export async function getGeneralELOHistory(supabase: SupabaseClient<Database>, u
  * Il ricalcolo completo avverrà alla prossima apertura di Stats.
  */
 export async function invalidateELOHistory(supabase: SupabaseClient<Database>, playId: string): Promise<void> {
+  requireLegacyWrites()
   try {
     // Recupera il game_id della partita modificata
     const { data: play, error: playError } = await supabase

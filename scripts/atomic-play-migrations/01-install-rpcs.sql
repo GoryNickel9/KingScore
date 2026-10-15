@@ -77,6 +77,7 @@ BEGIN
     ('public.play_scores','position','integer',false,true,false),
     ('public.play_scores','color','text',false,true,true),
     ('public.play_scores','role','text',false,true,true),
+    ('public.play_scores','elo_ordinal','integer',false,true,true),
     ('public.games','id','uuid',true,false,false),
     ('public.players','id','uuid',true,false,false),
     ('auth.users','id','uuid',true,false,false)
@@ -177,7 +178,8 @@ BEGIN
 
   -- All compatibility checks above complete before the first schema mutation.
   ALTER TABLE public.plays ADD COLUMN IF NOT EXISTS location text NULL, ADD COLUMN IF NOT EXISTS bga_table_id text NULL;
-  ALTER TABLE public.play_scores ADD COLUMN IF NOT EXISTS color text NULL, ADD COLUMN IF NOT EXISTS role text NULL;
+  ALTER TABLE public.play_scores ADD COLUMN IF NOT EXISTS color text NULL, ADD COLUMN IF NOT EXISTS role text NULL,
+    ADD COLUMN IF NOT EXISTS elo_ordinal integer NULL;
   IF orphan_trigger THEN DROP TRIGGER update_play_scores_updated_at ON public.play_scores; END IF;
   FOR idx IN SELECT co.oid AS constraint_id, co.conname, co.conindid,
     ARRAY(SELECT a.attname::text FROM unnest(co.conkey) WITH ORDINALITY k(attnum,ord)
@@ -390,7 +392,7 @@ LANGUAGE sql STABLE SET search_path='' SET lock_timeout='5s' SET statement_timeo
       'scores',COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'score',to_jsonb(s)||jsonb_build_object('score',s.score::text),
         'player',(SELECT to_jsonb(pl) FROM public.players pl WHERE pl.id=s.player_id))
-        ORDER BY s.position NULLS LAST,s.id) FROM public.play_scores s WHERE s.play_id=p.id),'[]'::jsonb)),
+        ORDER BY s.elo_ordinal NULLS LAST,s.id) FROM public.play_scores s WHERE s.play_id=p.id),'[]'::jsonb)),
     'revision','v1:'||encode(sha256(convert_to(jsonb_build_object('play',to_jsonb(p),'scores',COALESCE(
       (SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM public.play_scores s WHERE s.play_id=p.id),'[]'::jsonb))::text,'UTF8')),'hex'),
     'editability',kingscore_atomic.editability(p.id))
@@ -408,12 +410,13 @@ BEGIN
   UPDATE public.play_scores s SET player_id=(input.value->>'player_id')::uuid,
     score=(input.value->>'score')::numeric,winner=(input.value->>'winner')::boolean,
     color=input.value->>'color',role=input.value->>'role',
-    position=CASE WHEN preserve THEN s.position ELSE positions[input.ordinal::integer] END
+    position=CASE WHEN preserve THEN s.position ELSE positions[input.ordinal::integer] END,
+    elo_ordinal=CASE WHEN preserve THEN s.elo_ordinal ELSE input.ordinal::integer-1 END
   FROM jsonb_array_elements(payload->'scores') WITH ORDINALITY input(value,ordinal)
   WHERE s.play_id=write_scores.play_id AND s.id=(input.value->>'id')::uuid;
-  INSERT INTO public.play_scores(play_id,player_id,score,winner,color,role,position)
+  INSERT INTO public.play_scores(play_id,player_id,score,winner,color,role,position,elo_ordinal)
   SELECT write_scores.play_id,(input.value->>'player_id')::uuid,(input.value->>'score')::numeric,
-    (input.value->>'winner')::boolean,input.value->>'color',input.value->>'role',positions[input.ordinal::integer]
+    (input.value->>'winner')::boolean,input.value->>'color',input.value->>'role',positions[input.ordinal::integer],input.ordinal::integer-1
   FROM jsonb_array_elements(payload->'scores') WITH ORDINALITY input(value,ordinal)
   WHERE input.value->>'id' IS NULL;
 END $$;
@@ -433,6 +436,8 @@ BEGIN
     IF previous.request IS DISTINCT FROM request THEN RAISE EXCEPTION USING ERRCODE='PT409',MESSAGE='Request ID reused with different content'; END IF;
     RETURN previous.result||jsonb_build_object('replayed',true);
   END IF;
+  -- Share lock order with source invalidation and ELO publication before locking rows.
+  PERFORM pg_advisory_xact_lock(hashtextextended('kingscore:elo-source-v1',0));
   IF operation IN ('update','delete') THEN
     IF target IS NULL OR expected_revision IS NULL OR length(expected_revision) NOT BETWEEN 1 AND 160 OR expected_revision !~ '^[!-~]+$' THEN
       RAISE EXCEPTION USING ERRCODE='PT400',MESSAGE='Target and opaque revision required';

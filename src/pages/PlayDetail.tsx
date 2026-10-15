@@ -12,6 +12,9 @@ import { usePlayWrites } from '../hooks/usePlayWrites'
 import { PlayWriteStatus } from '../components/PlayWriteStatus'
 import { preparePlaySave } from '../services/playSaveRequests'
 import type { PlayEditorSnapshot } from '../services/playEditorReader'
+import { atomicEloReadsEnabled, readGlobalElo, eloReadStatus } from '../utils/elo/readClient'
+import { gameHistory, generalHistory } from '../utils/elo/projections'
+import type { EloRead } from '../utils/elo/readModel'
 
 interface EloHistoryEntry {
   playId: string
@@ -39,13 +42,22 @@ const PlayDetailPage = () => {
   const [loadingElo, setLoadingElo] = useState<boolean>(false)
   const [_generalELOs, setGeneralELOs] = useState<Record<string, unknown>>({})
   const [generalELOHistory, setGeneralELOHistory] = useState<EloHistoryEntry[]>([])
+  const [publication, setPublication] = useState<EloRead | null>(null)
+  const [publicationFailed, setPublicationFailed] = useState(false)
 
   useEffect(() => {
-    void fetchPlay()
+    let active = true
+    void fetchPlay(() => active)
+    return () => { active = false }
   }, [id])
 
-  const fetchPlay = async (): Promise<void> => {
+  const fetchPlay = async (active: () => boolean): Promise<void> => {
     try {
+      setLoading(true)
+      setEloHistory([])
+      setGeneralELOHistory([])
+      setPublication(null)
+      setPublicationFailed(false)
       const { data } = await supabase
         .from('plays')
         .select(`
@@ -59,8 +71,22 @@ const PlayDetailPage = () => {
         .eq('id', id!)
         .single()
 
+      if (!active()) return
       if (data) {
         setPlay(data)
+
+        if (atomicEloReadsEnabled) {
+          setLoadingElo(true)
+          try {
+            const read = await readGlobalElo(supabase)
+            if (!active()) return
+            setPublication(read)
+            setEloHistory(data.game_id ? [...(gameHistory(read, data.game_id).data ?? [])] : [])
+            setGeneralELOHistory([...(generalHistory(read).data ?? [])])
+          } catch { if (active()) setPublicationFailed(true) }
+          finally { if (active()) setLoadingElo(false) }
+          return
+        }
 
         // Recupera lo storico ELO per questo gioco usando l'user_id del proprietario della partita
         if (data.game_id && data.user_id) {
@@ -112,7 +138,7 @@ const PlayDetailPage = () => {
       console.error('Error fetching play:', error)
       toast.error('Errore durante il caricamento della partita')
     } finally {
-      setLoading(false)
+      if (active()) setLoading(false)
     }
   }
 
@@ -131,7 +157,7 @@ const PlayDetailPage = () => {
     })
     const outcome = await writes.coordinator.run(() => writes.api.writer.save(request))
     if (outcome?.kind === 'saved') {
-      toast.success('Partita eliminata. Le classifiche ELO richiedono un ricalcolo separato.')
+      toast.success('Partita eliminata. Le classifiche ELO saranno aggiornate dal server.')
       void navigate('/plays')
     } else if (outcome?.kind === 'rejected') {
       setDeleteSnapshot(null)
@@ -187,6 +213,7 @@ const PlayDetailPage = () => {
 
   return (
     <div className="space-y-6">
+      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">

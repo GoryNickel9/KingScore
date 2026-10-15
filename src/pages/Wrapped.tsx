@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 import { Trophy, Calendar, TrendingUp, Award, Clock, Sparkles } from 'lucide-react'
@@ -6,6 +6,8 @@ import { BarChart, Bar, LineChart, Line, Legend, XAxis, YAxis, CartesianGrid, To
 import { fetchAllPages } from '../utils/pagination'
 import type { DbGame, DbPlayer, DbPlayWithScores } from '../types/rows'
 import { useAuth } from '../contexts/AuthContext'
+import { atomicEloReadsEnabled, readGlobalEloYear, eloReadStatus } from '../utils/elo/readClient'
+import type { EloRead } from '../utils/elo/readModel'
 
 interface EloEntry {
   player_id: string
@@ -78,15 +80,20 @@ const Wrapped = () => {
   const [playerEloDetail, setPlayerEloDetail] = useState<PlayerEloSummary | null>(null)
   const [eloChartData, setEloChartData] = useState<EloChartPoint[]>([])
   const [eloPlayerNames, setEloPlayerNames] = useState<string[]>([])
+  const [publication, setPublication] = useState<EloRead | null>(null)
+  const [publicationFailed, setPublicationFailed] = useState(false)
+  const loadGeneration = useRef({ value: 0 })
 
   useEffect(() => {
     void loadInitialData()
   }, [])
 
   useEffect(() => {
+    const generation = loadGeneration.current
     if (availableYears.length > 0) {
       void loadStats()
     }
+    return () => { generation.value++ }
   }, [selectedYear, selectedPlayerId, availableYears])
 
   useEffect(() => {
@@ -123,7 +130,14 @@ const Wrapped = () => {
   }
 
   const loadStats = async () => {
+    const generation = ++loadGeneration.current.value
     setLoading(true)
+    setPublication(null)
+    setPublicationFailed(false)
+    setEloRanking([])
+    setPlayerEloDetail(null)
+    setEloChartData([])
+    setEloPlayerNames([])
 
     // Carica partite dell'anno (paginata: cap PostgREST di 1000 righe)
     const plays = await fetchAllPages<DbPlayWithScores>((from, to) =>
@@ -141,9 +155,11 @@ const Wrapped = () => {
           .range(from, to)
     )
 
+    if (generation !== loadGeneration.current.value) return
     if (plays.length === 0) {
       setStats(null)
-      setLoading(false)
+      await loadEloStats(generation)
+      if (generation === loadGeneration.current.value) setLoading(false)
       return
     }
 
@@ -160,17 +176,23 @@ const Wrapped = () => {
     setStats(calculatedStats)
 
     // Carica ELO Generale per l'anno
-    await loadEloStats()
+    await loadEloStats(generation)
 
-    setLoading(false)
+    if (generation === loadGeneration.current.value) setLoading(false)
   }
 
-  const loadEloStats = async () => {
+  const loadEloStats = async (generation: number) => {
     // Lettura paginata: elo_history per un anno supera il cap PostgREST di
     // 1000 righe e verrebbe troncata in silenzio (rating finali e grafico
     // dell'anno calcolati su dati parziali).
     let eloData: EloEntry[] = []
     try {
+      if (atomicEloReadsEnabled) {
+        const { read, history } = await readGlobalEloYear(supabase, selectedYear)
+        if (generation !== loadGeneration.current.value) return
+        setPublication(read)
+        eloData = (history ?? []).map(point => ({ player_id: point.playerId, player_name: point.playerName, rating: point.rating, rating_change: point.ratingChange, date: point.date }))
+      } else {
       eloData = await fetchAllPages<EloEntry>((from, to) =>
         supabase
           .from('elo_history')
@@ -183,9 +205,13 @@ const Wrapped = () => {
           .order('player_id', { ascending: true })
           .range(from, to)
       )
+      }
     } catch (error) {
+      if (generation !== loadGeneration.current.value) return
+      if (atomicEloReadsEnabled) setPublicationFailed(true)
       console.error('[Wrapped] Errore nel recupero dello storico ELO:', error)
     }
+    if (generation !== loadGeneration.current.value) return
 
     if (eloData.length === 0) {
       setEloRanking([])
@@ -401,6 +427,7 @@ const Wrapped = () => {
   return (
     <div className="min-h-screen bg-slate-900 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {atomicEloReadsEnabled && <p role="status" className="mb-6 rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">

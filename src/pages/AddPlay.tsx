@@ -366,7 +366,7 @@ const AddPlayForm = () => {
       }))
     })
     if (outcome?.kind === 'saved') {
-      toast.success('Partita salvata. Le classifiche ELO richiedono un ricalcolo separato.')
+      toast.success('Partita salvata. Le classifiche ELO saranno aggiornate dal server.')
       void navigate(`/plays/${outcome.receipt.playId}`)
     } else if (outcome?.kind === 'rejected') {
       toast.error('Salvataggio rifiutato. Controlla i dati e i permessi; la bozza è conservata.')

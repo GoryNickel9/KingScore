@@ -164,7 +164,7 @@ const EditPlayForm = ({ id }: { id: string }) => {
     const outcome = await coordinator.run(() => api.writer.save(request))
     if (!active.current || !outcome) return
     if (outcome.kind === 'saved') {
-      toast.success('Partita aggiornata. Le classifiche ELO richiedono un ricalcolo separato.')
+      toast.success('Partita aggiornata. Le classifiche ELO saranno aggiornate dal server.')
       void navigate(`/plays/${id}`)
     } else if (outcome.kind === 'rejected') {
       if (outcome.status === 409) {

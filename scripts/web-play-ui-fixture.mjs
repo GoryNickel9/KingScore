@@ -5,20 +5,26 @@ import react from '@vitejs/plugin-react'
 import { randomUUID } from 'node:crypto'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { simulateAllPlays } from '../src/utils/elo/simulation.ts'
+import { ELO_ALGORITHM } from '../src/utils/elo/algorithm.ts'
 
 const actor = '00000000-0000-0000-0000-000000000001'
 const owner = '00000000-0000-0000-0000-000000000005'
 const gameId = '00000000-0000-0000-0000-000000000003'
 const playerId = '00000000-0000-0000-0000-000000000006'
 const initialPlay = '00000000-0000-0000-0000-000000000002'
+const secondPlayerId = '00000000-0000-0000-0000-000000000007'
+const secondPlay = '00000000-0000-0000-0000-000000000008'
+const publicationId = '00000000-0000-0000-0000-000000000009'
 const timestamp = '2026-10-15T12:00:00Z'
 const game = { id: gameId, name: 'Gioco di prova locale', bga_id: null, image_url: null, min_players: 1, max_players: 63, created_at: timestamp }
 const player = { id: playerId, name: 'Anna locale', user_id: actor, account_user_id: null, alias: null, avatar_url: null, color: null, created_at: timestamp, updated_at: timestamp, is_me: false }
+const secondPlayer = { ...player, id: secondPlayerId, name: 'Bruno locale', user_id: owner, avatar_url: 'qa/bruno.svg' }
 const user = { id: actor, aud: 'authenticated', role: 'authenticated', email: 'admin@example.invalid', email_confirmed_at: timestamp,
   app_metadata: { role: 'admin', provider: 'email', providers: ['email'] }, user_metadata: {}, created_at: timestamp }
 const jwt = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: actor, role: 'authenticated', exp: Math.floor(Date.now()/1000)+3600 })).toString('base64url')}.synthetic-signature`
-const games = [game]; const players = [player]; const plays = new Map(); const receipts = new Map(); const requests = []
-let mode = 'normal'; let revision = 0
+const games = [game]; const players = [player, secondPlayer]; const plays = new Map(); const receipts = new Map(); const requests = []
+let mode = 'normal'; let revision = 0; let eloMode = 'current'
 function nextRevision() { return `v1:${String(++revision).padStart(64, '0')}` }
 function newPlay(id, payload, playOwner = actor) {
   return { revision: nextRevision(), editability: { editable: true, issues: [] }, detail: {
@@ -31,9 +37,25 @@ function newPlay(id, payload, playOwner = actor) {
 }
 plays.set(initialPlay, newPlay(initialPlay, { game_id: gameId, played_at: '2026-10-15', duration_minutes: 30, source: 'offline',
   notes: 'Partita di un altro proprietario', is_cooperative: false, team_won: null,
-  scores: [{ id: '00000000-0000-0000-0000-000000000004', player_id: playerId, score: '9007199254740993.125', winner: false, color: 'rosso', role: 'leader' }] }, owner))
+  scores: [{ id: '00000000-0000-0000-0000-000000000004', player_id: playerId, score: '9007199254740993.125', winner: false, color: 'rosso', role: 'leader' },
+    { id: '00000000-0000-0000-0000-000000000010', player_id: secondPlayerId, score: '0', winner: false, color: null, role: null }] }, owner))
+plays.set(secondPlay, newPlay(secondPlay, { game_id: gameId, played_at: '2026-10-15', duration_minutes: 20, source: 'offline',
+  notes: 'Seconda partita, altro proprietario', is_cooperative: false, team_won: null,
+  scores: [{ id: '00000000-0000-0000-0000-000000000011', player_id: playerId, score: '0', winner: false, color: null, role: null },
+    { id: '00000000-0000-0000-0000-000000000012', player_id: secondPlayerId, score: '5', winner: true, color: null, role: null }] }))
 function publicPlay(snapshot) { return { ...snapshot.detail.play, games: snapshot.detail.game,
   play_scores: snapshot.detail.scores.map(item => ({ ...item.score, score: item.score.score === null ? null : Number(item.score.score), players: item.player })) } }
+function eloPublication() {
+  const envelope = { scopeId: 'global', algorithm: ELO_ALGORITHM, status: 'current', sourceRevision: '9007199254740993',
+    publishedRevision: '9007199254740993', publicationId, result: null }
+  if (eloMode === 'missing') return { ...envelope, status: 'missing', algorithm: null, publishedRevision: null, publicationId: null }
+  if (eloMode === 'stale') return { ...envelope, status: 'stale', sourceRevision: '9007199254740994' }
+  const source = [...plays.values()].map(publicPlay).sort((a, b) => a.played_at.localeCompare(b.played_at) || a.id.localeCompare(b.id))
+  envelope.result = simulateAllPlays(source)
+  if (eloMode === 'wrong-owner') envelope.scopeId = owner
+  if (eloMode === 'partial') envelope.result.generalHistory.pop()
+  return envelope
+}
 const api = httpServer(async (request, response) => {
   response.setHeader('Access-Control-Allow-Origin', '*')
   response.setHeader('Access-Control-Allow-Headers', request.headers['access-control-request-headers'] ?? 'authorization,apikey,content-type')
@@ -42,6 +64,11 @@ const api = httpServer(async (request, response) => {
   const send = (value, status = 200) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)) }
   if (request.method === 'OPTIONS') { response.end(); return }
   const url = new URL(request.url, 'http://127.0.0.1')
+  if (url.pathname === '/qa-game.svg' || url.pathname === '/storage/v1/object/public/player-images/qa/bruno.svg') {
+    response.writeHead(200, { 'Content-Type': 'image/svg+xml' })
+    response.end('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#10b981"/></svg>')
+    return
+  }
   let raw = ''; for await (const chunk of request) raw += chunk
   let body
   try { body = raw ? JSON.parse(raw) : null } catch { send({ code: 'bad-json' }, 400); return }
@@ -49,8 +76,10 @@ const api = httpServer(async (request, response) => {
     if (request.method === 'PUT') {
       if (body.mode) mode = body.mode
       if (body.role) user.app_metadata.role = body.role
+      if (body.eloMode && ['current','stale','missing','wrong-owner','partial'].includes(body.eloMode)) eloMode = body.eloMode
+      if (body.clearRequests) requests.splice(0)
     }
-    send({ mode, requests, plays: [...plays.values()], receipts: receipts.size }); return
+    send({ mode, eloMode, requests, plays: [...plays.values()], receipts: receipts.size, publicationId }); return
   }
   if (url.pathname === '/auth/v1/token') {
     send({ access_token: jwt, refresh_token: 'synthetic-refresh', token_type: 'bearer', expires_in: 3600, user }); return
@@ -60,6 +89,11 @@ const api = httpServer(async (request, response) => {
   requests.push({ path: url.pathname, method: request.method, body })
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
     const rpc = url.pathname.split('/').at(-1)
+    if (rpc === 'get_elo_publication_v1') {
+      const value = eloPublication()
+      Object.assign(requests.at(-1), { publication: { scopeId: value.scopeId, status: value.status, publicationId: value.publicationId, sourceRevision: value.sourceRevision } })
+      send(value); return
+    }
     if (rpc === 'get_play_editor_v1') {
       const snapshot = plays.get(body.p_play_id)
       if (!snapshot) { send({ code: 'PT404' }, 404); return }
@@ -109,12 +143,13 @@ const api = httpServer(async (request, response) => {
 })
 await new Promise(resolve => api.listen(0, '127.0.0.1', resolve))
 const apiUrl = `http://127.0.0.1:${api.address().port}`
+game.image_url = `${apiUrl}/qa-game.svg`
 const vite = await viteServer({ configFile: false, envDir: false, plugins: [react()],
   define: { 'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(apiUrl), 'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('synthetic-key'), 'import.meta.env.VITE_ATOMIC_PLAY_WRITES': JSON.stringify('true') },
-  server: { host: '127.0.0.1', port: 0, headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data:; font-src 'self' data:; frame-src 'none'" } },
+  server: { host: '127.0.0.1', port: 0, headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: http://127.0.0.1:*; font-src 'self' data:; frame-src 'none'" } },
 })
 await vite.listen()
-const report = { app: `http://127.0.0.1:${vite.httpServer.address().port}`, api: apiUrl, actor, owner, gameId, playerId, initialPlay, fixture: 'synthetic-ui-only', pid: process.pid }
+const report = { app: `http://127.0.0.1:${vite.httpServer.address().port}`, api: apiUrl, actor, owner, gameId, playerId, secondPlayerId, initialPlay, secondPlay, publicationId, fixture: 'synthetic-ui-only', pid: process.pid }
 mkdirSync('.work', { recursive: true }); writeFileSync(resolve('.work/web-ui-fixture.json'), JSON.stringify(report, null, 2))
 console.log(JSON.stringify(report))
 async function stop() { await vite.close(); api.closeAllConnections(); await new Promise(resolve => api.close(resolve)); process.exit(0) }

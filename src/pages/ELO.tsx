@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Trophy, Award, Gamepad2, Star, RefreshCw } from 'lucide-react'
@@ -6,7 +6,21 @@ import { getAllGeneralELO, recalculateAllELO } from '../utils/eloCalculator'
 import toast from 'react-hot-toast'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
-import type { DbGeneralRatingWithPlayer, DbPlayerRatingWithPlayer } from '../types/rows'
+import { atomicEloReadsEnabled, readGlobalElo, eloReadStatus } from '../utils/elo/readClient'
+import { generalStandings, gameStandings } from '../utils/elo/projections'
+import type { EloRead } from '../utils/elo/readModel'
+import { fetchAllPages } from '../utils/pagination'
+
+interface RatingView {
+  id: string
+  player_id: string | null
+  rating: number | null
+  games_played: number | null
+  wins: number | null
+  losses: number | null
+  draws: number | null
+  players: { name: string; alias: string | null; avatar_url: string | null } | null
+}
 
 /** View model: gioco con conteggio partite, costruito aggregando plays. */
 interface DbEloGame {
@@ -26,23 +40,71 @@ const ELO = () => {
 
   const [games, setGames] = useState<DbEloGame[]>([])
   const [selectedGame, setSelectedGame] = useState<DbEloGame | null>(null)
-  const [ratings, setRatings] = useState<DbPlayerRatingWithPlayer[]>([])
+  const [legacyRatings, setRatings] = useState<RatingView[]>([])
   const [myPlayer, setMyPlayer] = useState<MyPlayer | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
 
   // ELO Generale
-  const [generalRatings, setGeneralRatings] = useState<DbGeneralRatingWithPlayer[]>([])
+  const [generalRatings, setGeneralRatings] = useState<RatingView[]>([])
+  const [publication, setPublication] = useState<EloRead | null>(null)
+  const [publicationFailed, setPublicationFailed] = useState(false)
+  const [playerAvatars, setPlayerAvatars] = useState<Record<string, string | null>>({})
+  const ratings = useMemo<RatingView[]>(() => {
+    if (!atomicEloReadsEnabled) return legacyRatings
+    const view = publication && selectedGame ? gameStandings(publication, selectedGame.id).data : null
+    return (view ?? []).map(player => ({
+      id: player.playerId, player_id: player.playerId, rating: player.rating, games_played: player.gamesPlayed,
+      wins: player.wins, losses: player.losses, draws: player.draws,
+      players: { name: player.playerName, alias: null, avatar_url: playerAvatars[player.playerId] ?? null },
+    }))
+  }, [legacyRatings, publication, selectedGame, playerAvatars])
 
   // Pulsante temporaneo per calcolare ELO esistenti
   const [recalculatingAll, setRecalculatingAll] = useState<boolean>(false)
 
   useEffect(() => {
-    void fetchGames()
     void fetchMyPlayer()
+    if (atomicEloReadsEnabled) {
+      let active = true
+      void (async () => {
+        try {
+          const read = await readGlobalElo(supabase)
+          const [metadata, playerMetadata] = await Promise.all([
+            fetchAllPages((from, to) => supabase.from('games').select('id,name,image_url', { count: 'exact' }).order('id').range(from, to)).catch(() => []),
+            fetchAllPages((from, to) => supabase.from('players').select('id,avatar_url', { count: 'exact' }).order('id').range(from, to)).catch(() => []),
+          ])
+          if (!active) return
+          const avatars = Object.fromEntries(playerMetadata.map(player => [player.id, player.avatar_url]))
+          setPlayerAvatars(avatars)
+          setPublication(read)
+          const standings = generalStandings(read)
+          setGeneralRatings((standings.data ?? []).map(player => ({
+            id: player.playerId, player_id: player.playerId, rating: player.rating, games_played: player.gamesPlayed,
+            wins: player.wins, losses: player.losses, draws: player.draws,
+            players: { name: player.playerName, alias: null, avatar_url: avatars[player.playerId] ?? null },
+          })))
+          const catalog = new Map(metadata.map(game => [game.id, game]))
+          const counts = new Map<string, Set<string>>()
+          for (const point of read.result?.gameHistory ?? []) {
+            if (point.gameId === null) continue
+            const ids = counts.get(point.gameId) ?? new Set<string>()
+            ids.add(point.playId)
+            counts.set(point.gameId, ids)
+          }
+          const list = [...counts].map(([id, plays]) => ({ id, name: catalog.get(id)?.name ?? 'Gioco sconosciuto', image_url: catalog.get(id)?.image_url ?? null, playCount: plays.size })).sort((a, b) => b.playCount - a.playCount)
+          setGames(list)
+          setSelectedGame(list[0] ?? null)
+        } catch { if (active) setPublicationFailed(true) }
+        finally { if (active) setLoading(false) }
+      })()
+      return () => { active = false }
+    }
+    void fetchGames()
     void fetchGeneralRatings()
   }, [])
 
   useEffect(() => {
+    if (atomicEloReadsEnabled) return
     if (selectedGame) {
       void fetchRatings(selectedGame.id)
     }
@@ -201,7 +263,7 @@ const ELO = () => {
           <p className="mt-2 text-slate-400">Classifica dei giocatori per ogni gioco</p>
         </div>
         <div className="flex items-center space-x-2">
-          {isAdmin && (
+          {isAdmin && !atomicEloReadsEnabled && (
             <button
               onClick={handleRecalculateAll}
               disabled={recalculatingAll}
@@ -213,6 +275,8 @@ const ELO = () => {
           )}
         </div>
       </div>
+
+      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
 
       {/* ELO Generale */}
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
