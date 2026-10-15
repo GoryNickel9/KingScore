@@ -161,9 +161,9 @@ describe('calculateELOForGame', () => {
     ])
     const byId = Object.fromEntries(results.map(r => [r.playerId, r]))
 
-    // a e b: reale 1 (vincitori), atteso vs media (1000+1000)/2 → 0.5 → +24
-    expect(byId.a.newRating).toBe(1024)
-    expect(byId.b.newRating).toBe(1024)
+    // Un avversario superato e uno pari: risultato 0.75 → K=48: +12.
+    expect(byId.a.newRating).toBe(1012)
+    expect(byId.b.newRating).toBe(1012)
     // c: posizione compattata a 3 di 3 → reale 0 → −24
     expect(byId.c.newRating).toBe(976)
   })

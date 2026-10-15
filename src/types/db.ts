@@ -132,6 +132,8 @@ export type Database = {
       }
       games: {
         Row: {
+          lower_score_wins: boolean
+          shared_score_positions: boolean
           bga_id: string | null
           created_at: string | null
           id: string
@@ -141,6 +143,8 @@ export type Database = {
           name: string
         }
         Insert: {
+          lower_score_wins?: boolean
+          shared_score_positions?: boolean
           bga_id?: string | null
           created_at?: string | null
           id?: string
@@ -150,6 +154,8 @@ export type Database = {
           name: string
         }
         Update: {
+          lower_score_wins?: boolean
+          shared_score_positions?: boolean
           bga_id?: string | null
           created_at?: string | null
           id?: string
@@ -504,6 +510,18 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      update_play_positions: {
+        Args: { p_positions: Json }
+        Returns: number
+      }
+      get_elo_source_v2: {
+        Args: never
+        Returns: Json
+      }
+      publish_elo_rules_v2: {
+        Args: { p_publication: Json }
+        Returns: Json
       }
     }
     Enums: {

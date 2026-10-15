@@ -7,9 +7,9 @@ import type { EloPublication, EloSourceSnapshot } from './publication'
 const uuid = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`
 const source = (revision = '4'): EloSourceSnapshot => ({ scopeId: 'global', sourceRevision: revision,
   plays: [{ id: uuid(1), game_id: uuid(2), played_at: '2026-10-15', play_scores: [
-    { player_id: uuid(3), score: null, winner: false, position: null },
-    { player_id: uuid(4), score: 8, winner: false, position: 1 },
-    { player_id: uuid(5), score: null, winner: true, position: 2 },
+    { id: uuid(13), player_id: uuid(3), score: null, winner: false, position: 3 },
+    { id: uuid(14), player_id: uuid(4), score: 8, winner: false, position: 2 },
+    { id: uuid(15), player_id: uuid(5), score: null, winner: true, position: 1 },
   ] }] })
 const ok = (data: unknown): EloWorkerRpcResult => ({ data, error: null, status: 200 })
 function server() {
@@ -28,12 +28,12 @@ function server() {
     sent.push(structuredClone(publication))
     const replayed = receipts.has(publication.publicationId)
     if (!replayed) { receipts.set(publication.publicationId, publication); head = publication }
-    return ok({ publicationId: publication.publicationId, scopeId: 'global', sourceRevision: publication.sourceRevision, replayed })
+    return ok({ publicationId: publication.publicationId, scopeId: 'global', sourceRevision: publication.sourceRevision, replayed, mirrored: true })
   }
   const rpc: EloWorkerRpc = async (name, args) => {
     calls.push(name)
     if (name === 'get_elo_publication_v1') return ok(read())
-    if (name === 'get_elo_source_v1') return ok(source(revision))
+    if (name === 'get_elo_source_v2') return ok(source(revision))
     return publish(args!.p_publication as EloPublication)
   }
   return { rpc, read, publish, calls, sent, receipts, nextId: () => uuid(sequence++),
@@ -42,11 +42,32 @@ function server() {
 }
 
 describe('global ELO worker', () => {
+  it('rereads the source revision after correcting positions through the restricted RPC', async () => {
+    const test = server()
+    let stale = true
+    const rpc: EloWorkerRpc = async (name, args) => {
+      if (name === 'get_elo_source_v2' && stale) {
+        const snapshot = source()
+        snapshot.plays[0].play_scores![2].position = 2
+        return ok(snapshot)
+      }
+      if (name === 'update_play_positions') {
+        expect(args).toEqual({ p_positions: [{ id: uuid(15), position: 1 }] })
+        stale = false
+        test.advance()
+        return ok(1)
+      }
+      return test.rpc(name, args)
+    }
+    expect(await runEloWorker(rpc, { newPublicationId: test.nextId }))
+      .toMatchObject({ status: 'published', attempts: 2, sourceRevision: '5' })
+    expect(test.sent[0].sourceRevision).toBe('5')
+  })
   it('publishes one complete global generation with the unchanged null-score core and exact revision', async () => {
     const test = server()
     const result = await runEloWorker(test.rpc, { newPublicationId: test.nextId })
     expect(result).toMatchObject({ status: 'published', attempts: 1, sourceRevision: '4', processedPlays: 1 })
-    expect(test.calls).toEqual(['get_elo_publication_v1', 'get_elo_source_v1', 'publish_elo_v1', 'get_elo_publication_v1'])
+    expect(test.calls).toEqual(['get_elo_publication_v1', 'get_elo_source_v2', 'publish_elo_rules_v2', 'get_elo_publication_v1'])
     expect(test.sent[0]).toEqual(buildEloPublication(source(), uuid(100)))
   })
   it('skips current data without snapshot, calculation or write', async () => {
@@ -58,7 +79,7 @@ describe('global ELO worker', () => {
     const test = server(); let lost = true
     const rpc: EloWorkerRpc = async (name, args) => {
       const result = await test.rpc(name, args)
-      if (name === 'publish_elo_v1' && lost) { lost = false; throw new TypeError('fetch failed') }
+      if (name === 'publish_elo_rules_v2' && lost) { lost = false; throw new TypeError('fetch failed') }
       return result
     }
     expect(await runEloWorker(rpc, { newPublicationId: test.nextId })).toMatchObject({ status: 'published' })
@@ -69,7 +90,7 @@ describe('global ELO worker', () => {
   it('takes a fresh snapshot and UUID on source CAS conflict, never resending stale content', async () => {
     const test = server(); let drift = true
     const rpc: EloWorkerRpc = async (name, args) => {
-      if (name === 'publish_elo_v1' && drift) {
+      if (name === 'publish_elo_rules_v2' && drift) {
         drift = false; test.advance()
         return { data: null, error: { code: '40001', message: 'changed' }, status: 500 }
       }
@@ -82,7 +103,7 @@ describe('global ELO worker', () => {
     const test = server(); let drift = true
     const rpc: EloWorkerRpc = async (name, args) => {
       const result = await test.rpc(name, args)
-      if (name === 'publish_elo_v1' && drift) { drift = false; test.advance() }
+      if (name === 'publish_elo_rules_v2' && drift) { drift = false; test.advance() }
       return result
     }
     expect(await runEloWorker(rpc, { newPublicationId: test.nextId })).toMatchObject({ status: 'published', attempts: 2, sourceRevision: '5' })
@@ -90,10 +111,25 @@ describe('global ELO worker', () => {
     expect(test.sent[0].sourceRevision).toBe('4')
     expect(test.sent[1].sourceRevision).toBe('5')
   })
+  it('takes a fresh snapshot when a replay was not mirrored after a source edit', async () => {
+    const test = server()
+    let drift = true
+    const rpc: EloWorkerRpc = async (name, args) => {
+      const response = await test.rpc(name, args)
+      if (name === 'publish_elo_rules_v2' && drift) {
+        drift = false
+        test.advance()
+        return ok({ ...(response.data as Record<string, unknown>), mirrored: false })
+      }
+      return response
+    }
+    expect(await runEloWorker(rpc, { newPublicationId: test.nextId }))
+      .toMatchObject({ status: 'published', sourceRevision: '5' })
+  })
   it('returns pending after bounded continuous source edits, with no partial totals', async () => {
     const test = server(); let writes = 0
     const rpc: EloWorkerRpc = async (name, args) => {
-      if (name === 'publish_elo_v1') { writes++; test.advance(); return { data: null, error: { code: '40001', message: 'changed' } } }
+      if (name === 'publish_elo_rules_v2') { writes++; test.advance(); return { data: null, error: { code: '40001', message: 'changed' } } }
       return test.rpc(name, args)
     }
     expect(await runEloWorker(rpc, { maxSnapshots: 2, newPublicationId: test.nextId })).toMatchObject({ status: 'pending', attempts: 2, processedPlays: null })
@@ -103,7 +139,7 @@ describe('global ELO worker', () => {
     for (const code of ['42501', 'PT409', '22023']) {
       const test = server(); let writes = 0
       const rpc: EloWorkerRpc = async (name, args) => {
-        if (name === 'publish_elo_v1') { writes++; return { data: null, error: { code, message: 'SECRET diagnostic' }, status: 400 } }
+        if (name === 'publish_elo_rules_v2') { writes++; return { data: null, error: { code, message: 'SECRET diagnostic' }, status: 400 } }
         return test.rpc(name, args)
       }
       await expect(runEloWorker(rpc, { newPublicationId: test.nextId })).rejects.toThrow(`ELO RPC failed (${code})`)
@@ -113,7 +149,7 @@ describe('global ELO worker', () => {
   it('bounds unknown publish outcomes and preserves one request body across all attempts', async () => {
     const test = server(); const bodies: unknown[] = []
     const rpc: EloWorkerRpc = async (name, args) => {
-      if (name === 'publish_elo_v1') { bodies.push(args!.p_publication); return { data: null, error: { message: 'fetch failed' }, status: 0 } }
+      if (name === 'publish_elo_rules_v2') { bodies.push(args!.p_publication); return { data: null, error: { message: 'fetch failed' }, status: 0 } }
       return test.rpc(name, args)
     }
     await expect(runEloWorker(rpc, { newPublicationId: test.nextId })).rejects.toThrow('ELO RPC failed')
@@ -122,7 +158,7 @@ describe('global ELO worker', () => {
   })
   it('rejects malformed source/order before publishing anything', async () => {
     const test = server()
-    const rpc: EloWorkerRpc = async (name, args) => name === 'get_elo_source_v1'
+    const rpc: EloWorkerRpc = async (name, args) => name === 'get_elo_source_v2'
       ? ok({ ...source(), scopeId: uuid(7) }) : test.rpc(name, args)
     await expect(runEloWorker(rpc)).rejects.toThrow('global snapshot')
     expect(test.sent).toHaveLength(0)
@@ -130,7 +166,7 @@ describe('global ELO worker', () => {
   it('rejects malformed acknowledgement without blindly retrying it', async () => {
     const test = server(); let writes = 0
     const rpc: EloWorkerRpc = async (name, args) => {
-      if (name === 'publish_elo_v1') { writes++; return ok({ replayed: false }) }
+      if (name === 'publish_elo_rules_v2') { writes++; return ok({ replayed: false }) }
       return test.rpc(name, args)
     }
     await expect(runEloWorker(rpc, { newPublicationId: test.nextId })).rejects.toThrow('receipt')
@@ -139,7 +175,7 @@ describe('global ELO worker', () => {
   it('rejects malformed read generations and missing ordinal error without a legacy fallback', async () => {
     const test = server()
     await expect(runEloWorker(async () => ok({ ...test.read(), status: 'current' }))).rejects.toThrow('read response')
-    await expect(runEloWorker(async (name, args) => name === 'get_elo_source_v1'
+    await expect(runEloWorker(async (name, args) => name === 'get_elo_source_v2'
       ? { data: null, error: { code: '22023', message: 'order missing' } } : test.rpc(name, args))).rejects.toThrow('22023')
     expect(test.sent).toHaveLength(0)
   })

@@ -5,6 +5,9 @@ import { supabase } from '../lib/supabase'
 import { Save, Plus, Search, X, Gamepad2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { listGames, createGame } from '../services/games'
+import { GameRulesFields } from '../components/GameRulesFields'
+import { defaultGameRuleConfig } from '../utils/elo/gameRules'
+import type { GameRuleConfig } from '../utils/elo/gameRules'
 import { listUserPlayers, createPlayer } from '../services/players'
 import { uploadGameImage, compressImage } from '../utils/imageUpload'
 import { XMLParser } from 'fast-xml-parser'
@@ -13,6 +16,7 @@ import { usePlayWrites } from '../hooks/usePlayWrites'
 import { PlayWriteStatus } from '../components/PlayWriteStatus'
 import { playFormPayload } from '../services/playFormPayload'
 import { preparePlaySave } from '../services/playSaveRequests'
+import { MAX_PLAY_DURATION_MINUTES } from '../utils/playDuration'
 
 interface TempPlayer {
   id: string
@@ -37,7 +41,7 @@ interface AddPlayFormData {
   teamWon: boolean | null
 }
 
-interface NewGameForm {
+interface NewGameForm extends GameRuleConfig {
   name: string
   minPlayers: string
   maxPlayers: string
@@ -76,6 +80,7 @@ const AddPlayForm = () => {
   const [quickPlayerName, setQuickPlayerName] = useState('')
   const [showAddGame, setShowAddGame] = useState<boolean>(false)
   const [newGame, setNewGame] = useState<NewGameForm>({
+    ...defaultGameRuleConfig,
     name: '',
     minPlayers: '',
     maxPlayers: '',
@@ -253,7 +258,8 @@ const AddPlayForm = () => {
       }
 
       const data = await createGame(supabase, {
-        user_id: user!.id,
+        lower_score_wins: newGame.lower_score_wins,
+        shared_score_positions: newGame.shared_score_positions,
         name: newGame.name,
         min_players: newGame.minPlayers ? parseInt(newGame.minPlayers) : null,
         max_players: newGame.maxPlayers ? parseInt(newGame.maxPlayers) : null,
@@ -267,7 +273,7 @@ const AddPlayForm = () => {
       }))
 
       setGames([...games, data])
-      setNewGame({ name: '', minPlayers: '', maxPlayers: '', imageUrl: '' })
+      setNewGame({ ...defaultGameRuleConfig, name: '', minPlayers: '', maxPlayers: '', imageUrl: '' })
       setImageFile(null)
       setImagePreview(null)
       setShowAddGame(false)
@@ -541,6 +547,7 @@ const AddPlayForm = () => {
                     className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
+                <GameRulesFields value={newGame} onChange={rules => setNewGame(prev => ({ ...prev, ...rules }))} />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-slate-300 mb-1">Min Giocatori</label>
@@ -659,11 +666,16 @@ const AddPlayForm = () => {
           </div>
 
           <div className="bg-slate-800 rounded-xl p-6 shadow-md">
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Durata (minuti)
+            <label htmlFor="durationMinutes" className="block text-sm font-medium text-slate-300 mb-2">
+              Durata (minuti) *
             </label>
             <input
+              id="durationMinutes"
               type="number"
+              required
+              min={1}
+              max={MAX_PLAY_DURATION_MINUTES}
+              step={1}
               value={formData.durationMinutes}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, durationMinutes: e.target.value }))}
               placeholder="es. 60"
@@ -810,6 +822,7 @@ const AddPlayForm = () => {
           {/* Indicatore Vincitori */}
           {!formData.isCooperative && formData.players.length > 0 && (() => {
             const winnersCount = formData.players.filter(playerId => playerScores[playerId]?.winner).length
+            if (formData.isCooperative) return null
             if (winnersCount === 0) return null
             if (winnersCount === 1) {
               return (

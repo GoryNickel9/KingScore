@@ -66,16 +66,14 @@ describe('assignPositions', () => {
     expect(result.every(p => p.position === 2)).toBe(true)
   })
 
-  it('punteggi nulli non riordinano: ordine di inserimento preservato (come il core ELO)', () => {
+  it('punteggi mancanti in fondo, senza attribuire loro una parità', () => {
     const result = assignPositions([
       { playerId: 'a', winner: false, score: null },
       { playerId: 'b', winner: false, score: null },
       { playerId: 'c', winner: false, score: 5 },
     ])
 
-    // null vs numero → comparatore 0 (elementi "uguali", sort stabile):
-    // stessa semantica del comparatore storico di simulation.ts
-    expect(result.map(p => p.playerId)).toEqual(['a', 'b', 'c'])
+    expect(result.map(p => p.playerId)).toEqual(['c', 'a', 'b'])
     expect(result.map(p => p.position)).toEqual([1, 2, 3])
   })
 

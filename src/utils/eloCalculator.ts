@@ -220,6 +220,7 @@ export async function getELOHistoryForGame(supabase: SupabaseClient<Database>, g
         .from('plays')
         .select(`
           *,
+          games(lower_score_wins, shared_score_positions),
           play_scores(
             *,
             players(*)
@@ -325,12 +326,13 @@ export async function getGeneralELOHistory(supabase: SupabaseClient<Database>, u
     // ─────────────────────────────────────────────────────────────────────────
 
     // Cache miss: lettura di tutte le partite (paginata, stesso cap PostgREST;
-    // niente join games(*), mai usato dalla simulazione) + core puro condiviso
+    // include le regole del gioco usate dalla simulazione) + core puro condiviso
     const plays = await fetchAllPages((from, to) => {
       let query = supabase
         .from('plays')
         .select(`
           *,
+          games(lower_score_wins, shared_score_positions),
           play_scores(
             *,
             players(*)

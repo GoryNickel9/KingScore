@@ -1,4 +1,6 @@
+import { isVisibleInRankings } from '../utils/rankingVisibility'
 import { useEffect, useState } from 'react'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { TrendingUp, Trophy, Gamepad2, Star, ChevronDown, ChevronUp } from 'lucide-react'
@@ -54,6 +56,7 @@ interface StatsState {
 }
 
 interface EloHistoryEntry {
+  playerId: string
   playId?: string
   playerName: string
   rating: number
@@ -84,6 +87,7 @@ const Stats = () => {
   const [loadingEloHistory, setLoadingEloHistory] = useState<Record<string, boolean>>({})
   const [generalEloHistory, setGeneralEloHistory] = useState<EloHistoryEntry[]>([])
   const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState<boolean>(false)
+  const [hiddenPlayerIds, setHiddenPlayerIds] = useState<Set<string>>(new Set())
   const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
   const [publication, setPublication] = useState<EloRead | null>(null)
   const [publicationFailed, setPublicationFailed] = useState(false)
@@ -167,6 +171,12 @@ const Stats = () => {
         return
       }
 
+      const hiddenIds = new Set(playsData.flatMap(play =>
+        (play.play_scores ?? []).filter(score => !isVisibleInRankings(score.players?.name))
+          .map(score => score.player_id ?? '')
+      ))
+      setHiddenPlayerIds(hiddenIds)
+
       const plays = playsData
 
       // Calculate Win Rate by Game (Top 10) - only for logged in users
@@ -183,7 +193,7 @@ const Stats = () => {
           }
 
           gameWinRates[gameId].total++
-          if (myScore?.winner) {
+          if (getPlayerOutcome(myScore, play.play_scores, play) === 'win') {
             gameWinRates[gameId].wins++
           }
         })
@@ -255,7 +265,7 @@ const Stats = () => {
           ? parseFloat((game.allScores.reduce((sum, score) => sum + score, 0) / game.allScores.length).toFixed(2))
           : '0.00'
 
-        const playersWithAvgScore: PlayerStats[] = Object.values(game.players).map(player => ({
+        const playersWithAvgScore: PlayerStats[] = Object.values(game.players).filter(player => !hiddenIds.has(player.playerId)).map(player => ({
           ...player,
           avgScore: player.playCount > 0 ? parseFloat((player.totalScore / player.playCount).toFixed(2)) : '0.00'
         })).sort((a, b) => (b.avgScore as number) - (a.avgScore as number))
@@ -334,7 +344,8 @@ const Stats = () => {
     const uniquePlayers = new Set<string>()
 
     // Ordina per data
-    const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    const sorted = history.filter(entry => !hiddenPlayerIds.has(entry.playerId) && isVisibleInRankings(entry.playerName))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Raggruppa per play_id per mostrare un punto per ogni partita
     // (evita di collassare più partite dello stesso giorno in un singolo punto)

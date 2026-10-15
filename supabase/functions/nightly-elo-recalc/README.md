@@ -1,15 +1,17 @@
 # nightly-elo-recalc
 
-Job notturno che ricalcola automaticamente tutti i rating ELO (per gioco, Generali e cache `elo_history`) una volta al giorno a mezzanotte, ora italiana. Piano completo in `docs/automazione-aggiornamento-elo-notturno.md`.
+Worker globale ELO. In produzione il job `kingscore-elo-v1-refresh` controlla ogni minuto se serve una nuova pubblicazione e in quel caso richiama la funzione. Il nome della funzione è conservato per compatibilità con la pianificazione esistente.
 
 ## Come funziona
 
-- Per ogni utente con almeno una partita: unica lettura bulk → simulazione in memoria → scritture massive (~6-10 richieste totali per utente).
-- L'algoritmo è **condiviso con il frontend**: importa `src/utils/elo/recalc.ts`, che a sua volta usa il core puro `src/utils/elo/simulation.ts`. Nessuna duplicazione della logica di calcolo.
-- Usa la **service role key** (env nativa dell'Edge runtime) che bypassa RLS: filtra sempre per `user_id`.
+- Legge lo snapshot globale e la sua revisione tramite `get_elo_source_v2`, conservando l'ordine persistente dei partecipanti.
+- `src/utils/elo/worker.ts` usa lo stesso motore matematico del frontend, `simulation.ts`, con regole persistenti ed esiti V/P/S condivisi.
+- Usa la service role per le RPC ristrette. Non scrive direttamente nelle tabelle dei rating; `publish_elo_rules_v2` allinea pubblicazione, rating, generali e cache in una transazione.
 - Ogni esecuzione è registrata in `elo_recalc_runs` (tabella creata dalla migrazione `add_elo_recalc_runs.sql`), che fa anche da guardia anti-sovrapposizione.
 - Accetta solo JWT con `role = service_role`: le invocazioni pianificate dalla dashboard usano proprio quel token; l'anon key viene rifiutata con 403.
-- Gli errori sono isolati per utente: se il ricalcolo di un utente fallisce, il job continua con i successivi e l'esecuzione viene registrata con status `succeeded_with_errors` (lista `failures` nel summary). `failed` solo se nessun utente è stato ricalcolato.
+- Un errore interrompe la pubblicazione globale ed è registrato come `failed`. Il worker rilegge lo snapshot quando cambiano le posizioni o la revisione, con un massimo di tre tentativi.
+
+La specifica corrente, le dipendenze di schema e le verifiche sono in `docs/game-ranking-rules.md`. Le istruzioni di pianificazione sotto descrivono la configurazione notturna storica e non vanno applicate al job di produzione già esistente.
 
 ## Prerequisiti (una volta sola)
 

@@ -30,12 +30,13 @@ export async function listGamesWithoutImages(supabase: SupabaseClient<Database>)
 }
 
 export interface CreateGameInput {
-  user_id: string
   name: string
   bga_id?: string | null
   min_players?: number | null
   max_players?: number | null
   image_url?: string | null
+  lower_score_wins?: boolean
+  shared_score_positions?: boolean
 }
 
 export async function createGame(supabase: SupabaseClient<Database>, input: CreateGameInput): Promise<DbGame> {

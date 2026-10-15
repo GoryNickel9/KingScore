@@ -112,6 +112,7 @@ async function fetchAllPlaysForSimulation(
       .from('plays')
       .select(`
         *,
+        games(lower_score_wins, shared_score_positions),
         play_scores(
           *,
           players(*)

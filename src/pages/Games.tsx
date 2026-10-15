@@ -2,20 +2,25 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2 } from 'lucide-react'
+import { Search, Gamepad2, TrendingUp, Calendar, Plus, X, Trash2, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getErrorMessage } from '../utils/errors'
 import { listGames } from '../services/games'
 import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 import type { DbGame } from '../types/rows'
+import { GameRulesFields } from '../components/GameRulesFields'
+import { defaultGameRuleConfig } from '../utils/elo/gameRules'
+import type { GameRuleConfig } from '../utils/elo/gameRules'
+import { performFullRecalc } from '../utils/elo/recalc'
+import { fetchAllPages } from '../utils/pagination'
 
 interface DbGameWithStats extends DbGame {
   playCount: number
   lastPlayed: string | null
 }
 
-interface NewGameForm {
+interface NewGameForm extends GameRuleConfig {
   name: string
   min_players: string
   max_players: string
@@ -31,7 +36,10 @@ const Games = () => {
   const [sortBy, setSortBy] = useState<string>('name')
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
+  const [editingGame, setEditingGame] = useState<DbGameWithStats | null>(null)
+  const [saving, setSaving] = useState(false)
   const [newGame, setNewGame] = useState<NewGameForm>({
+    ...defaultGameRuleConfig,
     name: '',
     min_players: '',
     max_players: '',
@@ -149,21 +157,37 @@ const Games = () => {
       return
     }
 
+    setSaving(true)
+    let rulesSaved = false
     try {
-      const { error } = await supabase
-        .from('games')
-        .insert({
+      const changes = {
           name: newGame.name,
           min_players: newGame.min_players ? parseInt(newGame.min_players) : null,
           max_players: newGame.max_players ? parseInt(newGame.max_players) : null,
-          image_url: newGame.image_url || null
-        })
+          image_url: newGame.image_url || null,
+          lower_score_wins: newGame.lower_score_wins,
+          shared_score_positions: newGame.shared_score_positions,
+      }
+      const { data: saved, error } = editingGame
+        ? await supabase.from('games').update(changes).eq('id', editingGame.id).select('id').single()
+        : await supabase.from('games').insert(changes).select('id').single()
 
       if (error) throw error
+      if (!saved) throw new Error('Gioco non salvato: controlla i permessi')
+      rulesSaved = true
+      if (editingGame && (editingGame.lower_score_wins !== changes.lower_score_wins ||
+        editingGame.shared_score_positions !== changes.shared_score_positions)) {
+        const plays = await fetchAllPages((from, to) => supabase.from('plays')
+          .select('id,user_id', { count: 'exact' }).eq('game_id', editingGame.id).order('id').range(from, to))
+        const owners = new Set(plays.map(p => p.user_id).filter((id): id is string => id !== null))
+        for (const owner of owners) await performFullRecalc(supabase, owner)
+      }
 
-      toast.success('Gioco aggiunto con successo!')
+      toast.success(editingGame ? 'Gioco aggiornato; classifiche ed ELO allineati' : 'Gioco aggiunto con successo!')
       setIsModalOpen(false)
+      setEditingGame(null)
       setNewGame({
+        ...defaultGameRuleConfig,
         name: '',
         min_players: '',
         max_players: '',
@@ -172,7 +196,11 @@ const Games = () => {
       await fetchGames()
     } catch (error) {
       console.error('Error creating game:', error)
-      toast.error('Errore durante la creazione del gioco')
+      toast.error(rulesSaved
+        ? 'Gioco salvato, ma ricalcolo non completato. Riprova da Rating ELO.'
+        : `Gioco non salvato: ${getErrorMessage(error)}`)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -281,7 +309,11 @@ const Games = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setEditingGame(null)
+              setNewGame({ ...defaultGameRuleConfig, name: '', min_players: '', max_players: '', image_url: '' })
+              setIsModalOpen(true)
+            }}
             className="flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
           >
             <Plus className="w-5 h-5 mr-2" />
@@ -343,6 +375,19 @@ const Games = () => {
               className="bg-slate-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition group relative"
             >
               {/* Delete Button */}
+              {user && (
+                <button type="button" aria-label={`Modifica ${game.name}`}
+                  onClick={() => {
+                    setEditingGame(game)
+                    setNewGame({ name: game.name, min_players: game.min_players?.toString() ?? '',
+                      max_players: game.max_players?.toString() ?? '', image_url: game.image_url ?? '',
+                      lower_score_wins: game.lower_score_wins, shared_score_positions: game.shared_score_positions })
+                    setIsModalOpen(true)
+                  }}
+                  className="absolute top-2 left-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg bg-slate-700 text-white shadow-lg hover:bg-slate-600 focus-visible:ring-2 focus-visible:ring-emerald-500">
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
               {user && (
                 <button
                   onClick={(e: React.MouseEvent) => {
@@ -427,10 +472,11 @@ const Games = () => {
       {/* Modal per aggiungere nuovo gioco */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md">
+          <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <h2 className="text-xl font-bold text-white">Aggiungi Nuovo Gioco</h2>
+              <h2 className="text-xl font-bold text-white">{editingGame ? 'Modifica Gioco' : 'Aggiungi Nuovo Gioco'}</h2>
               <button
+                disabled={saving}
                 onClick={() => setIsModalOpen(false)}
                 className="text-slate-400 hover:text-white transition"
               >
@@ -439,6 +485,8 @@ const Games = () => {
             </div>
 
             <form onSubmit={handleCreateGame} className="p-6 space-y-4">
+              <GameRulesFields value={newGame} disabled={saving} onChange={rules => setNewGame(prev => ({ ...prev, ...rules }))} />
+              {editingGame && <p className="text-sm text-slate-400">Se cambi le regole, il salvataggio ricalcola posizioni, ELO e cache delle partite registrate.</p>}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Nome del gioco *
@@ -499,6 +547,7 @@ const Games = () => {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 px-4 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition"
                 >
@@ -506,9 +555,10 @@ const Games = () => {
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition"
                 >
-                  Aggiungi Gioco
+                  {saving ? 'Salvataggio e ricalcolo…' : editingGame ? 'Salva e ricalcola' : 'Aggiungi Gioco'}
                 </button>
               </div>
             </form>

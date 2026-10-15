@@ -14,6 +14,8 @@ import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { calculateELOForGame, simulateAllPlays } from '../src/utils/elo/simulation'
 import type { SimulationPlay } from '../src/utils/elo/simulation'
+import { getGameRankingRules } from '../src/utils/elo/gameRules'
+import { fetchAllPages } from '../src/utils/pagination'
 
 config({ path: '.env.local' })
 
@@ -101,7 +103,7 @@ function oldGameHistory(plays: SimulationPlay[]): OldHistoryEntry[] {
       }
     })
 
-    const eloResults = calculateELOForGame(playersData)
+    const eloResults = calculateELOForGame(playersData, { pairwiseActualScore: false })
 
     eloResults.forEach((result) => {
       if (playerRatings[result.playerId]) {
@@ -187,7 +189,7 @@ function oldGeneralHistory(plays: SimulationPlay[]): {
       }
     })
 
-    const eloResults = calculateELOForGame(playersData)
+    const eloResults = calculateELOForGame(playersData, { pairwiseActualScore: false })
 
     const playersInPlay: string[] = play.play_scores.map((score) => score.player_id)
     const previousGeneralRatings: Record<string, number> = {}
@@ -272,19 +274,28 @@ async function main(): Promise<void> {
   }
 
   const supabase = createClient(url, key)
-  const { data, error } = await supabase
+  const data = await fetchAllPages((from, to) => supabase
     .from('plays')
-    .select('*, play_scores(*, players(*))')
+    .select('*, games(lower_score_wins,shared_score_positions), play_scores(*, players(*))', { count: 'exact' })
     .order('played_at', { ascending: true })
-    .limit(10000)
+    .order('id', { ascending: true })
+    .range(from, to))
 
-  if (error) {
-    console.error('Lettura plays fallita:', error.message)
-    process.exit(2)
+  // La parità legacy riguarda solo giochi senza pareggi o punteggi mancanti:
+  // gli altri storici cambiano intenzionalmente con le nuove regole.
+  const allPlays = data as unknown as SimulationPlay[]
+  const changedGames = new Set(allPlays.filter(play => {
+    const scores = play.play_scores ?? []
+    const values = scores.filter(s => !s.winner).map(s => s.score)
+    return getGameRankingRules(play.game_id, play.games).lowerScoreWins || play.is_cooperative ||
+      scores.filter(s => s.winner).length > 1 || scores.some(s => s.score == null) || new Set(values).size !== values.length
+  }).map(play => play.game_id))
+  const plays = allPlays.filter(play => !changedGames.has(play.game_id))
+  console.log(`Partite lette: ${allPlays.length}; confronto legacy senza correzioni: ${plays.length}; escluse: ${allPlays.length - plays.length}`)
+  if (plays.length === 0) {
+    console.log('Nessuno storico invariato disponibile per il confronto legacy; usare i test delle nuove regole.')
+    return
   }
-
-  const plays = (data ?? []) as unknown as SimulationPlay[]
-  console.log(`Partite totali lette: ${plays.length}`)
 
   let mismatches = 0
   const reportDiff = (context: string, detail: string) => {

@@ -11,13 +11,16 @@ Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si 
 ## 🎲 Caratteristiche
 
 - **Autenticazione multi-utente**: Ogni utente ha il proprio storico privato
-- **Inserimento manuale**: Aggiungi partite manualmente
+- **Inserimento manuale**: Aggiungi partite manualmente. Nei moduli di creazione e modifica la durata è obbligatoria: inserisci un numero intero di minuti maggiore di zero.
 - **Dettagli partita**: Il luogo non compare nei moduli, nello storico o nei dettagli. I valori già salvati restano nel database e vengono conservati durante la modifica di una partita.
 - **Importazione BGA**: Importa partite da Board Game Arena
 - **Ricerca giochi BGA**: Cerca giochi su Board Game Arena
 - **Statistiche avanzate**: H-Index, streak, win rate, heatmap
 - **Gestione giocatori**: Crea e gestisci i tuoi giocatori
+- **Classifiche**: Player 1 è nascosto da classifiche e grafici comparativi. Partite, risultati, numero di partecipanti e calcoli ELO restano invariati; il giocatore resta consultabile nello storico e nella sua scheda. Il filtro usa il nome registrato, anche se è presente un alias.
 - **Libreria giochi**: Organizza i tuoi giochi preferiti
+- **Regole per gioco**: Configura se vince il punteggio più basso e se i punteggi uguali condividono la posizione, sia creando sia modificando un gioco.
+- **Pareggi**: I primi posti condivisi contano come P, i piazzamenti condivisi fra sconfitti come S. L'ELO tratta correttamente i confronti pari a qualsiasi posizione.
 
 ## 🚀 Quick Start
 
@@ -91,6 +94,8 @@ Per maggiori dettagli, consulta [`EDGE_FUNCTIONS_DEPLOY.md`](EDGE_FUNCTIONS_DEPL
 
 ## 📚 Documentazione
 
+- [`docs/game-ranking-rules.md`](docs/game-ranking-rules.md): Configurazione dei giochi, V/P/S, formula ELO e pubblicazione di produzione.
+- [`docs/pili-pili-ranking.md`](docs/pili-pili-ranking.md): Regole di classifica e pareggi ELO di Pili Pili; confronto storico in sola lettura.
 - [`SETUP.md`](SETUP.md): Guida completa per la configurazione
 - [`DEBUG.md`](DEBUG.md): Guida per il debug
 - [`EDGE_FUNCTIONS_DEPLOY.md`](EDGE_FUNCTIONS_DEPLOY.md): Guida per il deploy delle Edge Functions

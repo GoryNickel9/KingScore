@@ -21,7 +21,7 @@ const snapshot = (plays = [play(1)]): EloSourceSnapshot => ({ scopeId: owner, so
 const build = (value = snapshot()) => buildEloPublication(value, publicationId)
 const legacy = (value: EloSourceSnapshot) => simulateAllPlays(value.plays as SimulationPlay[])
 
-describe('buildEloPublication legacy computation envelope', () => {
+describe('buildEloPublication rules-v2 computation envelope', () => {
   it('rejects noncanonical UUIDs instead of publishing a response rejected by readers', () => {
     const uppercase = 'AAAAAAAA-0000-0000-0000-000000000000'
     expect(() => build({ ...snapshot(), scopeId: uppercase })).toThrow('scopeId')
@@ -55,7 +55,7 @@ describe('buildEloPublication legacy computation envelope', () => {
     expect(current[a].rating).toBe(Math.round(previous[a].rating + k * ((priorGames % 2 === 0 ? 1 : 0) - expectedA)))
   })
 
-  it('preserves null-score ordering, equal-score legacy rankings, multiwinner and draw semantics', () => {
+  it('applies v2 null-score ordering, shared positions, multiwinner and draw semantics', () => {
     const histories = [
       [score(a), score(b), score(c, false, 5)],
       [score(a, false, 5), score(b, false, 5), score(c, false, 5)],
@@ -63,9 +63,9 @@ describe('buildEloPublication legacy computation envelope', () => {
       [{ ...score(a), draw: true }, { ...score(b), draw: true }],
     ]
     const results = histories.map(scores => build(snapshot([play(1, scores)])).result)
-    expect(results[0].gameHistory.map(point => [point.playerId, point.rating])).toEqual([[a, 1024], [b, 1000], [c, 976]])
-    expect(results[1].gameHistory.map(point => point.rating)).toEqual([1024, 1000, 976])
-    expect(results[2].gameHistory.map(point => point.rating)).toEqual([1024, 1024, 976])
+    expect(results[0].gameHistory.map(point => [point.playerId, point.rating])).toEqual([[c, 1024], [a, 1000], [b, 976]])
+    expect(results[1].gameHistory.map(point => point.rating)).toEqual([1000, 1000, 1000])
+    expect(results[2].gameHistory.map(point => point.rating)).toEqual([1012, 1012, 976])
     expect(results[3].gameHistory.map(point => point.rating)).toEqual([1024, 976])
     expect(results[3].generalPlayers[a].draws).toBe(1)
     histories.forEach((scores, i) => expect(results[i]).toEqual(legacy(snapshot([play(1, scores)]))))

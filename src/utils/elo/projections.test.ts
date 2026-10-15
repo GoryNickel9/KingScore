@@ -40,7 +40,7 @@ describe('ELO generation projections', () => {
   })
   it.each(['missing', 'stale'] as const)('does not present %s as empty or trigger a calculation', status => {
     const read = decodeEloRead({ scopeId: 'global', status, sourceRevision: '3',
-      algorithm: status === 'missing' ? null : 'kingscore-elo-legacy-v1',
+      algorithm: status === 'missing' ? null : 'kingscore-elo-rules-v2',
       publishedRevision: status === 'missing' ? null : '2', publicationId: status === 'missing' ? null : id(99), result: null }, 'global')
     for (const view of [generalStandings(read), gameStandings(read, game), generalHistory(read), gameHistory(read, game)]) {
       expect(view.status).toBe(status)

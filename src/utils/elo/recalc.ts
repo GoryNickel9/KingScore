@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '../../types/db.ts'
 // Import con estensione .ts: richiesto da Deno (Edge Function), gestito da
 // Vite/tsc grazie ad allowImportingTsExtensions
 import { simulateAllPlays } from './simulation.ts'
 import type { SimulationPlay } from './simulation.ts'
 import { withRetry } from '../retry.ts'
 import { fetchAllPages } from '../pagination.ts'
+import { assignPositions } from './positions.ts'
 
 /**
  * Pipeline di ricalcolo completo ELO condivisa dal frontend (pulsante
@@ -114,7 +116,7 @@ async function upsertInBatches(
  * Idempotente: parte sempre dai dati raw (plays/play_scores) e ricostruisce
  * tutto; rieseguire produce lo stesso risultato.
  */
-export async function performFullRecalc(supabase: SupabaseClient, userId: string): Promise<RecalcSummary> {
+export async function performFullRecalc(supabase: SupabaseClient<Database>, userId: string): Promise<RecalcSummary> {
   const startedAt = Date.now()
 
   // ── 1. Lettura bulk di tutte le partite dell'utente ──────────────────────
@@ -124,7 +126,7 @@ export async function performFullRecalc(supabase: SupabaseClient, userId: string
   const plays = await fetchAllPages((from, to) =>
     supabase
       .from('plays')
-      .select('*, play_scores(*, players(*))', { count: 'exact' })
+      .select('*, games(lower_score_wins, shared_score_positions), play_scores(*, players(*))', { count: 'exact' })
       .eq('user_id', userId)
       .order('played_at', { ascending: true })
       .order('id', { ascending: true })
@@ -132,6 +134,15 @@ export async function performFullRecalc(supabase: SupabaseClient, userId: string
   )
 
   const sim = simulateAllPlays(plays as unknown as SimulationPlay[])
+  const changedPositions = plays.flatMap(play => assignPositions(play.play_scores ?? [], {
+    gameId: play.game_id, game: play.games,
+    cooperative: play.is_cooperative ?? false, teamWon: play.team_won,
+  }).filter(score => score.position !== play.play_scores?.find(s => s.id === score.id)?.position)
+    .map(score => ({ id: score.id, position: score.position })))
+  for (const batch of chunk(changedPositions, BATCH_SIZE)) {
+    const { error } = await supabase.rpc('update_play_positions', { p_positions: batch })
+    if (error) throw new Error(`[performFullRecalc] Aggiornamento posizioni fallito: ${error.message}`)
+  }
   // Una partita senza game_id contribuisce all'ELO Generale (come nel vecchio
   // algoritmo) ma non deve generare righe per gioco: game_id non è un UUID
   const isValidGameId = (id: string): boolean => Boolean(id) && id !== 'null'

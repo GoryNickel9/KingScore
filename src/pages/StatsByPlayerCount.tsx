@@ -1,4 +1,6 @@
+import { isVisibleInRankings } from '../utils/rankingVisibility'
 import { useEffect, useState } from 'react'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -59,6 +61,7 @@ interface StatsState {
 }
 
 interface EloHistoryEntry {
+  playerId: string
   playId?: string
   playerName: string
   rating: number
@@ -97,6 +100,7 @@ const StatsByPlayerCount = () => {
   const [loadingGeneralEloHistory, setLoadingGeneralEloHistory] = useState<boolean>(false)
   // Classifica visiva ELO Generale del bucket (stessi dati del grafico sopra)
   const [generalStandings, setGeneralStandings] = useState<PlayerCountGeneralStanding[]>([])
+  const [hiddenPlayerIds, setHiddenPlayerIds] = useState<Set<string>>(new Set())
   const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
   const [playerAvatarMap, setPlayerAvatarMap] = useState<Record<string, string | null>>({})
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null)
@@ -165,6 +169,12 @@ const StatsByPlayerCount = () => {
         matchesPlayerCount(play.play_scores?.length ?? 0, bucket)
       )
 
+      const hiddenIds = new Set(playsData.flatMap(play =>
+        (play.play_scores ?? []).filter(score => !isVisibleInRankings(score.players?.name))
+          .map(score => score.player_id ?? '')
+      ))
+      setHiddenPlayerIds(hiddenIds)
+
       if (plays.length === 0) {
         console.warn(`[StatsByPlayerCount] No plays found for bucket ${bucket}`)
         setStats({
@@ -200,7 +210,7 @@ const StatsByPlayerCount = () => {
           }
 
           gameWinRates[gameId].total++
-          if (myScore?.winner) {
+          if (getPlayerOutcome(myScore, play.play_scores, play) === 'win') {
             gameWinRates[gameId].wins++
           }
         })
@@ -272,7 +282,7 @@ const StatsByPlayerCount = () => {
           ? parseFloat((game.allScores.reduce((sum, score) => sum + score, 0) / game.allScores.length).toFixed(2))
           : '0.00'
 
-        const playersWithAvgScore: PlayerStats[] = Object.values(game.players).map(player => ({
+        const playersWithAvgScore: PlayerStats[] = Object.values(game.players).filter(player => !hiddenIds.has(player.playerId)).map(player => ({
           ...player,
           avgScore: player.playCount > 0 ? parseFloat((player.totalScore / player.playCount).toFixed(2)) : '0.00'
         })).sort((a, b) => (b.avgScore as number) - (a.avgScore as number))
@@ -353,7 +363,8 @@ const StatsByPlayerCount = () => {
     const uniquePlayers = new Set<string>()
 
     // Ordina per data
-    const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    const sorted = history.filter(entry => !hiddenPlayerIds.has(entry.playerId) && isVisibleInRankings(entry.playerName))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     // Raggruppa per play_id per mostrare un punto per ogni partita
     // (evita di collassare più partite dello stesso giorno in un singolo punto)
@@ -414,6 +425,10 @@ const StatsByPlayerCount = () => {
 
     return playerColors
   }
+
+  const visibleStandings = generalStandings.filter(standing =>
+    !hiddenPlayerIds.has(standing.playerId) && isVisibleInRankings(standing.playerName)
+  )
 
   // Helper classifica: stessi criteri visivi della pagina Rating ELO
   const getRatingColor = (rating: number): string => {
@@ -595,7 +610,7 @@ const StatsByPlayerCount = () => {
           </span>
         </div>
 
-        {generalStandings.length === 0 ? (
+        {visibleStandings.length === 0 ? (
           <div className="text-center py-12">
             <Star className="w-16 h-16 text-slate-600 mx-auto mb-4" />
             <p className="text-slate-400">Nessun ELO Generale disponibile</p>
@@ -605,7 +620,7 @@ const StatsByPlayerCount = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {generalStandings.map((standing, index) => {
+            {visibleStandings.map((standing, index) => {
               const isMyPlayer = standing.playerId === myPlayerId
               const badge = getRatingBadge(standing.rating)
               const winRate = getWinRate(standing.wins, standing.losses, standing.draws)

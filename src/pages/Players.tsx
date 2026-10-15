@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -8,6 +9,7 @@ import { uploadPlayerImage, deletePlayerImage, getPlayerImageUrl } from '../util
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import Spinner from '../components/Spinner'
 import type { DbPlayer } from '../types/rows'
+import { fetchAllPages } from '../utils/pagination'
 
 interface PlayerStats {
   totalPlays: number
@@ -60,15 +62,15 @@ const Players = () => {
         const stats: Record<string, PlayerStats> = {}
 
         if (playerIds.length > 0) {
-          const { data: allPlaysData } = await supabase
+          const allPlaysData = await fetchAllPages((from, to) => supabase
             .from('play_scores')
-            .select('player_id, winner')
-            .in('player_id', playerIds)
+            .select('id,player_id, winner, plays(is_cooperative,team_won,play_scores(winner))', { count: 'exact' })
+            .in('player_id', playerIds).order('id').range(from, to))
 
           for (const player of data) {
             const playerPlays = (allPlaysData || []).filter((s) => s.player_id === player.id)
             const totalPlays = playerPlays.length
-            const wins = playerPlays.filter((s) => s.winner).length
+            const wins = playerPlays.filter(s => getPlayerOutcome(s, s.plays?.play_scores, s.plays ?? {}) === 'win').length
             stats[player.id] = {
               totalPlays,
               winRate: totalPlays > 0 ? Math.round((wins / totalPlays) * 100) : 0

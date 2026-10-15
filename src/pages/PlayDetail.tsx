@@ -15,6 +15,8 @@ import type { PlayEditorSnapshot } from '../services/playEditorReader'
 import { atomicEloReadsEnabled, readGlobalElo, eloReadStatus } from '../utils/elo/readClient'
 import { gameHistory, generalHistory } from '../utils/elo/projections'
 import type { EloRead } from '../utils/elo/readModel'
+import { assignPositions } from '../utils/elo/positions'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 
 interface EloHistoryEntry {
   playId: string
@@ -355,19 +357,13 @@ const PlayDetailPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {play.play_scores
-                  .slice()
-                  .sort((a, b) => {
-                    if (a.winner) return -1
-                    if (b.winner) return 1
-                    if (a.score !== null && a.score !== undefined && b.score !== null && b.score !== undefined) {
-                      return b.score - a.score
-                    }
-                    return 0
-                  })
-                  .map((score, index) => {
-                    const winnersCount = play.play_scores?.filter(s => s.winner).length || 0
-                    const isTie = winnersCount > 1
+                {assignPositions(play.play_scores, {
+                  gameId: play.game_id,
+                  game: play.games,
+                  cooperative: play.is_cooperative ?? false,
+                  teamWon: play.team_won,
+                }).map((score) => {
+                    const isTie = getPlayerOutcome(score, play.play_scores, play) === 'draw'
                     return (
                       <tr
                         key={score.id}
@@ -377,12 +373,12 @@ const PlayDetailPage = () => {
                       >
                         <td className="py-3 px-4">
                           <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                            index === 0 ? 'bg-yellow-500 text-white' :
-                            index === 1 ? 'bg-slate-400 text-white' :
-                            index === 2 ? 'bg-orange-600 text-white' :
+                            score.position === 1 ? 'bg-yellow-500 text-white' :
+                            score.position === 2 ? 'bg-slate-400 text-white' :
+                            score.position === 3 ? 'bg-orange-600 text-white' :
                             'bg-slate-700 text-slate-300'
                           }`}>
-                            {index + 1}
+                            {score.position}
                           </span>
                         </td>
                         <td className="py-3 px-4">

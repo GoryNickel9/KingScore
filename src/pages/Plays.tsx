@@ -344,7 +344,7 @@ const Plays = () => {
                   const winners = play.play_scores?.filter(s => s.winner) || []
                   if (winners.length === 0) return null
                   
-                  if (winners.length === 1) {
+                  if (winners.length === 1 || play.is_cooperative) {
                     return (
                       <div className="flex-shrink-0">
                         <div className="bg-emerald-500/20 px-4 py-2 rounded-lg">

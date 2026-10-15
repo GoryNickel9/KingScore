@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -89,7 +90,7 @@ const PlayerDetail = () => {
       if (playScores) {
         const scores = playScores ?? []
         const totalPlays = scores.length
-        const wins = scores.filter(s => s.winner).length
+        const wins = scores.filter(s => getPlayerOutcome(s, s.plays?.play_scores, s.plays ?? {}) === 'win').length
 
         // Calculate win rate vs me
         let winsVsMe = 0
@@ -104,14 +105,14 @@ const PlayerDetail = () => {
               const myScore = play.play_scores.find(s => s.player_id === myPlayer.id)
               if (myScore) {
                 totalVsMe++
-                if (score.winner) winsVsMe++
+                if (getPlayerOutcome(score, play.play_scores, play) === 'win') winsVsMe++
               }
             }
 
             // Add to win history
             winHistory.push({
               play: index + 1,
-              won: score.winner ? 1 : 0,
+              won: getPlayerOutcome(score, play.play_scores, play) === 'win' ? 1 : 0,
               date: new Date(play.played_at).toLocaleDateString('it-IT', {
                 day: '2-digit',
                 month: '2-digit'
@@ -363,7 +364,7 @@ const PlayerDetail = () => {
                       {score.winner && (
                         <div className="flex items-center text-emerald-500">
                           <Trophy className="w-4 h-4 mr-1" />
-                          <span className="text-sm font-medium">Vinto</span>
+                          <span className="text-sm font-medium">{getPlayerOutcome(score, play.play_scores, play) === 'draw' ? 'Pareggio' : 'Vinto'}</span>
                         </div>
                       )}
                       {score.score !== null && (

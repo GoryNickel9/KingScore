@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { isVisibleInRankings } from '../utils/rankingVisibility'
+import { getEloPositions } from '../utils/eloRanking'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Trophy, Award, Gamepad2, Star, RefreshCw } from 'lucide-react'
@@ -52,7 +54,7 @@ const ELO = () => {
   const ratings = useMemo<RatingView[]>(() => {
     if (!atomicEloReadsEnabled) return legacyRatings
     const view = publication && selectedGame ? gameStandings(publication, selectedGame.id).data : null
-    return (view ?? []).map(player => ({
+    return (view ?? []).filter(player => isVisibleInRankings(player.playerName)).map(player => ({
       id: player.playerId, player_id: player.playerId, rating: player.rating, games_played: player.gamesPlayed,
       wins: player.wins, losses: player.losses, draws: player.draws,
       players: { name: player.playerName, alias: null, avatar_url: playerAvatars[player.playerId] ?? null },
@@ -78,7 +80,7 @@ const ELO = () => {
           setPlayerAvatars(avatars)
           setPublication(read)
           const standings = generalStandings(read)
-          setGeneralRatings((standings.data ?? []).map(player => ({
+          setGeneralRatings((standings.data ?? []).filter(player => isVisibleInRankings(player.playerName)).map(player => ({
             id: player.playerId, player_id: player.playerId, rating: player.rating, games_played: player.gamesPlayed,
             wins: player.wins, losses: player.losses, draws: player.draws,
             players: { name: player.playerName, alias: null, avatar_url: avatars[player.playerId] ?? null },
@@ -185,7 +187,7 @@ const ELO = () => {
         .order('rating', { ascending: false })
 
       if (error) throw error
-      setRatings(data ?? [])
+      setRatings((data ?? []).filter(row => isVisibleInRankings(row.players?.name)))
     } catch (error) {
       console.error('Errore nel recupero dei rating ELO:', error)
     } finally {
@@ -196,7 +198,7 @@ const ELO = () => {
   const fetchGeneralRatings = async (): Promise<void> => {
     try {
       const data = await getAllGeneralELO(supabase, user?.id ?? null)
-      setGeneralRatings(data)
+      setGeneralRatings(data.filter(row => isVisibleInRankings(row.players?.name)))
     } catch (error) {
       console.error('Errore nel recupero degli ELO Generali:', error)
     }
@@ -252,6 +254,9 @@ const ELO = () => {
     return <Spinner className="h-64" />
   }
 
+  const generalPositions = getEloPositions(generalRatings)
+  const gamePositions = getEloPositions(ratings)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -279,6 +284,7 @@ const ELO = () => {
       {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
 
       {/* ELO Generale */}
+      <p className="text-sm text-slate-400">V = vittorie, P = primi posti condivisi, S = sconfitte. Il win rate conta solo le vittorie senza pareggio.</p>
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
         <div className="flex items-center mb-6">
           <Star className="w-6 h-6 mr-2 text-yellow-500" />
@@ -313,7 +319,7 @@ const ELO = () => {
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-600">
                       <span className="text-white font-bold">
-                        {index + 1}
+                        {generalPositions[index]}
                       </span>
                     </div>
 
@@ -471,7 +477,7 @@ const ELO = () => {
                     <div className="flex items-center space-x-4">
                       <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-600">
                         <span className="text-white font-bold">
-                          {index + 1}
+                          {gamePositions[index]}
                         </span>
                       </div>
 
@@ -582,6 +588,7 @@ const ELO = () => {
             <p className="text-sm mt-2">
               <strong>Per 3+ giocatori:</strong> Usa il metodo pairwise (all-pairs), calcolando il risultato atteso contro ogni altro giocatore e facendo la media.
             </p>
+            <p className="text-sm mt-2">Il risultato reale assegna 1 per ogni avversario superato, 0,5 per ogni avversario alla pari e 0 per ogni avversario che precede, poi calcola la media. Un piazzamento pari tra sconfitti resta una sconfitta nel conteggio V/P/S.</p>
           </div>
           <div>
             <h3 className="text-white font-medium mb-2">🏆 Livelli di Rating</h3>

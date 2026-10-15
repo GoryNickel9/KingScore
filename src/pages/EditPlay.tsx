@@ -13,6 +13,7 @@ import type { PlayEditorSnapshot } from '../services/playEditorReader'
 import type { DbGame, DbPlayer } from '../types/rows'
 import { listGames } from '../services/games'
 import { listUserPlayers } from '../services/players'
+import { MAX_PLAY_DURATION_MINUTES } from '../utils/playDuration'
 
 interface EditPlayerRow {
   id: string | null
@@ -261,6 +262,7 @@ const EditPlayForm = ({ id }: { id: string }) => {
           {/* Indicatore Vincitori */}
           {!formData.isCooperative && formData.players.length > 0 && (() => {
             const winnersCount = formData.players.filter(p => p.winner).length
+            if (formData.isCooperative) return null
             if (winnersCount === 0) return null
             if (winnersCount === 1) {
               return (
@@ -282,14 +284,18 @@ const EditPlayForm = ({ id }: { id: string }) => {
           <h2 className="text-xl font-bold text-white mb-4">Dettagli Partita</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Durata (minuti)</label>
+              <label htmlFor="durationMinutes" className="block text-sm font-medium text-slate-300 mb-2">Durata (minuti) *</label>
               <input
+                id="durationMinutes"
                 type="number"
+                required
+                min={1}
+                max={MAX_PLAY_DURATION_MINUTES}
+                step={1}
                 value={formData.durationMinutes}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, durationMinutes: e.target.value }))}
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="Es. 60"
-                min="0"
               />
             </div>
             <div>

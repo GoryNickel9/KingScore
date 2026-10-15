@@ -8,6 +8,7 @@ import { Spinner } from '../components/Spinner'
 import { PlayCommentBadge } from '../components/PlayCommentBadge'
 import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import { getWinnerNames } from '../utils/winners'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import type { DbGame, DbPlayWithScoresOnly } from '../types/rows'
 
 interface ScoreHistoryPoint {
@@ -90,7 +91,7 @@ const GameDetail = () => {
           // Check if I won
           if (myPlayer) {
             const myScore = play.play_scores?.find(s => s.player_id === myPlayer.id)
-            if (myScore?.winner) wins++
+            if (getPlayerOutcome(myScore, play.play_scores, play) === 'win') wins++
             if (myScore?.score !== null && myScore?.score !== undefined) {
               totalScore += myScore.score
               scoreCount++

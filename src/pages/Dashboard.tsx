@@ -1,3 +1,4 @@
+import { isVisibleInRankings } from '../utils/rankingVisibility'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,6 +9,7 @@ import { Spinner } from '../components/Spinner'
 import { PlayCommentBadge } from '../components/PlayCommentBadge'
 import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import { getWinnerNames } from '../utils/winners'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { getAvatarColor, getInitials } from '../utils/avatarHelpers'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { fetchAllPages } from '../utils/pagination'
@@ -69,7 +71,7 @@ interface ScoreRowWithPlayer {
   player_id: string | null
   winner: boolean | null
   players: DbPlayer | null
-  plays: { played_at: string } | null
+  plays: { played_at: string; is_cooperative: boolean | null; team_won: boolean | null; play_scores: { winner: boolean | null }[] } | null
 }
 
 const computeTopPlayers = (scores: ScoreRowWithPlayer[]): TopPlayer[] => {
@@ -77,12 +79,13 @@ const computeTopPlayers = (scores: ScoreRowWithPlayer[]): TopPlayer[] => {
     if (!score.player_id) return acc
     const entry = acc.get(score.player_id) ?? { player: score.players, total: 0, wins: 0 }
     entry.total++
-    if (score.winner) entry.wins++
+    if (getPlayerOutcome(score, score.plays?.play_scores, score.plays ?? {}) === 'win') entry.wins++
     acc.set(score.player_id, entry)
     return acc
   }, new Map())
 
   return Array.from(perPlayer.entries())
+    .filter(([, { player }]) => isVisibleInRankings(player?.name))
     .map(([id, { player, total, wins }]) => ({
       id,
       name: player?.alias || player?.name || 'Sconosciuto',
@@ -190,7 +193,7 @@ const Dashboard = () => {
       const monthScores = await fetchAllPages<ScoreRowWithPlayer>((from, to) =>
         supabase
           .from('play_scores')
-          .select('player_id, winner, players(*), plays!inner(played_at)', { count: 'exact' })
+          .select('player_id, winner, players(*), plays!inner(played_at,is_cooperative,team_won,play_scores(winner))', { count: 'exact' })
           .gte('plays.played_at', monthStart)
           .lt('plays.played_at', monthEnd)
           .range(from, to)

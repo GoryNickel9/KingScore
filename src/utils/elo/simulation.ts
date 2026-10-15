@@ -1,21 +1,22 @@
 /**
  * Core puro di simulazione ELO — nessuna dipendenza esterna (né Supabase né
- * DOM; l'unico import è il modulo altrettanto puro positions.ts).
+ * DOM; regole, posizioni ed esiti sono moduli puri).
  *
  * Fonte unica di verità dell'algoritmo ELO, riusata da:
  *  - frontend: src/utils/eloCalculator.ts (cache elo_history + percorsi di persistenza)
  *  - Edge Function notturna: supabase/functions/nightly-elo-recalc/
  *
- * Non modificare la semantica di calcolo (formule, K-factor, assegnazione
- * posizioni, ordinamenti): la parità con i rating prodotti dal codice
- * precedente è verificata da scripts/compare-elo.ts e dai test di
- * caratterizzazione in simulation.test.ts.
+ * Le regole persistenti scelgono l'ordine dei punteggi e gli spareggi.
+ * In tutti i giochi competitivi un avversario pari vale mezzo punto ELO;
+ * in V/P/S conta come pareggio soltanto il primo posto condiviso.
  *
  * Contratto: `simulateAllPlays` riceve le partite già ordinate
  * cronologicamente per `played_at` crescente (lo garantiscono le query
  * dei chiamanti) e non esegue alcuna operazione di I/O.
  */
 import { assignPositions } from './positions.ts'
+import type { GameRuleConfig } from './gameRules.ts'
+import { getPlayerOutcome } from './outcomes.ts'
 
 // ─── Formule ELO (spostate da eloCalculator.ts, invariate) ───────────────────
 
@@ -108,7 +109,10 @@ export function calculateKFactor(gamesPlayed: number): number {
  * - Per 2 giocatori: usa il metodo ELO classico
  * - Per 3+ giocatori: usa il metodo pairwise (all-pairs)
  */
-export function calculateELOForGame(players: PlayerInput[]): EloResult[] {
+export function calculateELOForGame(
+  players: PlayerInput[],
+  options: { pairwiseActualScore?: boolean; cooperativeResult?: boolean | null } = {}
+): EloResult[] {
   if (players.length < 2) {
     throw new Error('Servono almeno 2 giocatori per calcolare il rating ELO')
   }
@@ -139,7 +143,16 @@ export function calculateELOForGame(players: PlayerInput[]): EloResult[] {
       ? calculateExpectedScorePairwise(player.currentRating, opponentRatings)
       : calculateExpectedScore(player.currentRating, opponentRatings)
 
-    const actualScore = calculateActualScore(player.finalPosition, players.length, player.winner)
+    // S_i = (avversari superati + 0.5 × avversari pari) / (N - 1).
+    // Vale anche per i vincitori ex aequo. La modalità legacy serve al confronto storico.
+    const actualScore = options.cooperativeResult != null ? (options.cooperativeResult ? 1 : 0)
+      : options.pairwiseActualScore !== false
+      ? playersWithPositions.reduce((sum, opponent) => {
+        if (opponent.playerId === player.playerId) return sum
+        return sum + (player.finalPosition < opponent.finalPosition ? 1
+          : player.finalPosition === opponent.finalPosition ? 0.5 : 0)
+      }, 0) / (players.length - 1)
+      : calculateActualScore(player.finalPosition, players.length, player.winner)
     const kFactor = calculateKFactor(player.gamesPlayed)
     const newRating = calculateNewRating(player.currentRating, expectedScore, actualScore, kFactor)
 
@@ -160,6 +173,7 @@ export function calculateELOForGame(players: PlayerInput[]): EloResult[] {
 // ─── Simulazione completa dello storico ──────────────────────────────────────
 
 export interface SimulationPlayScore {
+  id?: string
   player_id: string
   winner: boolean | null
   position: number | null
@@ -173,6 +187,9 @@ export interface SimulationPlay {
   game_id: string
   played_at: string
   play_scores: SimulationPlayScore[] | null
+  games?: Partial<GameRuleConfig> | null
+  is_cooperative?: boolean | null
+  team_won?: boolean | null
 }
 
 /** Stato finale di un giocatore in un gioco, con statistiche W/P/S. */
@@ -300,9 +317,14 @@ export function simulateAllPlays(plays: SimulationPlay[]): SimulationResult {
       }
     })
 
-    const positionedPlayers = assignPositions(playersData)
+    const positionedPlayers = assignPositions(playersData, {
+      gameId, game: play.games,
+      cooperative: play.is_cooperative ?? false, teamWon: play.team_won,
+    })
 
-    const eloResults = calculateELOForGame(positionedPlayers)
+    const eloResults = calculateELOForGame(positionedPlayers, {
+      cooperativeResult: play.is_cooperative ? play.team_won : undefined,
+    })
     const resultByPlayer = new Map(eloResults.map(result => [result.playerId, result]))
 
     // ── Aggiornamento rating per gioco + storico di gioco (ordine eloResults) ──
@@ -313,9 +335,10 @@ export function simulateAllPlays(plays: SimulationPlay[]): SimulationResult {
       state.lastPlayedAt = play.played_at
 
       const playerData = playersData.find(p => p.playerId === result.playerId)
-      if (playerData?.winner) {
+      const outcome = getPlayerOutcome(playerData, playersData, play)
+      if (outcome === 'win') {
         state.wins++
-      } else if (playerData?.draw) {
+      } else if (outcome === 'draw') {
         state.draws++
       } else {
         state.losses++

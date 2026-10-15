@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { isVisibleInRankings } from '../utils/rankingVisibility'
+import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 import { Trophy, Calendar, TrendingUp, Award, Clock, Sparkles } from 'lucide-react'
@@ -10,6 +12,7 @@ import { atomicEloReadsEnabled, readGlobalEloYear, eloReadStatus } from '../util
 import type { EloRead } from '../utils/elo/readModel'
 
 interface EloEntry {
+  players?: { name: string } | null
   player_id: string
   player_name: string
   rating: number
@@ -196,7 +199,7 @@ const Wrapped = () => {
       eloData = await fetchAllPages<EloEntry>((from, to) =>
         supabase
           .from('elo_history')
-          .select('player_id, player_name, rating, rating_change, date', { count: 'exact' })
+          .select('player_id, player_name, rating, rating_change, date, players(name)', { count: 'exact' })
           .eq('is_general', true)
           .gte('date', `${selectedYear}-01-01`)
           .lte('date', `${selectedYear}-12-31T23:59:59`)
@@ -244,7 +247,10 @@ const Wrapped = () => {
 
     // Ranking globale ordinato per ELO finale decrescente
     summaries.sort((a, b) => b.endRating - a.endRating)
-    setEloRanking(summaries)
+    const visiblePlayerIds = new Set(entries.filter(entry =>
+      isVisibleInRankings(entry.players?.name ?? entry.player_name)
+    ).map(entry => entry.player_id))
+    setEloRanking(summaries.filter(summary => visiblePlayerIds.has(summary.player_id)))
 
     // Dettaglio per il giocatore selezionato
     if (selectedPlayerId) {
@@ -272,7 +278,7 @@ const Wrapped = () => {
       })
       const sortedDates = Array.from(dateMap.keys()).sort()
       const currentElo = new Map<string, number>()
-      const playerNames = summaries.map(s => s.player_name)
+      const playerNames = summaries.filter(s => visiblePlayerIds.has(s.player_id)).map(s => s.player_name)
       const chartPoints: EloChartPoint[] = sortedDates.map(dateKey => {
         dateMap.get(dateKey)?.forEach((rating, name) => currentElo.set(name, rating))
         const point: EloChartPoint = { date: formatChartDate(dateKey) }
@@ -303,7 +309,7 @@ const Wrapped = () => {
       
       if (playerId) {
         const playerScore = play.play_scores?.find(s => s.player_id === playerId)
-        if (playerScore?.winner) {
+        if (getPlayerOutcome(playerScore, play.play_scores, play) === 'win') {
           current.wins++
         }
       }
@@ -355,7 +361,7 @@ const Wrapped = () => {
       wins = 0
       plays.forEach(play => {
         const playerScore = play.play_scores?.find(s => s.player_id === playerId)
-        if (playerScore?.winner) {
+        if (getPlayerOutcome(playerScore, play.play_scores, play) === 'win') {
           wins!++
         }
       })
