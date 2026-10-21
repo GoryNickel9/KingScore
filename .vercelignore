@@ -10,3 +10,7 @@ scripts/
 supabase/
 **/*.test.ts
 **/*.test.tsx
+gui-test-screenshots/
+*.tsbuildinfo
+psw.txt
+*.local

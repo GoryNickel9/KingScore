@@ -94,6 +94,7 @@ Per maggiori dettagli, consulta [`EDGE_FUNCTIONS_DEPLOY.md`](EDGE_FUNCTIONS_DEPL
 
 ## 📚 Documentazione
 
+- [`docs/elo-partita-immediato.md`](docs/elo-partita-immediato.md): ELO nel dettaglio senza attesa del job globale, verifiche di revisione e misure.
 - [`docs/game-ranking-rules.md`](docs/game-ranking-rules.md): Configurazione dei giochi, V/P/S, formula ELO e pubblicazione di produzione.
 - [`docs/pili-pili-ranking.md`](docs/pili-pili-ranking.md): Regole di classifica e pareggi ELO di Pili Pili; confronto storico in sola lettura.
 - [`SETUP.md`](SETUP.md): Guida completa per la configurazione
@@ -172,6 +173,14 @@ kingscore/
 1. Clicca su "Giocatori" nella navbar
 2. Aggiungi, rinomina o elimina giocatori
 3. Visualizza le statistiche di ogni giocatore
+
+### Pubblicare un commento
+
+Nel dettaglio di una partita, accedi e scrivi nel campo «Lascia un commento».
+Su PC, Invio pubblica e Shift+Invio va a capo. Su telefono e tablet, Invio va
+a capo; per pubblicare usa il pulsante «Pubblica». Durante la composizione del
+testo con un IME, Invio conferma il testo senza pubblicarlo. Il pulsante resta
+disponibile anche su PC. In caso di errore, la bozza viene conservata.
 
 ### Importare da BGA
 

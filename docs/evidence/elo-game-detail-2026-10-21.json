@@ -1,0 +1,272 @@
+{
+  "checkedAtUtc": "2026-10-21T20:54:36.611Z",
+  "readOnly": true,
+  "globalRevision": "129",
+  "simulatedPendingEnvelope": true,
+  "liveRowsAndRevisionChecks": true,
+  "networkAndCalculationMs": [
+    579.18,
+    477.78,
+    481.13,
+    292.88,
+    275.06
+  ],
+  "callsPerSample": 2,
+  "baselineInitialPublicationIncludedInSamples": false,
+  "allGamesMatched": 17,
+  "formulaUnchanged": true,
+  "productionMutated": false,
+  "calls": [
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 336.12,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 236.45,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 256.98,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 214.88,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 281.62,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 194.49,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 121.73,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 165.45,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 98.74,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 171.3,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 120.32,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 139.6,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 95.33,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 170.21,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 226.49,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 160.02,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 84.84,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 172.88,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 97.07,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 173.54,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 162.42,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 160.47,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 130.89,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 167.12,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 126.33,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 184.38,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 72.29,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 164.4,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 85.13,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 148.92,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 81.11,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 155.52,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 97.87,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 151.6,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 84.69,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 163.85,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 72.8,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 141.85,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 74.79,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 154.49,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 111.76,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 141.22,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/plays",
+      "elapsedMs": 73.91,
+      "status": 200
+    },
+    {
+      "path": "/rest/v1/rpc/get_elo_publication_v1",
+      "elapsedMs": 128.75,
+      "status": 200
+    }
+  ],
+  "runtime": {
+    "node": "v24.19.0",
+    "cpu": "Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz",
+    "logicalCpus": 8,
+    "ramGiB": 31.94
+  },
+  "sourceHashes": {
+    "src/utils/elo/gameDetail.ts": "2c55635573874fa92852cfdabfbacbf84b7c32ba96190b20f5ee5479d4b8d099",
+    "src/utils/elo/publication.ts": "ba717cfaf26e9048de97c5c504181dd79c56d1ba048b158161ddd55765fb6217",
+    "src/utils/elo/simulation.ts": "44d988cd4085cd760072bb60178566d538f428a741da7a89d7e967ac26acf272"
+  },
+  "validation": {
+    "unitTests": 448,
+    "testFiles": 23,
+    "typecheck": "PASS",
+    "build": "PASS",
+    "lint": {
+      "errors": 0,
+      "warnings": 16
+    },
+    "globalReaderIntegrationChecks": 8,
+    "browser": {
+      "syntheticLoopbackOnly": true,
+      "gameEloVisibleWhileGlobalStale": true,
+      "generalEloHiddenWhileStale": true,
+      "confirmedNoticeRemoved": true,
+      "confirmedLinkRemoved": true,
+      "uncertainSaveRecoveryPreserved": true
+    },
+    "deployed": false
+  }
+}

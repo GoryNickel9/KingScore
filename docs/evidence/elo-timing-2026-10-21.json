@@ -1,0 +1,248 @@
+{
+  "checkedAtUtc": "2026-10-21T20:33:40.596Z",
+  "source": "https://rixivmeipbizoxyvrvaf.supabase.co",
+  "readOnly": true,
+  "node": "v24.19.0",
+  "cpu": "Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz",
+  "logicalCpus": 8,
+  "ramGiB": 31.94,
+  "network": [
+    {
+      "request": "publication",
+      "sample": 1,
+      "status": "current",
+      "revision": "125",
+      "headersMs": 300.89,
+      "bodyMs": 23.05,
+      "totalMs": 323.94,
+      "parseMs": 3.43,
+      "jsonBytes": 626719,
+      "contentLength": null,
+      "contentEncoding": "gzip",
+      "contentRange": "0-0/*"
+    },
+    {
+      "request": "publication",
+      "sample": 2,
+      "status": "current",
+      "revision": "125",
+      "headersMs": 194.27,
+      "bodyMs": 22.62,
+      "totalMs": 216.9,
+      "parseMs": 1.76,
+      "jsonBytes": 626719,
+      "contentLength": null,
+      "contentEncoding": "gzip",
+      "contentRange": "0-0/*"
+    },
+    {
+      "request": "publication",
+      "sample": 3,
+      "status": "current",
+      "revision": "125",
+      "headersMs": 136.05,
+      "bodyMs": 25.95,
+      "totalMs": 161.99,
+      "parseMs": 1.88,
+      "jsonBytes": 626719,
+      "contentLength": null,
+      "contentEncoding": "gzip",
+      "contentRange": "0-0/*"
+    },
+    {
+      "request": "publication",
+      "sample": 4,
+      "status": "current",
+      "revision": "125",
+      "headersMs": 94.88,
+      "bodyMs": 22.62,
+      "totalMs": 117.51,
+      "parseMs": 1.84,
+      "jsonBytes": 626719,
+      "contentLength": null,
+      "contentEncoding": "gzip",
+      "contentRange": "0-0/*"
+    },
+    {
+      "request": "publication",
+      "sample": 5,
+      "status": "current",
+      "revision": "125",
+      "headersMs": 118.54,
+      "bodyMs": 23.54,
+      "totalMs": 142.09,
+      "parseMs": 1.87,
+      "jsonBytes": 626719,
+      "contentLength": null,
+      "contentEncoding": "gzip",
+      "contentRange": "0-0/*"
+    },
+    {
+      "request": "source_public_select",
+      "headersMs": 332.33,
+      "bodyMs": 22.17,
+      "totalMs": 354.5,
+      "parseMs": 1.96,
+      "jsonBytes": 422040,
+      "contentLength": null,
+      "contentEncoding": "gzip",
+      "contentRange": "0-494/495"
+    }
+  ],
+  "localCpu": {
+    "simulateCompleteHistory": {
+      "samples": 30,
+      "minMs": 2.5,
+      "medianMs": 3.5,
+      "maxMs": 5.57
+    },
+    "validateAndFreezePublication": {
+      "samples": 30,
+      "minMs": 17.62,
+      "medianMs": 25.41,
+      "maxMs": 35.66
+    },
+    "projectViews": {
+      "samples": 30,
+      "minMs": 0.21,
+      "medianMs": 0.26,
+      "maxMs": 1.31
+    }
+  },
+  "counts": {
+    "processedPlays": 495,
+    "skippedPlays": 0,
+    "gameHistory": 1388,
+    "generalHistory": 1388
+  },
+  "simulationMatchesPublishedResult": true,
+  "browser": {
+    "site": "https://kingscore.baldeddu.cc",
+    "classificaReloadToCurrentMs": [
+      1400,
+      1028,
+      1053
+    ],
+    "dettaglioReloadToEloMs": [
+      1206,
+      944,
+      1034
+    ],
+    "includesAutomationOverhead": true
+  },
+  "verification": {
+    "unitTestFiles": 22,
+    "unitTests": 429,
+    "typecheck": "PASS",
+    "build": "PASS",
+    "lint": {
+      "errors": 0,
+      "warnings": 16,
+      "modifiedFilesWarnings": 0
+    },
+    "desktopComments": "PASS: Shift+Enter newline; three Enter presses, one POST; HTTP 500 draft preserved and successful retry; empty blocked",
+    "simulatedAndroidComments": "PASS: Enter and Shift+Enter newline; zero POSTs",
+    "productionMutated": false,
+    "deployed": false
+  },
+  "afterSaveObservation": {
+    "readOnly": true,
+    "intervalMs": null,
+    "events": [
+      {
+        "requestedAt": "2026-10-21T20:44:56.949Z",
+        "receivedAt": "2026-10-21T20:44:57.354Z",
+        "newPlayCreatedAt": "2026-10-21T20:44:31.687947+00:00",
+        "status": "stale",
+        "sourceRevision": "129",
+        "publishedRevision": "125",
+        "gameHistoryIncluded": false,
+        "generalHistoryIncluded": false,
+        "observedAfterCreationMs": 25667
+      },
+      {
+        "requestedAt": "2026-10-21T20:45:11.598Z",
+        "receivedAt": "2026-10-21T20:45:11.999Z",
+        "newPlayCreatedAt": "2026-10-21T20:44:31.687947+00:00",
+        "status": "current",
+        "sourceRevision": "129",
+        "publishedRevision": "129",
+        "gameHistoryIncluded": true,
+        "generalHistoryIncluded": true,
+        "observedAfterCreationMs": 40312
+      }
+    ],
+    "completed": true,
+    "lastStaleResponseAt": "2026-10-21T20:44:57.354Z",
+    "firstCurrentResponseAt": "2026-10-21T20:45:11.999Z",
+    "upperObservedLatencyMs": 40312,
+    "lastStaleElapsedMs": 25667,
+    "plannedIntervalMs": 1000,
+    "actualRequestStartGapMs": 14649,
+    "conservativeLatencyLowerBoundMs": 25262,
+    "conservativeLatencyUpperBoundMs": 40312,
+    "serverUpdateMarker": {
+      "checkedAtUtc": "2026-10-21T20:45:50.208Z",
+      "newPlayCreatedAt": "2026-10-21T20:44:31.687947+00:00",
+      "results": [
+        {
+          "table": "player_ratings",
+          "rows": 2,
+          "distinctUpdatedAt": [
+            "2026-10-21T20:45:02.749948+00:00"
+          ]
+        },
+        {
+          "table": "player_general_ratings",
+          "rows": 2,
+          "distinctUpdatedAt": [
+            "2026-10-21T20:45:02.749948+00:00"
+          ]
+        }
+      ],
+      "semantics": "updated_at uses NOW(): transaction start, not commit time or measured worker CPU duration"
+    },
+    "independentConfirmation": {
+      "checkedAtUtc": "2026-10-21T20:46:44.931Z",
+      "status": "current",
+      "sourceRevision": "129",
+      "publishedRevision": "129",
+      "gameHistoryIncluded": true,
+      "generalHistoryIncluded": true,
+      "processedPlays": 496
+    },
+    "browserConfirmation": {
+      "revision": "129",
+      "gameAndGeneralRatingsVisible": true
+    },
+    "collectorShutdown": {
+      "exitCode": 1,
+      "stage": "after result persisted",
+      "diagnostic": "Node Windows UV_HANDLE_CLOSING assertion",
+      "independentConfirmationExitCode": 0
+    },
+    "workerPhaseDurationsMeasured": false,
+    "productionMutated": false
+  },
+  "initialObservation": {
+    "startedAtUtc": "2026-10-21T20:34:32.794Z",
+    "windowMinutes": 8,
+    "intervalMs": 2000,
+    "status": "no-new-play-observed",
+    "revision": "125",
+    "events": [
+      {
+        "sample": 0,
+        "requestedAt": "2026-10-21T20:34:32.794Z",
+        "receivedAt": "2026-10-21T20:34:33.560Z",
+        "status": "current",
+        "revision": "125",
+        "publishedRevision": "125",
+        "newPlayCreatedAt": null,
+        "includedInBothHistories": false
+      }
+    ],
+    "monitorStopped": true,
+    "afterSaveLatencyMs": null
+  }
+}

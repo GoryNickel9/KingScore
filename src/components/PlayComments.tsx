@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, MessageCircle, Pencil, Send, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { DbPlayComment } from '../types/rows'
-import { MAX_PLAY_COMMENT_LENGTH, normalizePlayCommentContent } from '../utils/playComments'
+import { isDesktopCommentDevice, MAX_PLAY_COMMENT_LENGTH, normalizePlayCommentContent, shouldSubmitPlayComment } from '../utils/playComments'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 
 type PlayCommentWithAvatar = DbPlayComment & { author_avatar_url: string | null }
@@ -69,6 +69,8 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
+  const submittingComment = useRef(false)
+  const desktopCommentShortcut = isDesktopCommentDevice(navigator)
 
   const fetchComments = async (): Promise<void> => {
     setLoading(true)
@@ -126,29 +128,34 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
+    if (saving || submittingComment.current) return
     const content = normalizePlayCommentContent(draft)
     if (!content) {
       toast.error('Scrivi un commento prima di inviarlo')
       return
     }
 
+    submittingComment.current = true
     setSaving(true)
-    const { data, error } = await supabase
-      .from('play_comments')
-      .insert({ play_id: playId, content })
-      .select('*')
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('play_comments')
+        .insert({ play_id: playId, content })
+        .select('*')
+        .single()
 
-    if (error) {
-      console.error('Error creating play comment:', error)
-      toast.error("Impossibile pubblicare il commento. Riprova.")
-    } else {
+      if (error) throw error
       const [commentWithAvatar] = await attachAuthorAvatars([data], user?.id, currentUserAvatarPath)
       setComments((current) => [...current, commentWithAvatar])
       setDraft('')
       toast.success('Commento pubblicato')
+    } catch (error) {
+      console.error('Error creating play comment:', error)
+      toast.error("Impossibile pubblicare il commento. Riprova.")
+    } finally {
+      submittingComment.current = false
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleEdit = async (commentId: string): Promise<void> => {
@@ -321,11 +328,22 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
               id="new-play-comment"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (!shouldSubmitPlayComment(event.nativeEvent, navigator)) return
+                event.preventDefault()
+                if (!event.repeat) event.currentTarget.form?.requestSubmit()
+              }}
+              aria-describedby={desktopCommentShortcut ? 'play-comment-keyboard-hint' : undefined}
               maxLength={MAX_PLAY_COMMENT_LENGTH}
               rows={3}
               placeholder="Com'è andata la partita?"
               className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
+            {desktopCommentShortcut && (
+              <p id="play-comment-keyboard-hint" className="text-xs text-slate-400">
+                Invio per pubblicare · Shift+Invio per andare a capo
+              </p>
+            )}
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-slate-500">{draft.length}/{MAX_PLAY_COMMENT_LENGTH}</span>
               <button

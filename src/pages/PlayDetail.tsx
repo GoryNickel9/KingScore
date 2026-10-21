@@ -17,6 +17,7 @@ import { gameHistory, generalHistory } from '../utils/elo/projections'
 import type { EloRead } from '../utils/elo/readModel'
 import { assignPositions } from '../utils/elo/positions'
 import { getPlayerOutcome } from '../utils/elo/outcomes'
+import { readGameDetailElo } from '../utils/elo/gameDetail'
 
 interface EloHistoryEntry {
   playId: string
@@ -46,6 +47,8 @@ const PlayDetailPage = () => {
   const [generalELOHistory, setGeneralELOHistory] = useState<EloHistoryEntry[]>([])
   const [publication, setPublication] = useState<EloRead | null>(null)
   const [publicationFailed, setPublicationFailed] = useState(false)
+  const [gameEloCalculated, setGameEloCalculated] = useState(false)
+  const [gameEloError, setGameEloError] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -60,6 +63,8 @@ const PlayDetailPage = () => {
       setGeneralELOHistory([])
       setPublication(null)
       setPublicationFailed(false)
+      setGameEloCalculated(false)
+      setGameEloError(false)
       const { data } = await supabase
         .from('plays')
         .select(`
@@ -76,6 +81,7 @@ const PlayDetailPage = () => {
       if (!active()) return
       if (data) {
         setPlay(data)
+        setLoading(false)
 
         if (atomicEloReadsEnabled) {
           setLoadingElo(true)
@@ -85,6 +91,16 @@ const PlayDetailPage = () => {
             setPublication(read)
             setEloHistory(data.game_id ? [...(gameHistory(read, data.game_id).data ?? [])] : [])
             setGeneralELOHistory([...(generalHistory(read).data ?? [])])
+            if (read.status !== 'current' && data.game_id) {
+              try {
+                const detail = await readGameDetailElo(supabase, data.game_id, read)
+                if (!active()) return
+                setPublication(detail.read)
+                setEloHistory([...detail.history])
+                setGameEloCalculated(detail.calculated)
+                setGeneralELOHistory([...(generalHistory(detail.read).data ?? [])])
+              } catch { if (active()) setGameEloError(true) }
+            }
           } catch { if (active()) setPublicationFailed(true) }
           finally { if (active()) setLoadingElo(false) }
           return
@@ -215,7 +231,15 @@ const PlayDetailPage = () => {
 
   return (
     <div className="space-y-6">
-      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
+      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">
+        {gameEloCalculated
+          ? 'ELO della partita aggiornato. ELO generale in attesa del prossimo aggiornamento del server.'
+          : gameEloError
+            ? 'Impossibile aggiornare l’ELO della partita. Ricarica la pagina per riprovare. ELO generale in attesa del server.'
+            : loadingElo && publication && publication.status !== 'current'
+              ? 'Calcolo ELO della partita… ELO generale in attesa del server.'
+              : eloReadStatus(publication, publicationFailed)}
+      </p>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">

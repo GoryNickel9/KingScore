@@ -1,5 +1,11 @@
 # Contratto di pubblicazione ELO — prova locale
 
+Aggiornamento locale del 21 ottobre 2026: la validazione e il replay sono
+condivisi tramite `simulateEloSource`, richiamata sia da `buildEloPublication`
+sia dal [dettaglio immediato](elo-partita-immediato.md). Il secondo usa lo scope
+UUID del gioco solo per il calcolo locale; non crea una pubblicazione e non
+espone il generale del sottoinsieme. Il protocollo di pubblicazione non cambia.
+
 Definito il 15 ottobre 2026. Questo documento e il prototipo servono a verificare il protocollo sul PC. Non sono una migrazione Supabase. Nessun reader, ricalcolo web, job notturno o client Android è stato collegato al prototipo; nessun deploy è stato eseguito.
 
 ## Formula e input conservati

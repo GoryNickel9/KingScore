@@ -63,9 +63,8 @@ function validateResult(result: SimulationResult, plays: EloSourceSnapshot['play
   }
 }
 
-/** Pure worker adapter. It validates a complete ordered snapshot, never sorts it. */
-export function buildEloPublication(snapshot: EloSourceSnapshot, publicationId: string): EloPublication {
-  uuid(publicationId, 'publicationId')
+/** Validate and simulate an ordered source, shared by publication and game detail. */
+export function simulateEloSource(snapshot: EloSourceSnapshot): SimulationResult {
   if (!snapshot || typeof snapshot !== 'object') fail('snapshot')
   if (snapshot.scopeId !== 'global') uuid(snapshot.scopeId, 'scopeId')
   const revision = snapshot.sourceRevision
@@ -112,5 +111,12 @@ export function buildEloPublication(snapshot: EloSourceSnapshot, publicationId: 
   // in gameHistory.gameId at runtime; this cast preserves that existing behavior.
   const result = simulateAllPlays(snapshot.plays as SimulationPlay[])
   validateResult(result, snapshot.plays)
-  return { publicationId, scopeId: snapshot.scopeId, sourceRevision: revision, algorithm: ELO_ALGORITHM, result }
+  return result
+}
+
+/** Pure worker adapter. It validates a complete ordered snapshot, never sorts it. */
+export function buildEloPublication(snapshot: EloSourceSnapshot, publicationId: string): EloPublication {
+  uuid(publicationId, 'publicationId')
+  const result = simulateEloSource(snapshot)
+  return { publicationId, scopeId: snapshot.scopeId, sourceRevision: snapshot.sourceRevision, algorithm: ELO_ALGORITHM, result }
 }

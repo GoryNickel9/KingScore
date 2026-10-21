@@ -1,5 +1,13 @@
 # Letture ELO della classifica globale
 
+Aggiornamento locale del 21 ottobre 2026: il [dettaglio partita](elo-partita-immediato.md)
+aggiunge un calcolo separato del solo ELO del gioco quando la pubblicazione
+globale è in attesa. Il nuovo percorso verifica completezza, ordine dei
+partecipanti e stabilità della revisione; non espone il generale del
+sottoinsieme e non scrive cache. Il contratto del lettore globale e delle sue
+quattro proiezioni resta invariato. I paragrafi seguenti descrivono il
+contratto originale del 15 ottobre.
+
 Contratto locale del 15 ottobre 2026. L'utente ha scelto un'unica classifica calcolata su tutte le partite di tutti gli account. La formula `kingscore-elo-legacy-v1` rimane quella di `simulation.ts` e `positions.ts`. Nessun deploy, modifica cloud o collegamento dei nuovi reader alle pagine distribuite.
 
 ## Ambito e generazione

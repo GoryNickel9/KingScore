@@ -17,7 +17,8 @@ const secondPlayerId = '00000000-0000-0000-0000-000000000007'
 const secondPlay = '00000000-0000-0000-0000-000000000008'
 const publicationId = '00000000-0000-0000-0000-000000000009'
 const timestamp = '2026-10-15T12:00:00Z'
-const game = { id: gameId, name: 'Gioco di prova locale', bga_id: null, image_url: null, min_players: 1, max_players: 63, created_at: timestamp }
+const game = { id: gameId, name: 'Gioco di prova locale', bga_id: null, image_url: null, min_players: 1, max_players: 63,
+  lower_score_wins: false, shared_score_positions: true, created_at: timestamp }
 const player = { id: playerId, name: 'Anna locale', user_id: actor, account_user_id: null, alias: null, avatar_url: null, color: null, created_at: timestamp, updated_at: timestamp, is_me: false }
 const secondPlayer = { ...player, id: secondPlayerId, name: 'Bruno locale', user_id: owner, avatar_url: 'qa/bruno.svg' }
 const user = { id: actor, aud: 'authenticated', role: 'authenticated', email: 'admin@example.invalid', email_confirmed_at: timestamp,
@@ -44,7 +45,7 @@ plays.set(secondPlay, newPlay(secondPlay, { game_id: gameId, played_at: '2026-10
   scores: [{ id: '00000000-0000-0000-0000-000000000011', player_id: playerId, score: '0', winner: false, color: null, role: null },
     { id: '00000000-0000-0000-0000-000000000012', player_id: secondPlayerId, score: '5', winner: true, color: null, role: null }] }))
 function publicPlay(snapshot) { return { ...snapshot.detail.play, games: snapshot.detail.game,
-  play_scores: snapshot.detail.scores.map(item => ({ ...item.score, score: item.score.score === null ? null : Number(item.score.score), players: item.player })) } }
+  play_scores: snapshot.detail.scores.map((item, index) => ({ ...item.score, elo_ordinal: index, score: item.score.score === null ? null : Number(item.score.score), players: item.player })) } }
 function eloPublication() {
   const envelope = { scopeId: 'global', algorithm: ELO_ALGORITHM, status: 'current', sourceRevision: '9007199254740993',
     publishedRevision: '9007199254740993', publicationId, result: null }
@@ -138,6 +139,9 @@ const api = httpServer(async (request, response) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') { send({ code: 'fixture-forbids-legacy-dml' }, 403); return }
   let rows = table === 'games' ? games : table === 'players' ? players : table === 'plays' ? [...plays.values()].map(publicPlay) : []
   for (const [key,value] of url.searchParams) if (value.startsWith('eq.')) rows = rows.filter(row => String(row[key]) === value.slice(3))
+  if (table === 'plays' && url.searchParams.get('select')?.includes('score_count:play_scores(count)')) {
+    rows = rows.map(row => ({ ...row, score_count: [{ count: row.play_scores.length }] }))
+  }
   response.setHeader('Content-Range', `0-${Math.max(0,rows.length-1)}/${rows.length}`)
   send(request.headers.accept?.includes('vnd.pgrst.object') ? rows[0] ?? null : rows)
 })

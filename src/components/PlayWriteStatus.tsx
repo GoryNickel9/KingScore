@@ -1,9 +1,8 @@
-import { Link } from 'react-router-dom'
 import type { usePlayWrites } from '../hooks/usePlayWrites'
 
 export function PlayWriteStatus({ writes }: { writes: ReturnType<typeof usePlayWrites> }) {
   const { state, coordinator } = writes
-  if (state.phase === 'ready' && !state.message && !state.confirmed) return null
+  if (state.phase === 'ready' && !state.message) return null
   return <div role={state.phase === 'pending' || state.message ? 'alert' : 'status'} className="rounded-lg border border-slate-600 bg-slate-800 p-4 text-slate-200 space-y-3">
     {state.phase === 'checking' && <p>Verifica account e salvataggi…</p>}
     {state.phase === 'busy' && <p>Operazione in corso. Attendi la conferma prima di chiudere la pagina.</p>}
@@ -13,8 +12,5 @@ export function PlayWriteStatus({ writes }: { writes: ReturnType<typeof usePlayW
       <button type="button" className="px-4 py-3 rounded-lg bg-emerald-600 text-white" onClick={() => { void coordinator.recover() }}>Verifica salvataggio precedente</button>
     </>}
     {state.phase === 'unavailable' && <button type="button" className="px-4 py-3 rounded-lg bg-slate-700" onClick={() => { void coordinator.initialize() }}>Verifica disponibilità</button>}
-    {state.confirmed && state.phase === 'ready' && <p>
-      Ultimo salvataggio confermato. {state.confirmed.revision === null ? 'La partita è stata eliminata.' : <Link className="text-emerald-400 underline" to={`/plays/${state.confirmed.playId}`}>Apri la partita salvata</Link>}
-    </p>}
   </div>
 }
