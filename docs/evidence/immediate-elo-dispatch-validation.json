@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "remoteContacted": false,
+  "postgres": "17",
+  "cases": [
+    "one dispatch for multiple source statements in a committed transaction",
+    "a subsequent transaction queues its own refresh",
+    "rollback discards both revision and queued dispatch",
+    "savepoint rollback does not suppress the next valid dispatch",
+    "queue failure preserves saved data and dirty revision for cron recovery",
+    "publication writes do not recursively dispatch",
+    "trigger remains SECURITY DEFINER with an empty search_path"
+  ],
+  "serverStopped": true
+}

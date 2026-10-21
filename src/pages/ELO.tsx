@@ -12,6 +12,7 @@ import { atomicEloReadsEnabled, readGlobalElo, eloReadStatus } from '../utils/el
 import { generalStandings, gameStandings } from '../utils/elo/projections'
 import type { EloRead } from '../utils/elo/readModel'
 import { fetchAllPages } from '../utils/pagination'
+import { waitForCurrentGlobalElo } from '../utils/elo/liveRead'
 
 interface RatingView {
   id: string
@@ -69,38 +70,44 @@ const ELO = () => {
     void fetchMyPlayer()
     if (atomicEloReadsEnabled) {
       let active = true
+      const abort = new AbortController()
       void (async () => {
         try {
-          const read = await readGlobalElo(supabase)
-          const [metadata, playerMetadata] = await Promise.all([
+          const [read, metadata, playerMetadata] = await Promise.all([
+            readGlobalElo(supabase, abort.signal),
             fetchAllPages((from, to) => supabase.from('games').select('id,name,image_url', { count: 'exact' }).order('id').range(from, to)).catch(() => []),
             fetchAllPages((from, to) => supabase.from('players').select('id,avatar_url', { count: 'exact' }).order('id').range(from, to)).catch(() => []),
           ])
           if (!active) return
           const avatars = Object.fromEntries(playerMetadata.map(player => [player.id, player.avatar_url]))
           setPlayerAvatars(avatars)
-          setPublication(read)
-          const standings = generalStandings(read)
-          setGeneralRatings((standings.data ?? []).filter(player => isVisibleInRankings(player.playerName)).map(player => ({
-            id: player.playerId, player_id: player.playerId, rating: player.rating, games_played: player.gamesPlayed,
-            wins: player.wins, losses: player.losses, draws: player.draws,
-            players: { name: player.playerName, alias: null, avatar_url: avatars[player.playerId] ?? null },
-          })))
-          const catalog = new Map(metadata.map(game => [game.id, game]))
-          const counts = new Map<string, Set<string>>()
-          for (const point of read.result?.gameHistory ?? []) {
-            if (point.gameId === null) continue
-            const ids = counts.get(point.gameId) ?? new Set<string>()
-            ids.add(point.playId)
-            counts.set(point.gameId, ids)
-          }
-          const list = [...counts].map(([id, plays]) => ({ id, name: catalog.get(id)?.name ?? 'Gioco sconosciuto', image_url: catalog.get(id)?.image_url ?? null, playCount: plays.size })).sort((a, b) => b.playCount - a.playCount)
-          setGames(list)
-          setSelectedGame(list[0] ?? null)
+          await waitForCurrentGlobalElo(supabase, read => {
+            if (!active) return
+            setPublication(read)
+            setPublicationFailed(false)
+            const standings = generalStandings(read)
+            setGeneralRatings((standings.data ?? []).filter(player => isVisibleInRankings(player.playerName)).map(player => ({
+              id: player.playerId, player_id: player.playerId, rating: player.rating, games_played: player.gamesPlayed,
+              wins: player.wins, losses: player.losses, draws: player.draws,
+              players: { name: player.playerName, alias: null, avatar_url: avatars[player.playerId] ?? null },
+            })))
+            const catalog = new Map(metadata.map(game => [game.id, game]))
+            const counts = new Map<string, Set<string>>()
+            for (const point of read.result?.gameHistory ?? []) {
+              if (point.gameId === null) continue
+              const ids = counts.get(point.gameId) ?? new Set<string>()
+              ids.add(point.playId)
+              counts.set(point.gameId, ids)
+            }
+            const list = [...counts].map(([id, plays]) => ({ id, name: catalog.get(id)?.name ?? 'Gioco sconosciuto', image_url: catalog.get(id)?.image_url ?? null, playCount: plays.size })).sort((a, b) => b.playCount - a.playCount)
+            setGames(list)
+            setSelectedGame(selected => list.find(game => game.id === selected?.id) ?? list[0] ?? null)
+            setLoading(false)
+          }, abort.signal, read)
         } catch { if (active) setPublicationFailed(true) }
         finally { if (active) setLoading(false) }
       })()
-      return () => { active = false }
+      return () => { active = false; abort.abort() }
     }
     void fetchGames()
     void fetchGeneralRatings()

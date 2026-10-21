@@ -2,7 +2,7 @@
 
 Web app completa per tracciare le partite a giochi da tavolo, con autenticazione multi-utente.
 
-L'integrazione locale dei salvataggi atomici, i comandi di test e i blocchi alla pubblicazione sono descritti in [ATOMIC_PLAY_WEB.md](docs/ATOMIC_PLAY_WEB.md). I nuovi moduli restano disabilitati senza `VITE_ATOMIC_PLAY_WRITES=true`; le RPC proposte non sono installate online.
+L'integrazione dei salvataggi atomici è descritta in [ATOMIC_PLAY_WEB.md](docs/ATOMIC_PLAY_WEB.md) ed è attiva in produzione con `VITE_ATOMIC_PLAY_WRITES=true`. L'[aggiornamento immediato dell'ELO Generale](docs/elo-generale-dopo-salvataggio.md) avvia il worker dopo il salvataggio e aggiorna automaticamente le schermate in attesa.
 
 Il menu principale contiene «PartyScore» subito dopo «Wrapped», sia su desktop sia su mobile. Il collegamento apre [PartyScore](https://partyscore.baldeddu.cc/) nella stessa scheda; da quel sito la voce «KingScore» permette di tornare qui.
 

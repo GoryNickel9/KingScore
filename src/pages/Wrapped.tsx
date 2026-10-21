@@ -8,7 +8,9 @@ import { BarChart, Bar, LineChart, Line, Legend, XAxis, YAxis, CartesianGrid, To
 import { fetchAllPages } from '../utils/pagination'
 import type { DbGame, DbPlayer, DbPlayWithScores } from '../types/rows'
 import { useAuth } from '../contexts/AuthContext'
-import { atomicEloReadsEnabled, readGlobalEloYear, eloReadStatus } from '../utils/elo/readClient'
+import { atomicEloReadsEnabled, eloReadStatus } from '../utils/elo/readClient'
+import { waitForCurrentGlobalElo } from '../utils/elo/liveRead'
+import { generalHistory } from '../utils/elo/projections'
 import type { EloRead } from '../utils/elo/readModel'
 
 interface EloEntry {
@@ -87,6 +89,7 @@ const Wrapped = () => {
   const [publicationFailed, setPublicationFailed] = useState(false)
   const eloStatus = eloReadStatus(publication, publicationFailed)
   const loadGeneration = useRef({ value: 0 })
+  const eloAbort = useRef<AbortController | null>(null)
 
   useEffect(() => {
     void loadInitialData()
@@ -97,7 +100,7 @@ const Wrapped = () => {
     if (availableYears.length > 0) {
       void loadStats()
     }
-    return () => { generation.value++ }
+    return () => { generation.value++; eloAbort.current?.abort() }
   }, [selectedYear, selectedPlayerId, availableYears])
 
   useEffect(() => {
@@ -135,6 +138,7 @@ const Wrapped = () => {
 
   const loadStats = async () => {
     const generation = ++loadGeneration.current.value
+    eloAbort.current?.abort()
     setLoading(true)
     setPublication(null)
     setPublicationFailed(false)
@@ -192,9 +196,16 @@ const Wrapped = () => {
     let eloData: EloEntry[] = []
     try {
       if (atomicEloReadsEnabled) {
-        const { read, history } = await readGlobalEloYear(supabase, selectedYear)
+        if (!Number.isInteger(selectedYear) || selectedYear < 1 || selectedYear > 9999) throw new Error('Anno ELO non valido.')
+        const abort = new AbortController()
+        eloAbort.current = abort
+        const read = await waitForCurrentGlobalElo(supabase, updated => {
+          if (generation === loadGeneration.current.value) setPublication(updated)
+        }, abort.signal)
         if (generation !== loadGeneration.current.value) return
         setPublication(read)
+        const prefix = `${String(selectedYear).padStart(4, '0')}-`
+        const history = (generalHistory(read).data ?? []).filter(point => point.date.startsWith(prefix))
         eloData = (history ?? []).map(point => ({ player_id: point.playerId, player_name: point.playerName, rating: point.rating, rating_change: point.ratingChange, date: point.date }))
       } else {
       eloData = await fetchAllPages<EloEntry>((from, to) =>

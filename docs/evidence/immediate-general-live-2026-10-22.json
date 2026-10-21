@@ -1,0 +1,67 @@
+{
+  "test": "production no-op update, no play or score content changed",
+  "samples": [
+    {
+      "observedMs": 3715,
+      "status": "stale",
+      "sourceRevision": "130",
+      "publishedRevision": "129"
+    },
+    {
+      "observedMs": 4378,
+      "status": "stale",
+      "sourceRevision": "130",
+      "publishedRevision": "129"
+    },
+    {
+      "observedMs": 5057,
+      "status": "stale",
+      "sourceRevision": "130",
+      "publishedRevision": "129"
+    },
+    {
+      "observedMs": 6023,
+      "status": "stale",
+      "sourceRevision": "130",
+      "publishedRevision": "129"
+    },
+    {
+      "observedMs": 6740,
+      "status": "stale",
+      "sourceRevision": "130",
+      "publishedRevision": "129"
+    },
+    {
+      "observedMs": 7486,
+      "status": "current",
+      "sourceRevision": "130",
+      "publishedRevision": "130"
+    }
+  ],
+  "before": {
+    "revision": "129",
+    "resultHash": "bcdd1165e335699eb8bce5a28fb9e416ea2852955d939dc1077b7ca31a48eb56"
+  },
+  "dispatch": {
+    "queued_at": "2026-10-21 22:24:51.813651+00",
+    "request_id": 42,
+    "source_revision": 130
+  },
+  "sqlReturnMs": 3306,
+  "currentObservedMs": 7486,
+  "sameResult": true,
+  "after": {
+    "revision": "130",
+    "resultHash": "bcdd1165e335699eb8bce5a28fb9e416ea2852955d939dc1077b7ca31a48eb56"
+  },
+  "worker": [
+    {
+      "created": "2026-10-21 22:24:51.82973+00",
+      "error_msg": null,
+      "status_code": 200,
+      "timed_out": false
+    }
+  ],
+  "status": "PASS",
+  "timingNote": "Elapsed includes Management CLI submission and network; pg_net created is not a completion timestamp. No-op update is not a full browser save."
+}

@@ -12,7 +12,8 @@ import { getELOHistoryForGame, getGeneralELOHistory } from '../utils/eloCalculat
 import { fetchAllPages } from '../utils/pagination'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { Spinner } from '../components/Spinner'
-import { atomicEloReadsEnabled, readGlobalElo, eloReadStatus } from '../utils/elo/readClient'
+import { atomicEloReadsEnabled, eloReadStatus } from '../utils/elo/readClient'
+import { waitForCurrentGlobalElo } from '../utils/elo/liveRead'
 import { generalHistory, gameHistory } from '../utils/elo/projections'
 import type { EloRead } from '../utils/elo/readModel'
 
@@ -97,19 +98,21 @@ const Stats = () => {
     void fetchStats()
     if (atomicEloReadsEnabled) {
       let active = true
+      const abort = new AbortController()
       setLoadingGeneralEloHistory(true)
-      void readGlobalElo(supabase).then(read => {
+      void waitForCurrentGlobalElo(supabase, read => {
         if (!active) return
         setPublication(read)
+        setPublicationFailed(false)
         setGeneralEloHistory([...(generalHistory(read).data ?? [])])
         const histories: Record<string, EloHistoryEntry[]> = {}
         for (const id of Object.keys(read.result?.gamePlayers ?? {})) {
           if (id !== 'null') histories[id] = [...(gameHistory(read, id).data ?? [])]
         }
         setEloHistory(histories)
-      }).catch(() => { if (active) setPublicationFailed(true) })
+      }, abort.signal).catch(() => { if (active) setPublicationFailed(true) })
         .finally(() => { if (active) setLoadingGeneralEloHistory(false) })
-      return () => { active = false }
+      return () => { active = false; abort.abort() }
     }
     void fetchGeneralEloHistory()
   }, [])

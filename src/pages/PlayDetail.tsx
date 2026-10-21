@@ -18,6 +18,7 @@ import type { EloRead } from '../utils/elo/readModel'
 import { assignPositions } from '../utils/elo/positions'
 import { getPlayerOutcome } from '../utils/elo/outcomes'
 import { readGameDetailElo } from '../utils/elo/gameDetail'
+import { waitForCurrentGlobalElo } from '../utils/elo/liveRead'
 
 interface EloHistoryEntry {
   playId: string
@@ -49,21 +50,24 @@ const PlayDetailPage = () => {
   const [publicationFailed, setPublicationFailed] = useState(false)
   const [gameEloCalculated, setGameEloCalculated] = useState(false)
   const [gameEloError, setGameEloError] = useState(false)
-  const eloStatus = gameEloCalculated
-    ? 'ELO della partita aggiornato. ELO generale in attesa del prossimo aggiornamento del server.'
-    : gameEloError
-      ? 'Impossibile aggiornare l’ELO della partita. Ricarica la pagina per riprovare. ELO generale in attesa del server.'
-      : loadingElo && publication && publication.status !== 'current'
-        ? 'Calcolo ELO della partita… ELO generale in attesa del server.'
-        : eloReadStatus(publication, publicationFailed)
+  const eloStatus = publicationFailed
+    ? eloReadStatus(publication, true)
+    : gameEloCalculated
+      ? 'ELO della partita aggiornato. ELO generale in aggiornamento: la schermata si aggiornerà automaticamente.'
+      : gameEloError
+        ? 'Impossibile aggiornare l’ELO della partita. Ricarica la pagina per riprovare. ELO generale in attesa del server.'
+        : loadingElo && publication && publication.status !== 'current'
+          ? 'Calcolo ELO della partita… ELO generale in attesa del server.'
+          : eloReadStatus(publication, publicationFailed)
 
   useEffect(() => {
     let active = true
-    void fetchPlay(() => active)
-    return () => { active = false }
+    const abort = new AbortController()
+    void fetchPlay(() => active, abort.signal)
+    return () => { active = false; abort.abort() }
   }, [id])
 
-  const fetchPlay = async (active: () => boolean): Promise<void> => {
+  const fetchPlay = async (active: () => boolean, signal: AbortSignal): Promise<void> => {
     try {
       setLoading(true)
       setEloHistory([])
@@ -93,7 +97,7 @@ const PlayDetailPage = () => {
         if (atomicEloReadsEnabled) {
           setLoadingElo(true)
           try {
-            const read = await readGlobalElo(supabase)
+            let read = await readGlobalElo(supabase, signal)
             if (!active()) return
             setPublication(read)
             setEloHistory(data.game_id ? [...(gameHistory(read, data.game_id).data ?? [])] : [])
@@ -106,8 +110,22 @@ const PlayDetailPage = () => {
                 setEloHistory([...detail.history])
                 setGameEloCalculated(detail.calculated)
                 setGeneralELOHistory([...(generalHistory(detail.read).data ?? [])])
+                read = detail.read
               } catch { if (active()) setGameEloError(true) }
             }
+            if (!active()) return
+            setLoadingElo(false)
+            await waitForCurrentGlobalElo(supabase, updated => {
+              if (!active()) return
+              setPublication(updated)
+              setPublicationFailed(false)
+              setGeneralELOHistory([...(generalHistory(updated).data ?? [])])
+              if (updated.status === 'current') {
+                setEloHistory(data.game_id ? [...(gameHistory(updated, data.game_id).data ?? [])] : [])
+                setGameEloCalculated(false)
+                setGameEloError(false)
+              }
+            }, signal, read)
           } catch { if (active()) setPublicationFailed(true) }
           finally { if (active()) setLoadingElo(false) }
           return
