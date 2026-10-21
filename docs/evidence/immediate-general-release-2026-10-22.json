@@ -1,0 +1,50 @@
+{
+  "verifiedAtUtc": "2026-10-21T22:29:23.3450950Z",
+  "sourceCommit": "1b039fe",
+  "productionUrl": "https://kingscore.baldeddu.cc",
+  "deploymentId": "dpl_9S277u2wHw5TVwFqdkyrt4igHspw",
+  "deploymentUrl": "https://king-score-1xjm7x32q-gorynickel9s-projects.vercel.app",
+  "deploymentState": "READY",
+  "database": {
+    "active_fallback_jobs": 1,
+    "plays": 496,
+    "publication_status": "current",
+    "source_revision": "131",
+    "trigger_definition_md5": "f2830465134a8b46b0b17caf325e76d4",
+    "worker_http_status": 200,
+    "worker_response": {
+      "ok": true,
+      "positionsUpdated": 0,
+      "processedPlays": 496,
+      "publicationId": "3e97cf00-3ff0-4959-9c93-16f1563c9dd4",
+      "skippedPlays": 0,
+      "sourceRevision": "131"
+    }
+  },
+  "web": {
+    "automaticTransitionObservedInLocalBrowser": true,
+    "playDetailLoaded": true,
+    "correctGeneralElo": [
+      "1054 +1",
+      "951 -1"
+    ],
+    "pollingModule": "/assets/liveRead-CJWlGqIL.js",
+    "authenticatedCommentSubmission": "User will test live; not performed by agent",
+    "livePendingTransitionCaptured": false,
+    "removedNotices": 0,
+    "screenshot": ".work/online-immediate-general.png",
+    "correctGameElo": [
+      "1154 +4",
+      "864 -4"
+    ]
+  },
+  "tests": {
+    "typecheck": "PASS",
+    "lintErrors": 0,
+    "postgresLocal": 7,
+    "unit": 457,
+    "lintExistingWarnings": 16,
+    "build": "PASS"
+  },
+  "liveWriteTest": "Two no-op updates of the existing play; no scores, notes or play counts changed"
+}
