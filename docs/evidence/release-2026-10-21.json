@@ -1,0 +1,44 @@
+{
+  "checkedAtUtc": "2026-10-21T21:05:14.004Z",
+  "site": "https://kingscore.baldeddu.cc",
+  "deploymentId": "dpl_7QtVGR8bimREoxPVHLPL35i1SErX",
+  "readyState": "READY",
+  "aliases": [
+    "kingscore.baldeddu.cc",
+    "king-score-gorynickel9s-projects.vercel.app"
+  ],
+  "entry": "/assets/index-DQSYFuQC.js",
+  "detailChunk": "/assets/PlayDetail-AsF2-2Qp.js",
+  "detailSha256": "de1e7dbeab4c0ba6ce728d6414544ab8c6f47afee0ff2d0a6dbda4fada3b8f66",
+  "checks": {
+    "httpStatus": 200,
+    "newFastEloMessage": true,
+    "keyboardHint": true,
+    "requestSubmit": true,
+    "sourceCountCheck": true,
+    "oldSaveNoticeAbsent": true,
+    "oldSaveNoticeAbsentAcrossSharedComponent": true,
+    "pendingRecoveryPreserved": true
+  },
+  "commit": "bac2159",
+  "browser": {
+    "detailReloadToEloMs": [
+      1002,
+      883,
+      934
+    ],
+    "alreadyPublishedMatch": true,
+    "includesAutomationOverhead": true,
+    "gameAndGeneralEloVisible": true,
+    "authenticatedChecks": "Delegated to user at their explicit request; no live comment submitted by agent"
+  },
+  "saveStatusChunk": "/assets/PlayWriteStatus-Ba7Coy7d.js",
+  "productionDataMutatedByAgent": false,
+  "priorValidation": {
+    "unitTests": 448,
+    "typecheck": "PASS",
+    "build": "PASS",
+    "lintErrors": 0,
+    "lintWarnings": 16
+  }
+}

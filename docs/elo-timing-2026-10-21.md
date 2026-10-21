@@ -132,4 +132,7 @@ seconda fixture con identificazione Android simulata, Invio e Shift+Invio
 producono righe nuove e zero POST commenti. Non è una prova su hardware mobile
 reale. I commenti di collaudo restano in memoria nelle fixture locali.
 
-La modifica ai commenti è nel checkout locale; non è stata pubblicata sul sito.
+La modifica ai commenti è stata successivamente pubblicata il 21 ottobre 2026,
+insieme al percorso ELO rapido del dettaglio. Il [report del rilascio](elo-partita-immediato.md#distribuzione-e-controllo-pubblico)
+distingue le verifiche pubbliche online dal collaudo autenticato affidato
+all'utente.

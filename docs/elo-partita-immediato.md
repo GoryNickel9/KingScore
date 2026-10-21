@@ -99,4 +99,27 @@ una risposta persa dopo il commit sintetico, la comparsa del pulsante di
 recupero e il recupero con confronto fra bozza e dati aggiornati. Nessuna
 partita reale è stata modificata da queste prove.
 
-Le modifiche sono presenti nel checkout locale e non sono state distribuite.
+## Distribuzione e controllo pubblico
+
+Le modifiche sono online su https://kingscore.baldeddu.cc dal 21 ottobre 2026.
+Commit applicativo: `bac2159`; deploy Vercel
+`dpl_7QtVGR8bimREoxPVHLPL35i1SErX`, stato verificato `READY`, dominio pubblico
+associato. La pubblicazione include anche Invio per i commenti da PC e la
+rimozione dell'avviso persistente di salvataggio.
+
+Nel browser sul dominio pubblico, tre aperture del dettaglio della partita
+reale hanno mostrato gli ELO in **1.002 / 883 / 934 ms**. La pubblicazione era
+già corrente alla revisione 129: questa prova misura l'apertura del dettaglio,
+non un nuovo salvataggio con pubblicazione in attesa. Include l'overhead
+dell'automazione. Per il ramo in attesa restano valide le misure di
+275–579 ms aggiuntivi riportate sopra; non vanno sommate come benchmark di una
+singola prova né presentate come un tempo garantito dal click su Salva.
+
+Il controllo HTTPS del bundle distribuito conferma il percorso rapido, il
+testo della scorciatoia commenti, `requestSubmit`, la rimozione di testo e link
+del vecchio avviso nel componente condiviso e la conservazione del recupero.
+I valori ELO del gioco e generali sono visibili nel browser pubblico. Su
+richiesta dell'utente, il collaudo autenticato dei commenti è affidato a lui:
+l'agente non ha pubblicato commenti o modificato partite reali.
+
+Evidenza: [release-2026-10-21.json](evidence/release-2026-10-21.json).
