@@ -49,6 +49,13 @@ const PlayDetailPage = () => {
   const [publicationFailed, setPublicationFailed] = useState(false)
   const [gameEloCalculated, setGameEloCalculated] = useState(false)
   const [gameEloError, setGameEloError] = useState(false)
+  const eloStatus = gameEloCalculated
+    ? 'ELO della partita aggiornato. ELO generale in attesa del prossimo aggiornamento del server.'
+    : gameEloError
+      ? 'Impossibile aggiornare l’ELO della partita. Ricarica la pagina per riprovare. ELO generale in attesa del server.'
+      : loadingElo && publication && publication.status !== 'current'
+        ? 'Calcolo ELO della partita… ELO generale in attesa del server.'
+        : eloReadStatus(publication, publicationFailed)
 
   useEffect(() => {
     let active = true
@@ -231,15 +238,7 @@ const PlayDetailPage = () => {
 
   return (
     <div className="space-y-6">
-      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">
-        {gameEloCalculated
-          ? 'ELO della partita aggiornato. ELO generale in attesa del prossimo aggiornamento del server.'
-          : gameEloError
-            ? 'Impossibile aggiornare l’ELO della partita. Ricarica la pagina per riprovare. ELO generale in attesa del server.'
-            : loadingElo && publication && publication.status !== 'current'
-              ? 'Calcolo ELO della partita… ELO generale in attesa del server.'
-              : eloReadStatus(publication, publicationFailed)}
-      </p>}
+      {atomicEloReadsEnabled && eloStatus && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloStatus}</p>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">

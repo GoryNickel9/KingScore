@@ -50,6 +50,7 @@ const ELO = () => {
   const [generalRatings, setGeneralRatings] = useState<RatingView[]>([])
   const [publication, setPublication] = useState<EloRead | null>(null)
   const [publicationFailed, setPublicationFailed] = useState(false)
+  const eloStatus = eloReadStatus(publication, publicationFailed)
   const [playerAvatars, setPlayerAvatars] = useState<Record<string, string | null>>({})
   const ratings = useMemo<RatingView[]>(() => {
     if (!atomicEloReadsEnabled) return legacyRatings
@@ -281,7 +282,7 @@ const ELO = () => {
         </div>
       </div>
 
-      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
+      {atomicEloReadsEnabled && eloStatus && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloStatus}</p>}
 
       {/* ELO Generale */}
       <p className="text-sm text-slate-400">V = vittorie, P = primi posti condivisi, S = sconfitte. Il win rate conta solo le vittorie senza pareggio.</p>

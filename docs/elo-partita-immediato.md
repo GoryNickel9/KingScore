@@ -123,3 +123,9 @@ richiesta dell'utente, il collaudo autenticato dei commenti è affidato a lui:
 l'agente non ha pubblicato commenti o modificato partite reali.
 
 Evidenza: [release-2026-10-21.json](evidence/release-2026-10-21.json).
+
+Il messaggio «Classifica ELO globale · revisione …» è stato successivamente
+rimosso da dettaglio, classifiche, statistiche e Wrapped. Con dati correnti
+non viene mostrato alcun riquadro vuoto. Restano gli avvisi di caricamento,
+aggiornamento in attesa ed errore; le revisioni continuano a essere verificate
+internamente.

@@ -91,6 +91,7 @@ const Stats = () => {
   const [playerColorMap, setPlayerColorMap] = useState<Record<string, string>>({})
   const [publication, setPublication] = useState<EloRead | null>(null)
   const [publicationFailed, setPublicationFailed] = useState(false)
+  const eloStatus = eloReadStatus(publication, publicationFailed)
 
   useEffect(() => {
     void fetchStats()
@@ -415,7 +416,7 @@ const Stats = () => {
   if (stats.allGamesStats.length === 0) {
     return (
       <div className="space-y-6">
-        {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
+        {atomicEloReadsEnabled && eloStatus && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloStatus}</p>}
         <div>
           <h1 className="text-3xl font-bold text-white">Statistiche</h1>
           <p className="mt-2 text-slate-400">Analisi dettagliata delle partite</p>
@@ -439,7 +440,7 @@ const Stats = () => {
 
   return (
     <div className="space-y-6">
-      {atomicEloReadsEnabled && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
+      {atomicEloReadsEnabled && eloStatus && <p role="status" className="rounded-lg bg-slate-800 p-4 text-slate-200">{eloStatus}</p>}
       <div>
         <h1 className="text-3xl font-bold text-white">Statistiche</h1>
         <p className="mt-2 text-slate-400">Analisi dettagliata delle partite</p>

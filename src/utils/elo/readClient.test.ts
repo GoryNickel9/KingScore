@@ -20,7 +20,7 @@ describe('public ELO reader', () => {
     for (const view of [generalStandings(read), gameStandings(read, id), generalHistory(read), gameHistory(read, id)]) {
       expect(view).toMatchObject({ scopeId: 'global', publicationId: id, sourceRevision: '9007199254740993', publishedRevision: '9007199254740993', status: 'current', data: [] })
     }
-    expect(eloReadStatus(read)).toContain('9007199254740993')
+    expect(eloReadStatus(read)).toBe('')
   })
 
   it('preserves stale/missing status without a read fallback or write', async () => {

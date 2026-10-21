@@ -85,6 +85,7 @@ const Wrapped = () => {
   const [eloPlayerNames, setEloPlayerNames] = useState<string[]>([])
   const [publication, setPublication] = useState<EloRead | null>(null)
   const [publicationFailed, setPublicationFailed] = useState(false)
+  const eloStatus = eloReadStatus(publication, publicationFailed)
   const loadGeneration = useRef({ value: 0 })
 
   useEffect(() => {
@@ -433,7 +434,7 @@ const Wrapped = () => {
   return (
     <div className="min-h-screen bg-slate-900 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {atomicEloReadsEnabled && <p role="status" className="mb-6 rounded-lg bg-slate-800 p-4 text-slate-200">{eloReadStatus(publication, publicationFailed)}</p>}
+        {atomicEloReadsEnabled && eloStatus && <p role="status" className="mb-6 rounded-lg bg-slate-800 p-4 text-slate-200">{eloStatus}</p>}
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">

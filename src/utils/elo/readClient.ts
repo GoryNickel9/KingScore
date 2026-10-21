@@ -31,5 +31,5 @@ export function eloReadStatus(read: EloRead | null, failed = false): string {
   if (!read) return 'Caricamento della classifica ELO globale…'
   if (read.status === 'missing') return 'La classifica ELO globale non è ancora disponibile. Ricarica la pagina per verificare gli aggiornamenti.'
   if (read.status === 'stale') return 'Aggiornamento ELO in attesa. I risultati precedenti restano nascosti finché la classifica non sarà aggiornata. Ricarica la pagina per verificare gli aggiornamenti.'
-  return `Classifica ELO globale · revisione ${read.publishedRevision}`
+  return ''
 }
