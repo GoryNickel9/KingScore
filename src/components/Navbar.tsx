@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeftRight, ClipboardCheck, Gamepad2, LayoutDashboard, Calendar, Library, Users, BarChart3, LogOut, User, Trophy, LogIn, ChevronDown, Sparkles, ShieldCheck, Settings, Menu, X } from 'lucide-react'
+import { ArrowLeftRight, ClipboardCheck, LayoutDashboard, Calendar, Library, Users, BarChart3, LogOut, User, Trophy, LogIn, ChevronDown, Sparkles, ShieldCheck, Settings, Menu, X } from 'lucide-react'
 import type { NavItem } from '../types'
 import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/playerCountElo'
 import { getPlayerImageUrl } from '../utils/imageUpload'
@@ -90,9 +90,7 @@ const Navbar = () => {
             }}
             className="flex items-center space-x-2"
           >
-            <div className="bg-emerald-500 p-2 rounded-lg">
-              <Gamepad2 className="w-6 h-6 text-white" />
-            </div>
+            <img src="/kingscore-icon-64.png" alt="" width={40} height={40} className="h-10 w-10 rounded-lg" />
             <span className="text-xl font-bold text-white">KingScore</span>
           </Link>
 

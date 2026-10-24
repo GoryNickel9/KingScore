@@ -1,5 +1,7 @@
 # KingScore
 
+L'icona coordinata con Android raffigura un dado verde con cinque punti bianchi e corona oro. È usata nella navigazione, nelle schermate di accesso e registrazione, nelle favicon e nei collegamenti salvati. Le copie PNG in `public/kingscore-icon-*.png` derivano dallo stesso disegno approvato dall'utente il 24 ottobre 2026; il master e il prompt sono conservati in `assets/branding` nella repo KingScore-Android.
+
 Gli utenti autenticati trovano **Scarica Android** nel menu profilo. Download e aggiornamenti passano dal backend del sito: [configurazione, API e migrazione Android](docs/android-distribution.md).
 
 Web app completa per tracciare le partite a giochi da tavolo, con autenticazione multi-utente.

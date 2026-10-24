@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { UserPlus, Gamepad2, LockKeyhole } from 'lucide-react'
+import { UserPlus, LockKeyhole } from 'lucide-react'
 import { Spinner } from '../components/Spinner'
 import { supabase } from '../lib/supabase'
 
@@ -101,9 +101,7 @@ const Register = () => {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-emerald-500 p-3 rounded-full">
-              <Gamepad2 className="w-12 h-12 text-white" />
-            </div>
+            <img src="/kingscore-icon-192.png" alt="" width={72} height={72} className="h-18 w-18 rounded-xl" />
           </div>
           <h2 className="text-3xl font-bold text-white">KingScore</h2>
           <p className="mt-2 text-slate-400">Crea il tuo account</p>
