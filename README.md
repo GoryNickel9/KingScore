@@ -6,7 +6,11 @@ L'integrazione dei salvataggi atomici è descritta in [ATOMIC_PLAY_WEB.md](docs/
 
 Il menu principale contiene «PartyScore» subito dopo «Wrapped», sia su desktop sia su mobile. Il collegamento apre [PartyScore](https://partyscore.baldeddu.cc/) nella stessa scheda; da quel sito la voce «KingScore» permette di tornare qui.
 
-Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si seleziona una pagina. Da 640 a 1023 px resta visibile la griglia; da 1024 px le voci principali sono nella testata. La navigazione principale contiene solo Dashboard, Partite, Statistiche, Rating ELO, Wrapped e PartyScore. Giochi, Giocatori, Admin, Impostazioni e Logout sono disponibili esclusivamente nel menu profilo degli amministratori; per gli altri utenti il menu profilo contiene Impostazioni e Logout.
+Gli amministratori trovano «Controllo partite» nel menu profilo (`/admin/play-checks`). La pagina legge tutte le partite con paginazione, mostra quanti record richiedono correzioni per durata, vincitori e punteggi, permette di filtrare le anomalie e collega ogni partita al modulo di modifica. «Ricontrolla» aggiorna i risultati. Anche l’accesso diretto alla pagina richiede il ruolo admin in `app_metadata`.
+
+Il controllo richiede una durata intera positiva, almeno un vincitore nei competitivi e un esito esplicito del gruppo nei cooperativi (anche una sconfitta è un esito valido). Ogni partecipante registrato deve avere un punteggio numerico finito: zero, valori negativi e decimali sono validi. Le partite senza partecipanti vengono segnalate per i punteggi. Il controllo non modifica dati e non può individuare partecipanti mai registrati, perché manca un totale indipendente dei partecipanti attesi.
+
+Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si seleziona una pagina. Da 640 a 1023 px resta visibile la griglia; da 1024 px le voci principali sono nella testata. La navigazione principale contiene solo Dashboard, Partite, Statistiche, Rating ELO, Wrapped e PartyScore. Giochi, Giocatori, Controllo partite, Admin, Impostazioni e Logout sono disponibili esclusivamente nel menu profilo degli amministratori; per gli altri utenti il menu profilo contiene Impostazioni e Logout.
 
 ## 🎲 Caratteristiche
 

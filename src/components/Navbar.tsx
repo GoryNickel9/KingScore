@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeftRight, Gamepad2, LayoutDashboard, Calendar, Library, Users, BarChart3, LogOut, User, Trophy, LogIn, ChevronDown, Sparkles, ShieldCheck, Settings, Menu, X } from 'lucide-react'
+import { ArrowLeftRight, ClipboardCheck, Gamepad2, LayoutDashboard, Calendar, Library, Users, BarChart3, LogOut, User, Trophy, LogIn, ChevronDown, Sparkles, ShieldCheck, Settings, Menu, X } from 'lucide-react'
 import type { NavItem } from '../types'
 import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/playerCountElo'
 import { getPlayerImageUrl } from '../utils/imageUpload'
@@ -18,6 +18,7 @@ const publicNavItems: NavItem[] = [
 const profileNavItems: NavItem[] = [
   { path: '/games', icon: Library, label: 'Giochi' },
   { path: '/players', icon: Users, label: 'Giocatori' },
+  { path: '/admin/play-checks', icon: ClipboardCheck, label: 'Controllo partite' },
 ]
 
 const adminNavItem: NavItem = { path: '/admin', icon: ShieldCheck, label: 'Admin' }

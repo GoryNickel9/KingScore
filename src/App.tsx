@@ -26,6 +26,7 @@ const Images = lazy(() => import('./pages/Images'))
 const Register = lazy(() => import('./pages/Register'))
 const Wrapped = lazy(() => import('./pages/Wrapped'))
 const Admin = lazy(() => import('./pages/Admin'))
+const PlayChecks = lazy(() => import('./pages/PlayChecks'))
 const Settings = lazy(() => import('./pages/Settings'))
 
 function App() {
@@ -132,6 +133,16 @@ function App() {
               <ProtectedRoute requireAdmin>
                 <Layout>
                   <Admin />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/play-checks"
+            element={
+              <ProtectedRoute requireAdmin>
+                <Layout>
+                  <PlayChecks />
                 </Layout>
               </ProtectedRoute>
             }
