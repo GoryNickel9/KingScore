@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-24",
+  "deploymentId": "dpl_CxvbeuYSMu5a5meXHuUKzhWpPduK",
+  "production": "https://kingscore.baldeddu.cc",
+  "githubTokenConfigured": false,
+  "repositoryRemainsPublic": true,
+  "validation": {
+    "fullWebSuiteBeforeOptionalTokenMode": {
+      "files": 27,
+      "passed": 515
+    },
+    "updatedDistributionAndClientSuite": {
+      "files": 2,
+      "passed": 41
+    },
+    "fullLint": {
+      "errors": 0,
+      "warnings": 16
+    },
+    "apiTypecheck": "PASS",
+    "changedFileLint": "PASS",
+    "vercelBuild": "PASS"
+  },
+  "productionSmoke": {
+    "base": "https://kingscore.baldeddu.cc",
+    "metadata": {
+      "status": 200,
+      "type": "application/json; charset=utf-8",
+      "cache": "public, max-age=0",
+      "body": {
+        "tag_name": "v0.7.1",
+        "draft": false,
+        "prerelease": false,
+        "html_url": "https://github.com/GoryNickel9/KingScore-Android/releases/tag/v0.7.1",
+        "assets": [
+          {
+            "name": "KingScore-0.7.1-23.apk",
+            "state": "uploaded",
+            "size": 14593562,
+            "digest": "sha256:c68d76fea98b1141ef4958eb5defa67507bbb250ecd327ce96a42f9fef58a87f",
+            "browser_download_url": "https://kingscore.baldeddu.cc/api/android/download?version=0.7.1"
+          }
+        ]
+      }
+    },
+    "anonymous": {
+      "status": 401,
+      "type": "application/json; charset=utf-8",
+      "cache": "private, no-store"
+    },
+    "invalidSession": {
+      "status": 401,
+      "type": "application/json; charset=utf-8",
+      "cache": "private, no-store"
+    },
+    "spa": {
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "cache": "public, max-age=0, must-revalidate"
+    },
+    "missingApi": {
+      "status": 404,
+      "type": "text/plain; charset=utf-8",
+      "cache": "public, max-age=0, must-revalidate"
+    }
+  },
+  "realApkTransport": {
+    "status": "PASS",
+    "upstream": "real public GitHub v0.7.1 APK",
+    "authentication": "Supabase Auth HTTP response mocked on localhost only",
+    "anonymousStatus": 401,
+    "authorizedStatus": 200,
+    "authRequests": 1,
+    "bytes": 14593562,
+    "sha256": "c68d76fea98b1141ef4958eb5defa67507bbb250ecd327ce96a42f9fef58a87f",
+    "elapsedSeconds": 4.7
+  },
+  "sourceHashes": {
+    "api/_android.ts": "718af648df71245b611f39fda69789149ca8fbe1a08a7f1b16275b05506bd80d",
+    "api/android/download.ts": "bdef72f9d9aacf62c0037bb40488cd49d3a4d494be3a8111da0e63a8393e046a",
+    "api/android/update.ts": "e3e12ecda66447306fe85ddeeed740f78b1988da582a5698c50c871f759bd2f9",
+    "api/android/distribution.test.ts": "bc45108227cadb8a9b85930f1c1d63eedd86ed2ccd4e0e6117dd231e96ad4fe7",
+    "src/components/AndroidDownloadButton.tsx": "0af0d887ec323eab7c8a7fcafd44f16adac6ff62948fd38948093e91e735f9f1",
+    "src/services/androidDownload.ts": "f7890e1f52a8550bc811ee78279898384dd7d7b8165ee7b46bfcf86150a1ab17",
+    "vercel.json": "b07e315a293a6f7b47ee16b81536b45b124863a0047d5ac09659871ba6fc6fb9"
+  }
+}

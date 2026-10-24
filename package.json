@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.json && tsc --noEmit -p api/tsconfig.json",
     "compare:elo": "esbuild scripts/compare-elo.ts --bundle --platform=node --format=esm --external:dotenv --outfile=scripts/.compare-elo.mjs && node scripts/.compare-elo.mjs"
   },
   "dependencies": {

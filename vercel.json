@@ -1,7 +1,10 @@
 {
+  "functions": {
+    "api/android/download.ts": { "maxDuration": 300 }
+  },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }
   ]

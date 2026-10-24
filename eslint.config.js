@@ -65,6 +65,13 @@ export default defineConfig([
   },
 
   {
+    files: ['api/**/*.ts'],
+    plugins: { '@typescript-eslint': tsPlugin },
+    languageOptions: { parser: tsParser, globals: globals.node },
+    rules: { ...tsPlugin.configs.recommended.rules },
+  },
+
+  {
     files: ['**/*.{js,mjs}'],
     extends: [js.configs.recommended],
     languageOptions: {

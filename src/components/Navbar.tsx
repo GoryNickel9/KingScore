@@ -6,6 +6,7 @@ import type { NavItem } from '../types'
 import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/playerCountElo'
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { supabase } from '../lib/supabase'
+import AndroidDownloadButton from './AndroidDownloadButton'
 
 const publicNavItems: NavItem[] = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -233,6 +234,7 @@ const Navbar = () => {
                         <span>{item.label}</span>
                       </Link>
                     ))}
+                    <AndroidDownloadButton />
                     <div className="border-t border-slate-600 mt-1 pt-1">
                       <button
                         onClick={() => {

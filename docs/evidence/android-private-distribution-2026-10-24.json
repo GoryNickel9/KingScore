@@ -1,0 +1,95 @@
+{
+  "verifiedAt": "2026-10-24T17:25:24.871Z",
+  "status": "CONFIGURED_AND_PUBLISHED_WITH_UNTESTED_DEVICE_FLOW",
+  "repositories": {
+    "androidPrivate": true,
+    "webPrivate": false
+  },
+  "secret": {
+    "configuredAt": "2026-10-24T17:20:11.355Z",
+    "projectId": "prj_5i4M0HYnb9X65HNHZHPZfZJFsUqi",
+    "teamId": "team_mzvZVvtN3uGUDlDRq6eIq8pa",
+    "key": "GH_TOKEN",
+    "environments": [
+      "production"
+    ],
+    "type": "sensitive",
+    "environmentVariableId": "Sc4YRTQpr15CdW6A",
+    "credentialOrigin": "New GitHub fine-grained personal access token",
+    "repository": "GoryNickel9/KingScore-Android",
+    "repositoryScopedReadOnly": true,
+    "permissionsVerifiedInGitHubUI": {
+      "contents": "read",
+      "metadata": "read",
+      "account": "none"
+    },
+    "expiresOn": "2027-01-22",
+    "secretValuePrinted": false,
+    "secretValueWrittenToFile": false
+  },
+  "deployment": {
+    "id": "dpl_FccvG5BEGG1fcUKMWsqjqM1dLYcJ",
+    "target": "production",
+    "readyState": "READY"
+  },
+  "release": {
+    "id": 422874949,
+    "tag": "v0.7.2",
+    "sourceCommit": "00fb97ff7b2031c44e9d845ffea90a677b00a02e",
+    "publishedAt": "2026-10-24T17:24:07Z",
+    "apkAssetId": 672858680,
+    "apkBytes": 14593562,
+    "sha256": "2382fcc3c0cb6e4ee374dd589d425785a11d578cb92c6ddcdb791433e4b09c14"
+  },
+  "artifactDownloadVerified": {
+    "transport": "GitHub CLI authenticated private asset download; not the production Supabase endpoint",
+    "bytes": 14593562,
+    "sha256": "2382fcc3c0cb6e4ee374dd589d425785a11d578cb92c6ddcdb791433e4b09c14"
+  },
+  "buildInputHashesMatchPublishedSource": true,
+  "checks": {
+    "updater": {
+      "status": 200,
+      "body": {
+        "tag_name": "v0.7.2",
+        "draft": false,
+        "prerelease": false,
+        "html_url": "https://github.com/GoryNickel9/KingScore-Android/releases/tag/v0.7.2",
+        "assets": [
+          {
+            "name": "KingScore-0.7.2-24.apk",
+            "state": "uploaded",
+            "size": 14593562,
+            "digest": "sha256:2382fcc3c0cb6e4ee374dd589d425785a11d578cb92c6ddcdb791433e4b09c14",
+            "browser_download_url": "https://kingscore.baldeddu.cc/api/android/download?version=0.7.2"
+          }
+        ]
+      }
+    },
+    "anonymousDownload": {
+      "status": 401,
+      "body": {
+        "error": "Accedi a KingScore per scaricare l’app Android."
+      }
+    },
+    "invalidSessionDownload": {
+      "status": 401,
+      "body": {
+        "error": "Sessione scaduta. Accedi di nuovo a KingScore."
+      }
+    },
+    "anonymousGitHubRepository": {
+      "status": 404,
+      "body": {
+        "message": "Not Found",
+        "documentation_url": "https://docs.github.com/rest/repos/repos#get-a-repository",
+        "status": "404"
+      }
+    }
+  },
+  "productionAuthenticatedDownloadVerified": false,
+  "productionAuthenticatedDownloadLimitation": "No real user session available; registrations are closed and were not changed",
+  "deviceInstallationVerified": false,
+  "deviceInstallationLimitation": "Dedicated emulator failed to boot; no instrumentation or installation was completed",
+  "legacyVersionsRequireManualMigration": true
+}

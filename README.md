@@ -1,5 +1,7 @@
 # KingScore
 
+Gli utenti autenticati trovano **Scarica Android** nel menu profilo. Download e aggiornamenti passano dal backend del sito: [configurazione, API e migrazione Android](docs/android-distribution.md).
+
 Web app completa per tracciare le partite a giochi da tavolo, con autenticazione multi-utente.
 
 L'integrazione dei salvataggi atomici è descritta in [ATOMIC_PLAY_WEB.md](docs/ATOMIC_PLAY_WEB.md) ed è attiva in produzione con `VITE_ATOMIC_PLAY_WRITES=true`. L'[aggiornamento immediato dell'ELO Generale](docs/elo-generale-dopo-salvataggio.md) avvia il worker dopo il salvataggio e aggiorna automaticamente le schermate in attesa.

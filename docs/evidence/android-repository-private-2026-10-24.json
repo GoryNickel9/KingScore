@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-10-24T15:46:11.715Z",
+  "checks": {
+    "githubRepository": {
+      "status": 404
+    },
+    "githubLatest": {
+      "status": 404
+    },
+    "siteUpdater": {
+      "status": 502,
+      "response": "{\"error\":\"Impossibile leggere la release Android.\"}"
+    },
+    "siteAnonymousDownload": {
+      "status": 401
+    }
+  },
+  "githubTokenConfigured": false,
+  "publishedVersion": "0.7.1",
+  "migrationCandidate": "0.7.2/code 24",
+  "legacyUpdaterCompatibleWithPrivateRepository": false
+}
