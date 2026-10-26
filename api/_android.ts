@@ -3,7 +3,17 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export const SITE_URL = 'https://kingscore.baldeddu.cc'
 export const RELEASES_URL = 'https://github.com/GoryNickel9/KingScore-Android/releases'
-const GITHUB_API = 'https://api.github.com/repos/GoryNickel9/KingScore-Android'
+export interface AndroidChannel { repository: string; query: string }
+const KINGSCORE: AndroidChannel = { repository: 'KingScore-Android', query: '' }
+const CANT_STOP: AndroidChannel = { repository: 'cant-stop-android', query: '?app=cant-stop' }
+export function androidChannel(req: IncomingMessage): AndroidChannel {
+  const apps = new URL(req.url || '/', SITE_URL).searchParams.getAll('app')
+  if (!apps.length) return KINGSCORE
+  if (apps.length === 1 && apps[0] === 'cant-stop') return CANT_STOP
+  throw new ApiError(400, 'Applicazione Android non valida.')
+}
+const releasesUrl = (channel: AndroidChannel) => `https://github.com/GoryNickel9/${channel.repository}/releases`
+const githubApi = (channel: AndroidChannel) => `https://api.github.com/repos/GoryNickel9/${channel.repository}`
 export const MAX_APK_BYTES = 100_000_000
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 
@@ -55,7 +65,9 @@ export async function requireUser(req: IncomingMessage): Promise<void> {
   if (!data.user || data.user.is_anonymous) throw new ApiError(401, 'Accedi con un account KingScore.')
 }
 
-export function githubToken(): string | undefined { return process.env.GH_TOKEN || undefined }
+export function githubToken(channel: AndroidChannel = KINGSCORE): string | undefined {
+  return (channel.repository === 'cant-stop-android' ? process.env.CANTSTOP_GH_TOKEN || process.env.GH_TOKEN : process.env.GH_TOKEN) || undefined
+}
 
 interface GitHubAsset {
   id: number
@@ -75,7 +87,7 @@ export interface AndroidRelease {
 export function requestedVersion(req: IncomingMessage): string | undefined {
   const params = new URL(req.url || '/', SITE_URL).searchParams
   const versions = params.getAll('version')
-  if (versions.length > 1 || [...params.keys()].some(key => key !== 'version')) {
+  if (versions.length > 1 || [...params.keys()].some(key => key !== 'version' && key !== 'app')) {
     throw new ApiError(400, 'Parametri di download non validi.')
   }
   const version = versions[0]
@@ -105,7 +117,9 @@ async function boundedJson(response: Response): Promise<unknown> {
   } finally { await reader.cancel() }
 }
 
-export async function latestRelease(token: string | undefined, version?: string): Promise<AndroidRelease> {
+export async function latestRelease(token: string | undefined, version?: string, channel: AndroidChannel = KINGSCORE): Promise<AndroidRelease> {
+  const GITHUB_API = githubApi(channel)
+  const RELEASES_URL = releasesUrl(channel)
   const response = await fetch(`${GITHUB_API}/releases/${version ? `tags/v${version}` : 'latest'}`, {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: 'application/vnd.github+json', 'User-Agent': 'KingScore-distribution' },
     redirect: 'error', signal: AbortSignal.timeout(15_000),
@@ -133,11 +147,13 @@ export async function latestRelease(token: string | undefined, version?: string)
   return { tag, asset }
 }
 
-export function manifest({ tag, asset }: AndroidRelease): object {
+export function manifest({ tag, asset }: AndroidRelease, channel: AndroidChannel = KINGSCORE): object {
+  const RELEASES_URL = releasesUrl(channel)
+  const query = channel.query ? `${channel.query}&` : '?'
   return {
     tag_name: tag, draft: false, prerelease: false, html_url: `${RELEASES_URL}/tag/${tag}`,
     assets: [{ name: asset.name, state: 'uploaded', size: asset.size, digest: asset.digest,
-      browser_download_url: `${SITE_URL}/api/android/download?version=${tag.slice(1)}` }],
+      browser_download_url: `${SITE_URL}/api/android/download${query}version=${tag.slice(1)}` }],
   }
 }
 

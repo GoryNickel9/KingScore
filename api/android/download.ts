@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { fail, fetchApk, githubToken, latestRelease, prepare, requestedVersion, requireUser } from '../_android.js'
+import { androidChannel, fail, fetchApk, githubToken, latestRelease, prepare, requestedVersion, requireUser } from '../_android.js'
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const abort = new AbortController()
@@ -11,9 +11,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   try {
     prepare(req, res)
     await requireUser(req)
+    const channel = androidChannel(req)
     const version = requestedVersion(req)
-    const token = githubToken()
-    const { asset } = await latestRelease(token, version)
+    const token = githubToken(channel)
+    const { asset } = await latestRelease(token, version, channel)
     const upstream = await fetchApk(asset, token, AbortSignal.any([abort.signal, AbortSignal.timeout(180_000)]))
     let size = 0
     const hash = createHash('sha256')

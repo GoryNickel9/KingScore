@@ -163,3 +163,41 @@ describe('Android authenticated distribution', () => {
     expect(response.headers.get('allow')).toBe('GET')
   })
 })
+
+
+describe('Canale privato Can’t Stop', () => {
+  const repository = 'https://api.github.com/repos/GoryNickel9/cant-stop-android'
+  const releases = 'https://github.com/GoryNickel9/cant-stop-android/releases'
+  const stopAsset = { ...asset, name: 'CantStop-0.1.1.apk', url: `${repository}/releases/assets/42`,
+    browser_download_url: `${releases}/download/v0.1.1/CantStop-0.1.1.apk` }
+  const stopRelease = { ...release, tag_name: 'v0.1.1', html_url: `${releases}/tag/v0.1.1`, assets: [stopAsset] }
+  beforeEach(() => {
+    vi.stubEnv('CANTSTOP_GH_TOKEN', 'cantstop-repository-token')
+    upstream.mockImplementation(async input => String(input) === stopAsset.url ? new Response(bytes) : Response.json(stopRelease))
+  })
+  it('restituisce metadati senza sessione e mantiene il canale nel link di download', async () => {
+    const response = await request('/api/android/update?app=cant-stop', null)
+    expect(response.status).toBe(200)
+    const body = await response.json() as typeof release
+    expect(body.html_url).toBe(stopRelease.html_url)
+    expect(body.assets[0].browser_download_url).toBe(`${SITE_URL}/api/android/download?app=cant-stop&version=0.1.1`)
+    expect(String(upstream.mock.calls[0][0])).toBe(`${repository}/releases/latest`)
+    expect(new Headers(upstream.mock.calls[0][1]?.headers).get('authorization')).toBe('Bearer cantstop-repository-token')
+    expect(JSON.stringify(body)).not.toContain('cantstop-repository-token')
+  })
+  it('scarica solo la versione richiesta dopo verifica della sessione', async () => {
+    const response = await request('/api/android/download?app=cant-stop&version=0.1.1')
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes)
+    expect(String(upstream.mock.calls[0][0])).toBe(`${repository}/releases/tags/v0.1.1`)
+    expect(getUser).toHaveBeenCalledWith('valid-session')
+  })
+  it('rifiuta il download anonimo e le release appartenenti a KingScore', async () => {
+    expect((await request('/api/android/download?app=cant-stop', null)).status).toBe(401)
+    upstream.mockResolvedValue(Response.json(release))
+    expect((await request('/api/android/update?app=cant-stop', null)).status).toBe(502)
+  })
+  it.each(['app=other', 'app=cant-stop&app=cant-stop', 'app=../private'])('rifiuta canali non autorizzati %s', async query => {
+    expect((await request(`/api/android/update?${query}`, null)).status).toBe(400)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+})

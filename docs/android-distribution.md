@@ -50,3 +50,12 @@ Questi test non certificano le variabili Vercel, il token GitHub reale o l'insta
 Il primo deployment `dpl_CxvbeuYSMu5a5meXHuUKzhWpPduK` usava le Releases pubbliche. Dopo la privatizzazione è stato ridistribuito come `dpl_FccvG5BEGG1fcUKMWsqjqM1dLYcJ` con il token dedicato. Sono verificati la risposta `200` della Latest 0.7.2, il suo URL del proxy e lo SHA-256 dell'APK, download anonimo `401`, sessione invalida `401` e repo GitHub anonima `404`. Il token GitHub del PC non è stato copiato su Vercel.
 
 Passano 515 test nella suite web completa prima dell'aggiunta della modalità senza token e 41 test mirati dopo quell'aggiunta; typecheck, lint dei file modificati e build Vercel passano. Il lint completo ha zero errori e 16 avvisi preesistenti. Il proxy locale ha trasferito l'APK reale della 0.7.1 sia da repo pubblica sia da repo privata, 14.593.562 byte, con verifica SHA-256; soltanto la risposta HTTP di Supabase Auth era simulata. Non è stato eseguito un download di produzione con un account reale: le registrazioni risultano chiuse e non sono state modificate. Non sono stati eseguiti test strumentali o installazioni della 0.7.2, perché l'emulatore dedicato non ha completato il boot. [Evidenze iniziali e hash dei sorgenti](evidence/android-distribution-2026-10-24.json).
+
+
+## Canale Can't Stop, preparazione del 26 ottobre 2026
+
+Gli stessi endpoint accettano `app=cant-stop` per leggere le release private di `GoryNickel9/cant-stop-android`. Senza parametro conservano il comportamento KingScore. Il manifest mantiene il selettore nel link di download e fissa la versione; il download richiede sempre una sessione Supabase verificata. Valori diversi o ripetuti di `app` ricevono `400`, senza contattare GitHub.
+
+Il server usa `CANTSTOP_GH_TOKEN` se presente, altrimenti `GH_TOKEN`. La credenziale deve avere `Contents: read` sulla repository Can't Stop. Il 26 ottobre 2026, su autorizzazione dell'utente, il token fine-grained esistente «KingScore Vercel Releases» è stato esteso ai soli repository KingScore-Android e cant-stop-android. Restano invariati `Contents: read`, `Metadata: read` e la scadenza del 22 gennaio 2027. Questa modifica non copia credenziali del PC e non cambia la visibilità dei repository.
+
+I test locali verificano separazione dei canali, manifest, download fissato alla versione, autenticazione e rifiuto di release appartenenti all'altra applicazione. La preparazione dei sorgenti e i test locali non costituiscono una distribuzione del backend o una conferma dei permessi GitHub di produzione.
