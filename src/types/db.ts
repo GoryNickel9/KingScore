@@ -431,12 +431,22 @@ export type Database = {
           },
         ]
       }
+      play_reactions: {
+        Row: { id: string; play_id: string; comment_id: string | null; user_id: string; emoji: string }
+        Insert: { id?: string; play_id: string; comment_id?: string | null; user_id?: string; emoji: string }
+        Update: { emoji?: string }
+        Relationships: [
+          { foreignKeyName: "play_reactions_play_id_fkey"; columns: ["play_id"]; isOneToOne: false; referencedRelation: "plays"; referencedColumns: ["id"] },
+          { foreignKeyName: "play_reactions_comment_same_play_fkey"; columns: ["comment_id", "play_id"]; isOneToOne: false; referencedRelation: "play_comments"; referencedColumns: ["id", "play_id"] },
+        ]
+      }
       play_comments: {
         Row: {
           author_name: string
           content: string
           created_at: string
           id: string
+          parent_comment_id: string | null
           play_id: string
           updated_at: string
           user_id: string
@@ -446,6 +456,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          parent_comment_id?: string | null
           play_id: string
           updated_at?: string
           user_id?: string
@@ -455,6 +466,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          parent_comment_id?: string | null
           play_id?: string
           updated_at?: string
           user_id?: string

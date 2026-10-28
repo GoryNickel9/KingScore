@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ReactionBar } from './ReactionBar'
+import type { PlayReactionsModel } from '../hooks/usePlayReactions'
 import { Check, MessageCircle, Pencil, Send, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -43,6 +45,7 @@ async function attachAuthorAvatars(
 
 interface PlayCommentsProps {
   playId: string
+  reactions: PlayReactionsModel
 }
 
 function getAuthorInitial(name: string): string {
@@ -56,13 +59,15 @@ function formatCommentDate(date: string): string {
   })
 }
 
-const PlayComments = ({ playId }: PlayCommentsProps) => {
+const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
   const { user } = useAuth()
   const currentUserAvatarPath = typeof user?.user_metadata?.avatar_url === 'string'
     ? user.user_metadata.avatar_url
     : null
   const [comments, setComments] = useState<PlayCommentWithAvatar[]>([])
   const [draft, setDraft] = useState('')
+  const [replyTo, setReplyTo] = useState<PlayCommentWithAvatar | null>(null)
+  const draftRef = useRef<HTMLTextAreaElement>(null)
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
@@ -96,6 +101,8 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
 
   useEffect(() => {
     let isCurrent = true
+    setReplyTo(null)
+    setDraft('')
 
     const loadComments = async (): Promise<void> => {
       setLoading(true)
@@ -140,7 +147,7 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
     try {
       const { data, error } = await supabase
         .from('play_comments')
-        .insert({ play_id: playId, content })
+        .insert({ play_id: playId, content, parent_comment_id: replyTo?.id ?? null })
         .select('*')
         .single()
 
@@ -148,6 +155,7 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
       const [commentWithAvatar] = await attachAuthorAvatars([data], user?.id, currentUserAvatarPath)
       setComments((current) => [...current, commentWithAvatar])
       setDraft('')
+      setReplyTo(null)
       toast.success('Commento pubblicato')
     } catch (error) {
       console.error('Error creating play comment:', error)
@@ -196,7 +204,10 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
       console.error('Error deleting play comment:', error)
       toast.error('Impossibile eliminare il commento')
     } else {
-      setComments((current) => current.filter((comment) => comment.id !== commentId))
+      setComments((current) => current.filter((comment) => comment.id !== commentId).map(comment =>
+        comment.parent_comment_id === commentId ? { ...comment, parent_comment_id: null } : comment))
+      if (replyTo?.id === commentId) setReplyTo(null)
+      void reactions.reload()
       setDeletingCommentId(null)
       toast.success('Commento eliminato')
     }
@@ -258,6 +269,21 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
                       </time>
                     </div>
 
+                    {comment.parent_comment_id && (
+                      <blockquote className="mt-2 border-l-2 border-slate-500 pl-3 text-sm text-slate-300">
+                        {(() => {
+                          const parent = comments.find(item => item.id === comment.parent_comment_id)
+                          return parent ? `In risposta a ${parent.author_name}: ${parent.content}` : 'In risposta a un commento precedente'
+                        })()}
+                      </blockquote>
+                    )}
+                    {user && (
+                      <button type="button" disabled={saving} aria-label={`Rispondi a ${comment.author_name}`}
+                        onClick={() => { setReplyTo(comment); draftRef.current?.focus() }}
+                        className="min-h-11 rounded px-2 text-sm text-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-50">
+                        Rispondi
+                      </button>
+                    )}
                     {isEditing ? (
                       <div className="mt-3 space-y-2">
                         <textarea
@@ -284,6 +310,7 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
                       <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-300">{comment.content}</p>
                     )}
 
+                    <ReactionBar model={reactions} commentId={comment.id} />
                     {isAuthor && !isEditing && (
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         {isConfirmingDelete ? (
@@ -323,9 +350,18 @@ const PlayComments = ({ playId }: PlayCommentsProps) => {
       <div className="mt-5 border-t border-slate-700 pt-5">
         {user ? (
           <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3">
+            {replyTo && (
+              <div className="rounded-lg border border-slate-600 p-3 text-sm text-slate-300">
+                <p>In risposta a {replyTo.author_name}: {replyTo.content}</p>
+                <button type="button" disabled={saving} onClick={() => { setReplyTo(null); draftRef.current?.focus() }}
+                  className="min-h-11 rounded px-2 text-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400">Annulla risposta</button>
+              </div>
+            )}
             <label htmlFor="new-play-comment" className="block text-sm font-medium text-slate-300">Lascia un commento</label>
             <textarea
               id="new-play-comment"
+              ref={draftRef}
+              disabled={saving}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {

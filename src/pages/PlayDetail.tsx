@@ -7,6 +7,8 @@ import toast from 'react-hot-toast'
 import { getELOHistoryForGame, getGeneralELO, getGeneralELOHistory } from '../utils/eloCalculator'
 import { Spinner } from '../components/Spinner'
 import PlayComments from '../components/PlayComments'
+import { ReactionBar } from '../components/ReactionBar'
+import { usePlayReactions } from '../hooks/usePlayReactions'
 import type { DbPlayWithScores } from '../types/rows'
 import { usePlayWrites } from '../hooks/usePlayWrites'
 import { PlayWriteStatus } from '../components/PlayWriteStatus'
@@ -36,6 +38,7 @@ const PlayDetailPage = () => {
   const writes = usePlayWrites()
   const [deleteSnapshot, setDeleteSnapshot] = useState<PlayEditorSnapshot | null>(null)
   const { id } = useParams<{ id: string }>()
+  const reactions = usePlayReactions(id)
   const { user } = useAuth()
   const navigate = useNavigate()
 
@@ -374,11 +377,12 @@ const PlayDetailPage = () => {
           <div className="mt-6 pt-6 border-t border-slate-700">
             <h3 className="text-sm font-medium text-slate-400 mb-2">Note</h3>
             <p className="text-white">{play.notes}</p>
+            {play.notes.trim() && <ReactionBar model={reactions} />}
           </div>
         )}
       </div>
 
-      <PlayComments playId={play.id} />
+      <PlayComments key={play.id} playId={play.id} reactions={reactions} />
 
       {/* Scores Table */}
       <div className="bg-slate-800 rounded-xl p-6 shadow-md">
