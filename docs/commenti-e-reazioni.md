@@ -2,6 +2,8 @@
 
 Il sito e Android 0.7.11/code 33 permettono agli utenti autenticati di rispondere a un commento e reagire ai commenti o alle note di partita.
 
+Dalla 0.7.12 il commento e le note mostrano soltanto le emoji già usate, con i rispettivi conteggi. «Reagisci» apre la scelta delle dodici emoji; dopo la selezione il pannello si chiude. Si può chiudere il pannello senza modificare la reazione. Se l'ultima reazione a un'emoji viene rimossa, anche quell'emoji scompare dalla riga.
+
 «Rispondi» apre il modulo con autore e testo del commento originale. La risposta rimane nell'elenco cronologico e può ricevere altre risposte. Su entrambi i client, solo l'autore trova i controlli per modificare o eliminare il proprio testo. Eliminare l'originale conserva le risposte, che diventano commenti indipendenti. La citazione mostra il testo corrente, senza conservarne una copia storica.
 
 Ogni utente può scegliere una reazione per ciascun commento e una per le note della partita. Toccare un'altra emoji sostituisce la scelta; toccare quella selezionata la rimuove. Le dodici scelte sono 👍 ❤️ 😂 🎉 😮 👏 🔥 🤔 😢 😡 🤯 👎. Il numero accanto all'emoji è il conteggio degli utenti. Le note vuote non offrono reazioni. I dati si aggiornano entrando nel dettaglio, ricaricandolo o dopo una propria operazione; non è presente una sottoscrizione realtime.
