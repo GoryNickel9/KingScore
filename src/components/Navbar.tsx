@@ -7,6 +7,7 @@ import { PLAYER_COUNT_BUCKETS, PLAYER_COUNT_BUCKET_ORDER } from '../utils/elo/pl
 import { getPlayerImageUrl } from '../utils/imageUpload'
 import { supabase } from '../lib/supabase'
 import AndroidDownloadButton from './AndroidDownloadButton'
+import { NotificationBell } from './NotificationBell'
 
 const publicNavItems: NavItem[] = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -187,6 +188,7 @@ const Navbar = () => {
 
           {/* User Menu */}
           <div className="flex items-center gap-1 sm:gap-4">
+            {user && <NotificationBell />}
             {user ? (
               <div className="relative" ref={dropdownRef}>
                 {/* User Profile Button */}

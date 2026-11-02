@@ -1,5 +1,7 @@
 # KingScore
 
+Il centro notifiche raccoglie risposte, reazioni ai propri commenti e menzioni `@`, con stato di lettura condiviso con Android 0.8.0. [Comportamento e contratto](docs/notifiche-e-menzioni.md).
+
 Commenti e note mostrano soltanto le emoji già usate. «Reagisci» apre il selettore delle dodici scelte, che si richiude dopo la selezione; lo stesso comportamento è disponibile su Android 0.7.12.
 
 Commenti e note di partita supportano dodici reazioni, modificabili e rimovibili; «Rispondi» collega un nuovo commento all’originale. Le funzioni sono condivise con Android 0.7.11. [Regole e contratto](docs/commenti-e-reazioni.md).

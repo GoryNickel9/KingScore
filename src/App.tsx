@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { NotificationsProvider } from './contexts/NotificationsContext'
 import { Toaster } from 'react-hot-toast'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
@@ -28,18 +29,21 @@ const Wrapped = lazy(() => import('./pages/Wrapped'))
 const Admin = lazy(() => import('./pages/Admin'))
 const PlayChecks = lazy(() => import('./pages/PlayChecks'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Notifications = lazy(() => import('./pages/Notifications'))
 
 function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
       <Router>
+        <NotificationsProvider>
         <Toaster position="top-right" />
         <Suspense fallback={<Spinner />}>
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/notifications" element={<ProtectedRoute><Layout><Notifications /></Layout></ProtectedRoute>} />
 
           {/* Public Routes - Accessible to everyone */}
           <Route
@@ -214,6 +218,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        </NotificationsProvider>
       </Router>
       </AuthProvider>
     </ErrorBoundary>

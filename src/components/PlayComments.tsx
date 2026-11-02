@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { MentionInput, MentionText } from './MentionInput'
+import { parseMentions, retainedMentions, type Mention } from '../utils/discussion'
 import { ReactionBar } from './ReactionBar'
 import type { PlayReactionsModel } from '../hooks/usePlayReactions'
 import { Check, MessageCircle, Pencil, Send, Trash2, X } from 'lucide-react'
@@ -66,6 +68,9 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
     : null
   const [comments, setComments] = useState<PlayCommentWithAvatar[]>([])
   const [draft, setDraft] = useState('')
+  const [mentions, setMentions] = useState<Mention[]>([])
+  const [editMentions, setEditMentions] = useState<Mention[]>([])
+  const location = useLocation()
   const [replyTo, setReplyTo] = useState<PlayCommentWithAvatar | null>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
@@ -103,6 +108,7 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
     let isCurrent = true
     setReplyTo(null)
     setDraft('')
+    setMentions([])
 
     const loadComments = async (): Promise<void> => {
       setLoading(true)
@@ -133,6 +139,13 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
     }
   }, [playId, user?.id, currentUserAvatarPath])
 
+  useEffect(() => {
+    if (loading || !location.hash.startsWith('#comment-')) return
+    const target = document.getElementById(location.hash.slice(1))
+    target?.scrollIntoView({ block: 'center' })
+    target?.focus({ preventScroll: true })
+  }, [loading, location.hash])
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     if (saving || submittingComment.current) return
@@ -147,7 +160,8 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
     try {
       const { data, error } = await supabase
         .from('play_comments')
-        .insert({ play_id: playId, content, parent_comment_id: replyTo?.id ?? null })
+        .insert({ play_id: playId, content, parent_comment_id: replyTo?.id ?? null,
+          mentions: retainedMentions(content, mentions).map(m => ({ ...m })) })
         .select('*')
         .single()
 
@@ -155,6 +169,7 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
       const [commentWithAvatar] = await attachAuthorAvatars([data], user?.id, currentUserAvatarPath)
       setComments((current) => [...current, commentWithAvatar])
       setDraft('')
+      setMentions([])
       setReplyTo(null)
       toast.success('Commento pubblicato')
     } catch (error) {
@@ -176,7 +191,7 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
     setSaving(true)
     const { data, error } = await supabase
       .from('play_comments')
-      .update({ content })
+      .update({ content, mentions: retainedMentions(content, editMentions).map(m => ({ ...m })) })
       .eq('id', commentId)
       .select('*')
       .single()
@@ -247,7 +262,7 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
             const isConfirmingDelete = deletingCommentId === comment.id
 
             return (
-              <li key={comment.id} className="py-4 first:pt-0 last:pb-0">
+              <li key={comment.id} id={`comment-${comment.id}`} tabIndex={-1} className="scroll-mt-24 rounded-lg py-4 first:pt-0 last:pb-0 focus:outline focus:outline-2 focus:outline-emerald-400">
                 <div className="flex items-start gap-3">
                 {comment.author_avatar_url ? (
                   <img
@@ -286,14 +301,8 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
                     )}
                     {isEditing ? (
                       <div className="mt-3 space-y-2">
-                        <textarea
-                          value={editDraft}
-                          onChange={(event) => setEditDraft(event.target.value)}
-                          maxLength={MAX_PLAY_COMMENT_LENGTH}
-                          rows={3}
-                          aria-label="Modifica commento"
-                          className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
+                        <MentionInput value={editDraft} mentions={editMentions} disabled={saving} label="Modifica commento"
+                          onChange={(text, people) => { setEditDraft(text); setEditMentions(people) }} />
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-xs text-slate-500">{editDraft.length}/{MAX_PLAY_COMMENT_LENGTH}</span>
                           <div className="flex gap-2">
@@ -307,7 +316,7 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-300">{comment.content}</p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-300"><MentionText content={comment.content} mentions={parseMentions(comment.mentions ?? [])} /></p>
                     )}
 
                     <ReactionBar model={reactions} commentId={comment.id} />
@@ -323,7 +332,7 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
                           <>
                             <button
                               type="button"
-                              onClick={() => { setEditingCommentId(comment.id); setEditDraft(comment.content); setDeletingCommentId(null) }}
+                              onClick={() => { setEditingCommentId(comment.id); setEditDraft(comment.content); setEditMentions(parseMentions(comment.mentions ?? [])); setDeletingCommentId(null) }}
                               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-white"
                             >
                               <Pencil className="w-3 h-3" /> Modifica
@@ -357,23 +366,13 @@ const PlayComments = ({ playId, reactions }: PlayCommentsProps) => {
                   className="min-h-11 rounded px-2 text-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-400">Annulla risposta</button>
               </div>
             )}
-            <label htmlFor="new-play-comment" className="block text-sm font-medium text-slate-300">Lascia un commento</label>
-            <textarea
-              id="new-play-comment"
-              ref={draftRef}
-              disabled={saving}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+            <MentionInput value={draft} mentions={mentions} inputRef={draftRef} disabled={saving} label="Lascia un commento"
+              onChange={(text, people) => { setDraft(text); setMentions(people) }}
               onKeyDown={(event) => {
                 if (!shouldSubmitPlayComment(event.nativeEvent, navigator)) return
                 event.preventDefault()
                 if (!event.repeat) event.currentTarget.form?.requestSubmit()
               }}
-              aria-describedby={desktopCommentShortcut ? 'play-comment-keyboard-hint' : undefined}
-              maxLength={MAX_PLAY_COMMENT_LENGTH}
-              rows={3}
-              placeholder="Com'è andata la partita?"
-              className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
             {desktopCommentShortcut && (
               <p id="play-comment-keyboard-hint" className="text-xs text-slate-400">

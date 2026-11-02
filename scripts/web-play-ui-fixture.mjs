@@ -26,6 +26,11 @@ const user = { id: actor, aud: 'authenticated', role: 'authenticated', email: 'a
 const jwt = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: actor, role: 'authenticated', exp: Math.floor(Date.now()/1000)+3600 })).toString('base64url')}.synthetic-signature`
 const games = [game]; const players = [player, secondPlayer]; const plays = new Map(); const receipts = new Map(); const requests = []
 let mode = 'normal'; let revision = 0; let eloMode = 'current'
+const comments = [{ id: '00000000-0000-0000-0000-000000000050', play_id: initialPlay, user_id: owner,
+  author_name: 'Bruno locale', content: 'Commento originale locale', parent_comment_id: null, mentions: [], created_at: timestamp, updated_at: timestamp }]
+const notifications = ['reply', 'mention', 'reaction'].map((kind, index) => ({ id: `00000000-0000-0000-0000-00000000006${index}`,
+  recipient_id: actor, actor_name: 'Bruno locale', play_id: initialPlay, comment_id: comments[0].id,
+  kind, emoji: kind === 'reaction' ? '❤️' : null, created_at: timestamp, read_at: null }))
 function nextRevision() { return `v1:${String(++revision).padStart(64, '0')}` }
 function newPlay(id, payload, playOwner = actor) {
   return { revision: nextRevision(), editability: { editable: true, issues: [] }, detail: {
@@ -61,7 +66,7 @@ const api = httpServer(async (request, response) => {
   response.setHeader('Access-Control-Allow-Origin', '*')
   response.setHeader('Access-Control-Allow-Headers', request.headers['access-control-request-headers'] ?? 'authorization,apikey,content-type')
   response.setHeader('Access-Control-Expose-Headers', 'Content-Range')
-  response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
   const send = (value, status = 200) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)) }
   if (request.method === 'OPTIONS') { response.end(); return }
   const url = new URL(request.url, 'http://127.0.0.1')
@@ -80,7 +85,7 @@ const api = httpServer(async (request, response) => {
       if (body.eloMode && ['current','stale','missing','wrong-owner','partial'].includes(body.eloMode)) eloMode = body.eloMode
       if (body.clearRequests) requests.splice(0)
     }
-    send({ mode, eloMode, requests, plays: [...plays.values()], receipts: receipts.size, publicationId }); return
+    send({ mode, eloMode, requests, plays: [...plays.values()], receipts: receipts.size, publicationId, comments, notifications }); return
   }
   if (url.pathname === '/auth/v1/token') {
     send({ access_token: jwt, refresh_token: 'synthetic-refresh', token_type: 'bearer', expires_in: 3600, user }); return
@@ -90,6 +95,15 @@ const api = httpServer(async (request, response) => {
   requests.push({ path: url.pathname, method: request.method, body })
   if (url.pathname.startsWith('/rest/v1/rpc/')) {
     const rpc = url.pathname.split('/').at(-1)
+    if (rpc === 'notification_feed') {
+      if (mode === 'notification-error') { send({code:'qa-unavailable'},503); return }
+      send({ items: notifications, unread_count: notifications.filter(n => !n.read_at).length, has_more: false }); return
+    }
+    if (rpc === 'mark_notifications_read') {
+      notifications.filter(n => !body.p_id || n.id === body.p_id).forEach(n => { n.read_at = new Date().toISOString() })
+      send(null); return
+    }
+    if (rpc === 'search_mention_users') { send([{user_id:owner,label:'Bruno locale'}]); return }
     if (rpc === 'get_elo_publication_v1') {
       const value = eloPublication()
       Object.assign(requests.at(-1), { publication: { scopeId: value.scopeId, status: value.status, publicationId: value.publicationId, sourceRevision: value.sourceRevision } })
@@ -132,12 +146,21 @@ const api = httpServer(async (request, response) => {
     send(value); return
   }
   const table = url.pathname.split('/').at(-1)
+  if (table === 'play_comments' && request.method === 'POST') {
+    const row = { ...comments[0], ...body, id: randomUUID(), user_id: actor, author_name: 'Anna locale', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    comments.push(row); send(row); return
+  }
+  if (table === 'play_comments' && request.method === 'PATCH') {
+    const row = comments.find(c => 'eq.' + c.id === url.searchParams.get('id'))
+    if (!row || row.user_id !== actor) { send({code:'denied'},403); return }
+    Object.assign(row,body); send(row); return
+  }
   if (request.method === 'POST' && ['games','players'].includes(table)) {
     const row = { ...(table === 'games' ? game : player), ...body, id: randomUUID() }
     ;(table === 'games' ? games : players).push(row); send(row); return
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') { send({ code: 'fixture-forbids-legacy-dml' }, 403); return }
-  let rows = table === 'games' ? games : table === 'players' ? players : table === 'plays' ? [...plays.values()].map(publicPlay) : []
+  let rows = table === 'games' ? games : table === 'players' ? players : table === 'plays' ? [...plays.values()].map(publicPlay) : table === 'play_comments' ? comments : []
   for (const [key,value] of url.searchParams) if (value.startsWith('eq.')) rows = rows.filter(row => String(row[key]) === value.slice(3))
   if (table === 'plays' && url.searchParams.get('select')?.includes('score_count:play_scores(count)')) {
     rows = rows.map(row => ({ ...row, score_count: [{ count: row.play_scores.length }] }))

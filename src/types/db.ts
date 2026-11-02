@@ -442,6 +442,7 @@ export type Database = {
       }
       play_comments: {
         Row: {
+          mentions: Json
           author_name: string
           content: string
           created_at: string
@@ -452,6 +453,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          mentions?: Json
           author_name?: string
           content: string
           created_at?: string
@@ -462,6 +464,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          mentions?: Json
           author_name?: string
           content?: string
           created_at?: string
@@ -486,6 +489,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      search_mention_users: { Args: { p_query?: string }; Returns: { user_id: string; label: string }[] }
+      notification_feed: { Args: { p_before_time?: string; p_before_id?: string }; Returns: Json }
+      mark_notifications_read: { Args: { p_id?: string }; Returns: undefined }
       get_play_user_ids: {
         Args: never
         Returns: {
