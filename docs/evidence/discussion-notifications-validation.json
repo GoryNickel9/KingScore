@@ -1,0 +1,96 @@
+{
+  "status": "PASS",
+  "verifiedAt": "2026-11-02T20:45:53.0410174Z",
+  "sourceCommit": "f35b961",
+  "migration": "20261102010000_discussion_notifications_and_mentions.sql",
+  "migrationSha256": "7d617c111d29816e835b15fefb26405f6b494eaeb90f1344b611623c7713de04",
+  "projectRef": "rixivmeipbizoxyvrvaf",
+  "schemaMigrationApplied": true,
+  "applicationRowsMutatedByTests": false,
+  "preflightCounts": {
+    "comments": 18,
+    "plays": 526,
+    "reactions": 6
+  },
+  "postMigration": {
+    "anon_feed": false,
+    "anon_mark": false,
+    "anon_search": false,
+    "anon_select": false,
+    "authenticated_delete": false,
+    "authenticated_insert": false,
+    "authenticated_select": true,
+    "authenticated_truncate": false,
+    "authenticated_update": false,
+    "client_trigger": false,
+    "comments": 18,
+    "mentions_default": "'[]'::jsonb",
+    "notifications": 0,
+    "plays": 526,
+    "reactions": 6,
+    "rls": true
+  },
+  "localValidation": {
+    "lintWarnings": 16,
+    "build": "PASS",
+    "webTestFiles": 31,
+    "nodeChecks": 41,
+    "browser": "PASS",
+    "browserSizes": [
+      1280,
+      390
+    ],
+    "sqlDiscussionBaseline": "PASS",
+    "stableMentionRecipient": "PASS",
+    "webTests": 537,
+    "typecheck": "PASS",
+    "sqlNotificationChecks": 37,
+    "keyboardSelection": "PASS",
+    "lintErrors": 0
+  },
+  "webRollout": {
+    "status": "PASS",
+    "site": "https://kingscore.baldeddu.cc",
+    "webCommit": "f35b961",
+    "deploymentId": "dpl_EZJx8Zx77ET2KxuWV89P7q36RMtY",
+    "notificationsBundle": true,
+    "mentionsBundle": true,
+    "anonymousDownloadDenied": true,
+    "invalidSessionDenied": true,
+    "update": {
+      "tag_name": "v0.8.0",
+      "draft": false,
+      "prerelease": false,
+      "html_url": "https://github.com/GoryNickel9/KingScore-Android/releases/tag/v0.8.0",
+      "assets": [
+        {
+          "name": "KingScore-0.8.0-35.apk",
+          "state": "uploaded",
+          "size": 14954122,
+          "digest": "sha256:34899c5ab87746648513a4f163defaabf54d01fed288c574aa5d167289b56c25",
+          "browser_download_url": "https://kingscore.baldeddu.cc/api/android/download?version=0.8.0"
+        }
+      ]
+    },
+    "verifiedAt": "2026-11-02T20:42:13.082Z"
+  },
+  "ci": {
+    "conclusion": "success",
+    "url": "https://github.com/GoryNickel9/KingScore/actions/runs/41520467398"
+  },
+  "android": {
+    "sourceCi": "success",
+    "version": "0.8.0",
+    "sha256": "34899c5ab87746648513a4f163defaabf54d01fed288c574aa5d167289b56c25",
+    "releaseUrl": "https://github.com/GoryNickel9/KingScore-Android/releases/tag/v0.8.0",
+    "code": 35,
+    "jvmTestsPerVariant": 419,
+    "upgrade": "34 to 35 PASS",
+    "sourceCommit": "531903d0701ee67916b8d69406d6d4d7903f913a"
+  },
+  "limitations": [
+    "No system push notifications",
+    "No live account login, comment writes or authenticated website download",
+    "No physical phone or full TalkBack audit"
+  ]
+}

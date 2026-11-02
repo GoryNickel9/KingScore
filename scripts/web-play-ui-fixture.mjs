@@ -173,7 +173,7 @@ const apiUrl = `http://127.0.0.1:${api.address().port}`
 game.image_url = `${apiUrl}/qa-game.svg`
 const vite = await viteServer({ configFile: false, envDir: false, plugins: [react()],
   define: { 'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(apiUrl), 'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('synthetic-key'), 'import.meta.env.VITE_ATOMIC_PLAY_WRITES': JSON.stringify('true') },
-  server: { host: '127.0.0.1', port: 0, headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: http://127.0.0.1:*; font-src 'self' data:; frame-src 'none'" } },
+  server: { host: '127.0.0.1', port: 0, watch: { ignored: ['**/.work/**'] }, headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: http://127.0.0.1:*; font-src 'self' data:; frame-src 'none'" } },
 })
 await vite.listen()
 const report = { app: `http://127.0.0.1:${vite.httpServer.address().port}`, api: apiUrl, actor, owner, gameId, playerId, secondPlayerId, initialPlay, secondPlay, publicationId, fixture: 'synthetic-ui-only', pid: process.pid }
