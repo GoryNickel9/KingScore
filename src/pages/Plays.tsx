@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -7,6 +7,7 @@ import { Spinner } from '../components/Spinner'
 import { Pagination } from '../components/Pagination'
 import { PlayCommentBadge } from '../components/PlayCommentBadge'
 import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
+import { fetchAllPages } from '../utils/pagination'
 import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface Filters {
@@ -21,8 +22,10 @@ interface Filters {
 const Plays = () => {
   const { user } = useAuth()
   const [plays, setPlays] = useState<DbPlayWithScores[]>([])
-  const [filteredPlays, setFilteredPlays] = useState<DbPlayWithScores[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+  const [order, setOrder] = useState<'played_at' | 'created_at'>('played_at')
+  const [error, setError] = useState(false)
+  const [reload, setReload] = useState(0)
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [filters, setFilters] = useState<Filters>({
     search: '',
@@ -36,41 +39,33 @@ const Plays = () => {
   const PLAYS_PER_PAGE = 20
 
   useEffect(() => {
-    void fetchPlays()
-  }, [user])
-
-  useEffect(() => {
-    applyFilters()
-  }, [plays, filters])
+    let current = true
+    const load = async (): Promise<void> => {
+      try {
+        const data = await fetchAllPages((from, to) => supabase
+          .from('plays')
+          .select('*,games(*),play_scores(*,players(*))', { count: 'exact' })
+          .order(order, { ascending: false, nullsFirst: false })
+          .order('id', { ascending: false })
+          .range(from, to))
+        if (current) { setPlays(data); setError(false) }
+      } catch (cause) {
+        console.error('Error fetching plays:', cause)
+        if (current) setError(true)
+      } finally {
+        if (current) setLoading(false)
+      }
+    }
+    void load()
+    return () => { current = false }
+  }, [user, order, reload])
 
   // Reset pagina quando cambiano i filtri
   useEffect(() => {
     setCurrentPage(1)
   }, [filters])
 
-  const fetchPlays = async (): Promise<void> => {
-    try {
-      const { data } = await supabase
-        .from('plays')
-        .select(`
-          *,
-          games(*),
-          play_scores(
-            *,
-            players(*)
-          )
-        `)
-        .order('played_at', { ascending: false })
-
-      setPlays(data ?? [])
-    } catch (error) {
-      console.error('Error fetching plays:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const applyFilters = (): void => {
+  const filteredPlays = useMemo(() => {
     let result = [...plays]
 
     if (filters.search) {
@@ -103,8 +98,8 @@ const Plays = () => {
       })
     }
 
-    setFilteredPlays(result)
-  }
+    return result
+  }, [plays, filters])
 
   const getUniqueGames = (): DbGame[] => {
     const games = [...new Set(plays.map(p => p.game_id))]
@@ -139,6 +134,14 @@ const Plays = () => {
     return <Spinner className="h-64" />
   }
 
+  if (error) {
+    return <div role="alert" className="space-y-4 rounded-xl bg-slate-800 p-6 text-white">
+      <p>Non è stato possibile caricare lo storico. Riprova.</p>
+      <button type="button" onClick={() => { setLoading(true); setReload(value => value + 1) }}
+        className="min-h-11 rounded-lg bg-emerald-500 px-4 py-2 hover:bg-emerald-600">Riprova</button>
+    </div>
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -162,6 +165,21 @@ const Plays = () => {
         <div className="flex items-center mb-4">
           <Filter className="w-5 h-5 text-slate-400 mr-2" />
           <h2 className="text-lg font-semibold text-white">Filtri</h2>
+        </div>
+
+        <div className="mb-4">
+          <label htmlFor="history-order" className="mb-2 block text-sm font-medium text-slate-300">Ordina per</label>
+          <select id="history-order" value={order}
+            onChange={e => {
+              setLoading(true)
+              setCurrentPage(1)
+              setOrder(e.target.value === 'created_at' ? 'created_at' : 'played_at')
+            }}
+            className="min-h-11 w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:w-auto">
+            <option value="played_at">Ultime giocate</option>
+            <option value="created_at">Ultime inserite</option>
+          </select>
+          <p className="mt-2 text-sm text-slate-400">I filtri anno e mese si riferiscono alla data della partita.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -304,6 +322,14 @@ const Plays = () => {
                       </div>
                     )}
                   </div>
+
+                  {order === 'created_at' && (
+                    <p className="mb-3 text-sm text-slate-400">
+                      {play.created_at
+                        ? `Inserita il ${new Date(play.created_at).toLocaleString('it-IT')}`
+                        : 'Data di inserimento non disponibile'}
+                    </p>
+                  )}
 
                   {/* Scores */}
                   {play.play_scores && play.play_scores.length > 0 && (

@@ -1,5 +1,7 @@
 # KingScore
 
+Lo storico offre «Ultime giocate» e «Ultime inserite», nel sito e in Android 0.8.1. La seconda vista ordina per la registrazione nel database e mostra data e ora di inserimento. [Comportamento e limiti](docs/storico-inserimento.md).
+
 Il centro notifiche raccoglie risposte, reazioni ai propri commenti e menzioni `@`, con stato di lettura condiviso con Android 0.8.0. [Comportamento e contratto](docs/notifiche-e-menzioni.md).
 
 Commenti e note mostrano soltanto le emoji già usate. «Reagisci» apre il selettore delle dodici scelte, che si richiude dopo la selezione; lo stesso comportamento è disponibile su Android 0.7.12.
