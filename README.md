@@ -1,6 +1,6 @@
 # KingScore
 
-Lo storico offre «Ultime giocate» e «Ultime inserite», nel sito e in Android 0.8.1. La seconda vista ordina per la registrazione nel database e mostra data e ora di inserimento. [Comportamento e limiti](docs/storico-inserimento.md).
+Lo storico si apre su «Ultime inserite», nel sito e in Android 0.8.2. Ordina per il timestamp completo nel database e mostra sempre data, ore, minuti e secondi di inserimento. Il sito conserva la scelta fra «Ultime inserite» e «Ultime giocate» anche dopo navigazione e ricaricamento. [Comportamento e limiti](docs/storico-inserimento.md).
 
 Il centro notifiche raccoglie risposte, reazioni ai propri commenti e menzioni `@`, con stato di lettura condiviso con Android 0.8.0. [Comportamento e contratto](docs/notifiche-e-menzioni.md).
 

@@ -1,8 +1,10 @@
 # Storico per data di inserimento
 
-In Partite, «Ordina per» permette di scegliere «Ultime giocate» (vista iniziale) o «Ultime inserite». La seconda scelta usa `plays.created_at`: una partita giocata anni fa e registrata oggi compare tra gli ultimi inserimenti. Ogni scheda conserva la data giocata e aggiunge data e ora di inserimento nel fuso del dispositivo.
+In Partite, «Ordina per» permette di scegliere «Ultime inserite» (vista iniziale) o «Ultime giocate». La prima scelta usa `plays.created_at`: una partita giocata anni fa e registrata oggi compare tra gli ultimi inserimenti. Il database confronta il timestamp completo, incluse ore, minuti, secondi e microsecondi. Ogni scheda mostra sempre la data giocata e la data di inserimento con ore, minuti e secondi nel fuso del dispositivo.
 
-Ricerca e filtri si applicano a entrambe le viste. Anno e mese si riferiscono sempre a `played_at`, la data della partita. Cambiare ordine riporta alla prima pagina e conserva i filtri; rimuovere i filtri conserva l'ordine scelto. Uscire dalla pagina web ripristina la vista iniziale.
+Ricerca e filtri si applicano a entrambe le viste. Anno e mese si riferiscono sempre a `played_at`, la data della partita. Cambiare ordine riporta alla prima pagina e conserva i filtri; rimuovere i filtri conserva l'ordine scelto. Il sito conserva la scelta in `localStorage`, anche al ritorno dal dettaglio e dopo un ricaricamento. Se lo storage è bloccato, la selezione resta valida nella pagina corrente e alla riapertura si usa «Ultime inserite».
+
+La correzione del 4 novembre 2026 risolve la vista iniziale della 0.8.1, che usava soltanto giorno e ID: le partite dello stesso giorno potevano quindi apparire fuori ordine rispetto all'inserimento. `played_at` contiene il giorno, senza ora effettiva della partita; `created_at` contiene l'orario della registrazione. Il client non ricostruisce l'ora giocata a partire dall'ora di registrazione.
 
 Il database ordina prima per la data scelta, dalla più recente, poi per ID decrescente in caso di parità. I record senza `created_at` vengono dopo quelli datati e mostrano «Data di inserimento non disponibile». Il client non ricostruisce né modifica le date mancanti. Le partite importate seguono il timestamp salvato nel database, che può coincidere per un intero import.
 

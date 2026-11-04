@@ -8,6 +8,8 @@ import { Pagination } from '../components/Pagination'
 import { PlayCommentBadge } from '../components/PlayCommentBadge'
 import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import { fetchAllPages } from '../utils/pagination'
+import { readPlayHistoryOrder, savePlayHistoryOrder } from '../utils/playHistoryOrder'
+import type { PlayHistoryOrder } from '../utils/playHistoryOrder'
 import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface Filters {
@@ -23,7 +25,7 @@ const Plays = () => {
   const { user } = useAuth()
   const [plays, setPlays] = useState<DbPlayWithScores[]>([])
   const [loading, setLoading] = useState<boolean>(true)
-  const [order, setOrder] = useState<'played_at' | 'created_at'>('played_at')
+  const [order, setOrder] = useState<PlayHistoryOrder>(readPlayHistoryOrder)
   const [error, setError] = useState(false)
   const [reload, setReload] = useState(0)
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -171,9 +173,11 @@ const Plays = () => {
           <label htmlFor="history-order" className="mb-2 block text-sm font-medium text-slate-300">Ordina per</label>
           <select id="history-order" value={order}
             onChange={e => {
+              const next = e.target.value === 'played_at' ? 'played_at' : 'created_at'
+              savePlayHistoryOrder(next)
               setLoading(true)
               setCurrentPage(1)
-              setOrder(e.target.value === 'created_at' ? 'created_at' : 'played_at')
+              setOrder(next)
             }}
             className="min-h-11 w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:w-auto">
             <option value="played_at">Ultime giocate</option>
@@ -278,6 +282,7 @@ const Plays = () => {
         <div className="space-y-4">
           {/* Pagination info */}
           <div className="text-sm text-slate-400 text-center">
+            <p>Ordine: {order === 'created_at' ? 'data e ora di inserimento' : 'data della partita'}</p>
             Pagina {currentPage} di {totalPages} — Mostrando {startItem}-{endItem} di {filteredPlays.length}
           </div>
 
@@ -323,13 +328,14 @@ const Plays = () => {
                     )}
                   </div>
 
-                  {order === 'created_at' && (
-                    <p className="mb-3 text-sm text-slate-400">
-                      {play.created_at
-                        ? `Inserita il ${new Date(play.created_at).toLocaleString('it-IT')}`
-                        : 'Data di inserimento non disponibile'}
-                    </p>
-                  )}
+                  <p className="mb-3 text-sm text-slate-400">
+                    {play.created_at
+                      ? `Inserita il ${new Date(play.created_at).toLocaleString('it-IT', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                      })}`
+                      : 'Data di inserimento non disponibile'}
+                  </p>
 
                   {/* Scores */}
                   {play.play_scores && play.play_scores.length > 0 && (
