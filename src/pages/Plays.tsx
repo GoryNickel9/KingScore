@@ -8,8 +8,6 @@ import { Pagination } from '../components/Pagination'
 import { PlayCommentBadge } from '../components/PlayCommentBadge'
 import { usePlayCommentCounts } from '../hooks/usePlayCommentCounts'
 import { fetchAllPages } from '../utils/pagination'
-import { readPlayHistoryOrder, savePlayHistoryOrder } from '../utils/playHistoryOrder'
-import type { PlayHistoryOrder } from '../utils/playHistoryOrder'
 import type { DbGame, DbPlayWithScores } from '../types/rows'
 
 interface Filters {
@@ -25,7 +23,6 @@ const Plays = () => {
   const { user } = useAuth()
   const [plays, setPlays] = useState<DbPlayWithScores[]>([])
   const [loading, setLoading] = useState<boolean>(true)
-  const [order, setOrder] = useState<PlayHistoryOrder>(readPlayHistoryOrder)
   const [error, setError] = useState(false)
   const [reload, setReload] = useState(0)
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -47,7 +44,7 @@ const Plays = () => {
         const data = await fetchAllPages((from, to) => supabase
           .from('plays')
           .select('*,games(*),play_scores(*,players(*))', { count: 'exact' })
-          .order(order, { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false, nullsFirst: false })
           .order('id', { ascending: false })
           .range(from, to))
         if (current) { setPlays(data); setError(false) }
@@ -60,7 +57,7 @@ const Plays = () => {
     }
     void load()
     return () => { current = false }
-  }, [user, order, reload])
+  }, [user, reload])
 
   // Reset pagina quando cambiano i filtri
   useEffect(() => {
@@ -169,22 +166,7 @@ const Plays = () => {
           <h2 className="text-lg font-semibold text-white">Filtri</h2>
         </div>
 
-        <div className="mb-4">
-          <label htmlFor="history-order" className="mb-2 block text-sm font-medium text-slate-300">Ordina per</label>
-          <select id="history-order" value={order}
-            onChange={e => {
-              const next = e.target.value === 'played_at' ? 'played_at' : 'created_at'
-              savePlayHistoryOrder(next)
-              setLoading(true)
-              setCurrentPage(1)
-              setOrder(next)
-            }}
-            className="min-h-11 w-full rounded-lg border border-slate-600 bg-slate-700 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:w-auto">
-            <option value="played_at">Ultime giocate</option>
-            <option value="created_at">Ultime inserite</option>
-          </select>
-          <p className="mt-2 text-sm text-slate-400">I filtri anno e mese si riferiscono alla data della partita.</p>
-        </div>
+        <p className="mb-4 text-sm text-slate-400">I filtri anno e mese si riferiscono alla data della partita.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Search */}
@@ -282,7 +264,6 @@ const Plays = () => {
         <div className="space-y-4">
           {/* Pagination info */}
           <div className="text-sm text-slate-400 text-center">
-            <p>Ordine: {order === 'created_at' ? 'data e ora di inserimento' : 'data della partita'}</p>
             Pagina {currentPage} di {totalPages} — Mostrando {startItem}-{endItem} di {filteredPlays.length}
           </div>
 

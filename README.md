@@ -1,6 +1,6 @@
 # KingScore
 
-Lo storico si apre su «Ultime inserite», nel sito e in Android 0.8.2. Ordina per il timestamp completo nel database e mostra sempre data, ore, minuti e secondi di inserimento. Il sito conserva la scelta fra «Ultime inserite» e «Ultime giocate» anche dopo navigazione e ricaricamento. [Comportamento e limiti](docs/storico-inserimento.md).
+Nel sito lo storico mostra sempre le ultime partite inserite, ordinate per il timestamp completo nel database. Il selettore dell'ordine e la dicitura «Ordine» sono stati rimossi; le preferenze salvate in precedenza non vengono più lette. Ogni partita mostra data, ore, minuti e secondi di inserimento. [Comportamento e limiti, anche per Android](docs/storico-inserimento.md).
 
 Il centro notifiche raccoglie risposte, reazioni ai propri commenti e menzioni `@`, con stato di lettura condiviso con Android 0.8.0. [Comportamento e contratto](docs/notifiche-e-menzioni.md).
 
@@ -33,7 +33,7 @@ Sotto i 640 px la navigazione si apre con il pulsante ☰ e si chiude quando si 
 - **Ricerca giochi BGA**: Cerca giochi su Board Game Arena
 - **Statistiche avanzate**: H-Index, streak, win rate, heatmap
 - **Gestione giocatori**: Crea e gestisci i tuoi giocatori
-- **Classifiche**: Player 1 è nascosto da classifiche e grafici comparativi. Partite, risultati, numero di partecipanti e calcoli ELO restano invariati; il giocatore resta consultabile nello storico e nella sua scheda. Il filtro usa il nome registrato, anche se è presente un alias.
+- **Giocatori selezionabili e classifiche**: Player 1 è escluso da classifiche, grafici comparativi e selettori di giocatore, compresi nuove partite, modifica e Wrapped. L'aggiunta rapida rifiuta questo nome. Nelle partite esistenti il partecipante resta visibile e viene conservato al salvataggio; il suo nome compare come opzione disabilitata solo nella riga già assegnata. Partite, risultati, numero di partecipanti e calcoli ELO restano invariati; il giocatore resta consultabile nello storico e nella sua scheda. Il filtro usa il nome registrato, anche se è presente un alias, e ignora maiuscole e spazi esterni.
 - **Libreria giochi**: Organizza i tuoi giochi preferiti
 - **Regole per gioco**: Configura se vince il punteggio più basso e se i punteggi uguali condividono la posizione, sia creando sia modificando un gioco.
 - **Pareggi**: I primi posti condivisi contano come P, i piazzamenti condivisi fra sconfitti come S. L'ELO tratta correttamente i confronti pari a qualsiasi posizione.

@@ -130,7 +130,7 @@ const Wrapped = () => {
       .order('name', { ascending: true })
     
     if (playersData) {
-      setPlayers(playersData)
+      setPlayers(playersData.filter(player => isVisibleInRankings(player.name)))
     }
 
     setLoading(false)

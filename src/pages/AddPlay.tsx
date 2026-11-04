@@ -17,6 +17,7 @@ import { PlayWriteStatus } from '../components/PlayWriteStatus'
 import { playFormPayload } from '../services/playFormPayload'
 import { preparePlaySave } from '../services/playSaveRequests'
 import { MAX_PLAY_DURATION_MINUTES } from '../utils/playDuration'
+import { isVisibleInRankings } from '../utils/rankingVisibility'
 
 interface TempPlayer {
   id: string
@@ -298,6 +299,10 @@ const AddPlayForm = () => {
   const handleAddQuickPlayer = (): void => {
     const name = quickPlayerName.trim()
     if (!name) return
+    if (!isVisibleInRankings(name)) {
+      toast.error('Player 1 non è selezionabile. Usa un altro nome.')
+      return
+    }
 
     const newPlayer: TempPlayer = {
       id: `temp-${crypto.randomUUID()}`,

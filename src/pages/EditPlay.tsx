@@ -14,6 +14,7 @@ import type { DbGame, DbPlayer } from '../types/rows'
 import { listGames } from '../services/games'
 import { listUserPlayers } from '../services/players'
 import { MAX_PLAY_DURATION_MINUTES } from '../utils/playDuration'
+import { isVisibleInRankings } from '../utils/rankingVisibility'
 
 interface EditPlayerRow {
   id: string | null
@@ -408,8 +409,8 @@ const EditPlayForm = ({ id }: { id: string }) => {
                       required
                     >
                       <option value="">Seleziona giocatore</option>
-                      {players.map(p => (
-                        <option key={p.id} value={p.id}>
+                      {players.filter(p => isVisibleInRankings(p.name) || p.id === player.playerId).map(p => (
+                        <option key={p.id} value={p.id} disabled={!isVisibleInRankings(p.name)}>
                           {p.alias || p.name}
                         </option>
                       ))}
